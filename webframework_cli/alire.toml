@@ -1,0 +1,12 @@
+name = "webframework_cli"
+description = "CLI scaffolding and validation tool for webframework apps"
+version = "0.1.0-dev"
+licenses = "MIT"
+website = ""
+tags = ["web", "scaffold", "tooling"]
+
+[[depends-on]]
+gnat = ">=13"
+
+[[pins]]
+project_tools = { path = "../../project_tools" }

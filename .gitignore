@@ -1,0 +1,43 @@
+# Alire generated workspace state
+/alire/
+/config/
+/example_app/alire/
+/example_app/config/
+/tests/alire/
+/tests/config/
+/webframework_cli/alire/
+/webframework_cli/config/
+
+# GPR/Alire build outputs
+/bin/
+/lib/
+/obj/
+/tests/bin/
+/tests/obj/
+/example_app/bin/
+/example_app/obj/
+/webframework_cli/bin/
+/webframework_cli/obj/
+/tools/bin/
+/tools/obj/
+
+# Local runtime data
+/*.db
+/example_app/*.db
+/tests/*.db
+
+# Ada compiler and binder byproducts outside configured object dirs
+*.ali
+*.o
+*.bexch
+*.lexch
+*.stdout
+*.stderr
+*.cswi
+b__*.adb
+b__*.ads
+
+# Local editor and OS noise
+*~
+*.swp
+.DS_Store

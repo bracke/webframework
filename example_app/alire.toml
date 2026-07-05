@@ -1,0 +1,30 @@
+name = "example_app"
+description = "Reference app for the Ada-first webframework"
+version = "0.1.0-dev"
+licenses = "MIT"
+website = ""
+tags = ["webframework", "example", "server-driven"]
+
+executables = ["example_app"]
+project-files = ["example_app.gpr"]
+
+[[depends-on]]
+gnat = ">=13"
+
+[[depends-on]]
+webframework = "*"
+
+[[depends-on]]
+templates = "*"
+
+[[depends-on]]
+database = "*"
+
+[[pins]]
+webframework = { path = ".." }
+
+[[pins]]
+templates = { path = "../../template" }
+
+[[pins]]
+database = { path = "../../database" }

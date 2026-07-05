@@ -1,0 +1,27 @@
+name = "webframework"
+description = "Ada-first server-driven web framework using HTTP/1.1 and WebSockets"
+version = "0.1.0-dev"
+licenses = "MIT"
+website = ""
+tags = ["web", "websocket", "http", "server-driven"]
+
+[[depends-on]]
+gnat = ">=13"
+
+[[depends-on]]
+cryptolib = "*"
+
+[[depends-on]]
+ssh_lib = "*"
+
+[[depends-on]]
+zlib = "*"
+
+[[pins]]
+cryptolib = { path = "../cryptolib" }
+
+[[pins]]
+ssh_lib = { path = "../sshlib" }
+
+[[pins]]
+zlib = { path = "../zlib" }

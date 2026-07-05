@@ -1,0 +1,18 @@
+name = "webframework_tests"
+description = "AUnit tests for the webframework crate"
+version = "0.1.0-dev"
+licenses = "MIT"
+website = ""
+tags = ["webframework", "tests"]
+
+executables = ["tests"]
+project-files = ["webframework_tests.gpr"]
+
+[[depends-on]]
+aunit = "*"
+
+[[depends-on]]
+webframework = "*"
+
+[[pins]]
+webframework = { path = ".." }

@@ -1,0 +1,7 @@
+name = "example_app"
+routes = ["/"]
+actions = ["counter.increment", "profile.save", "todo.add"]
+handlers = ["App.Counter.Increment", "App.Profile.Save", "App.Todo.Add"]
+templates = ["layout.html", "home.html", "counter.html", "profile.html", "todo.html", "todo-item.html"]
+patch_targets = ["counter-value", "profile-status", "todo-list"]
+static_files = ["webframework.js", "style.css"]
