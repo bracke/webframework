@@ -10,6 +10,10 @@ package body Web.Connection is
      (Item   : in out Connection_Type;
       Socket : GNAT.Sockets.Socket_Type) is
    begin
+      if Socket = GNAT.Sockets.No_Socket then
+         raise Web.Errors.Security_Error with "plain connection socket must be open";
+      end if;
+
       Item.Raw_Socket := Socket;
       Item.TLS_Handle := System.Null_Address;
    end Open_Plain;
@@ -19,6 +23,14 @@ package body Web.Connection is
       Socket     : GNAT.Sockets.Socket_Type;
       TLS_Handle : System.Address) is
    begin
+      if Socket = GNAT.Sockets.No_Socket then
+         raise Web.Errors.Security_Error with "tls connection socket must be open";
+      end if;
+
+      if TLS_Handle = System.Null_Address then
+         raise Web.Errors.Security_Error with "tls connection handle must not be null";
+      end if;
+
       Item.Raw_Socket := Socket;
       Item.TLS_Handle := TLS_Handle;
    end Open_TLS;

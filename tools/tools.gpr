@@ -1,0 +1,20 @@
+with "../webframework.gpr";
+with "../../project_tools/project_tools.gpr";
+
+project Tools is
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj";
+   for Exec_Dir use "bin";
+   for Main use
+     ("release_smoke.adb",
+      "stress_harness.adb",
+      "fuzz_corpus.adb",
+      "soak_harness.adb",
+      "benchmark.adb",
+      "release_check.adb");
+
+   package Compiler is
+      for Default_Switches ("Ada") use
+        ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");
+   end Compiler;
+end Tools;

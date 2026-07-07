@@ -137,6 +137,24 @@ package body Web_Runtime_Tests is
       Put (File, "assert(submit.type === 'submit' && submit.id === 'profile-form'");
       Put (File, "  && submit.action === 'profile.save', 'submit sent');");
       Put (File, "assert(submit.fields.name === 'Bent' && submit.version === 1, 'submit fields sent');");
+      Put (File, "const todoForm = add(new Element('todo-form', 'form'));");
+      Put (File, "const title = add(new Element('title', 'input'));");
+      Put (File, "const todoStatus = add(new Element('todo-status'));");
+      Put (File, "const todoList = add(new Element('todo-list', 'ul'));");
+      Put (File, "todoForm.setAttribute('data-wf-submit', 'todo.add');");
+      Put (File, "todoForm.fields = { title: 'Ship release' };");
+      Put (File, "document.dispatchEvent({ type: 'submit', target: todoForm, preventDefault() {} });");
+      Put (File, "let todoSubmit = JSON.parse(sent[sent.length - 1]);");
+      Put (File, "assert(todoSubmit.type === 'submit' && todoSubmit.action === 'todo.add', 'todo submit sent');");
+      Put (File, "assert(todoSubmit.fields.title === 'Ship release', 'todo title sent');");
+      Put (File, "window.WebFramework.applyPatches([");
+      Put (File, "  { op: 'replace_html', target: 'todo-list', value: '<li>Ship release</li>' },");
+      Put (File, "  { op: 'set_text', target: 'todo-status', value: 'Added Ship release' },");
+      Put (File, "  { op: 'set_value', target: 'title', value: '' }");
+      Put (File, "]);");
+      Put (File, "assert(todoList.innerHTML === '<li>Ship release</li>', 'example todo list patched');");
+      Put (File, "assert(todoStatus.textContent === 'Added Ship release', 'example todo status patched');");
+      Put (File, "assert(title.value === '', 'example todo input cleared');");
       Put (File, "console.log('PASS runtime behavior');");
       Ada.Text_IO.Close (File);
    exception

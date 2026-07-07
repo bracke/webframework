@@ -1,4 +1,5 @@
-with App.State;
-with Web.Dispatcher;
+--  Compatibility wrapper for action dispatch.
+with App.Runtime;
 
-package App.Dispatcher is new Web.Dispatcher (App.State.App_State);
+--  This package is now a rename to the convenience façade nested dispatcher.
+package App.Dispatcher renames App.Runtime.Dispatcher;

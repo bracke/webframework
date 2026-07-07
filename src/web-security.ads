@@ -9,6 +9,21 @@ package Web.Security is
    --  @return True when no traversal or absolute filesystem escape is present.
    function Is_Safe_Path (Path : String) return Boolean;
 
+   --  Check whether a path is safe after percent decoding.
+   --  @param Path Candidate path, possibly containing percent escapes.
+   --  @return True when decoded path is valid and has no traversal or escapes.
+   function Is_Safe_Decoded_Path (Path : String) return Boolean;
+
+   --  Normalize and validate an HTTP authority.
+   --  @param Value Candidate authority from Host or an Origin URL.
+   --  @return Lower-case authority, or an empty string when invalid.
+   function Normalize_Authority (Value : String) return String;
+
+   --  Normalize and validate an HTTP or HTTPS origin.
+   --  @param Value Candidate origin with scheme and authority.
+   --  @return Lower-case origin, or an empty string when invalid.
+   function Normalize_Origin (Value : String) return String;
+
    --  Generate a new opaque session id.
    --  @return Random URL-safe session id.
    function New_Session_Id return String;

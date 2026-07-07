@@ -38,6 +38,14 @@ package Web.Live is
    --  @return HTTP response.
    function Html_Response (Session : String; Content : String) return Web.Response.Response_Type;
 
+   --  Find or create a session and build an HTML response carrying its cookie.
+   --  @param Request HTTP request.
+   --  @param Content HTML body.
+   --  @return HTTP response.
+   function Html_Response
+     (Request : Web.Request.Request_Type;
+      Content : String) return Web.Response.Response_Type;
+
    --  Apply session settings from framework configuration.
    --  @param Config Framework configuration.
    --  @return No return value.
@@ -51,6 +59,14 @@ package Web.Live is
    --  Check whether session cookies include the Secure attribute.
    --  @return True when Secure cookies are enabled.
    function Secure_Cookies return Boolean;
+
+   --  Return the number of currently stored sessions.
+   --  @return Current session count.
+   function Session_Count return Natural;
+
+   --  Return the number of sessions with an active WebSocket.
+   --  @return Current active WebSocket count.
+   function Active_WebSocket_Count return Natural;
 
    --  Serialize access to session state.
    --  @param Id Session id.
@@ -75,6 +91,10 @@ package Web.Live is
    --  Stop periodic background session cleanup when it is running.
    --  @return No return value.
    procedure Stop_Cleanup_Task;
+
+   --  Check whether periodic background cleanup is currently started.
+   --  @return True when the cleanup task has been started and not stopped.
+   function Cleanup_Task_Running return Boolean;
 
    --  Run the WebSocket event loop for a session.
    --  @param Conn Connected transport.

@@ -2,7 +2,9 @@ with App.State;
 with Web.Events;
 with Web.Patch;
 
+--  Todo feature handler.
 package App.Todo is
+   --  Validate and add a todo row through the persistence layer.
    --  Add a todo from a submitted form.
    --  @param State Typed session state.
    --  @param Event Submit event.

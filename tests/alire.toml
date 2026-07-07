@@ -9,6 +9,9 @@ executables = ["tests"]
 project-files = ["webframework_tests.gpr"]
 
 [[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
 aunit = "*"
 
 [[depends-on]]

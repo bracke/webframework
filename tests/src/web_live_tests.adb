@@ -5,11 +5,14 @@ with AUnit.Assertions;
 with AUnit.Test_Caller;
 with GNAT.Sockets;
 with Web.Config;
+with Web.Connection;
+with Web.Errors;
 with Interfaces;
 with Web.Events;
 with Web.Live;
 with Web.Patch;
 with Web.Request;
+with Web.Response;
 with Web.Security;
 
 package body Web_Live_Tests is
@@ -51,6 +54,8 @@ package body Web_Live_Tests is
         (Suite, Caller.Create ("live session cleanup", Test_Session_Cleanup'Access));
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("live secure cookie settings", Test_Secure_Cookie_Settings'Access));
+      AUnit.Test_Suites.Add_Test
+        (Suite, Caller.Create ("live resource counters", Test_Resource_Counters'Access));
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("live websocket message limit", Test_WebSocket_Message_Limit'Access));
       AUnit.Test_Suites.Add_Test
@@ -279,10 +284,28 @@ package body Web_Live_Tests is
       Session : constant String := Test_Live.Find_Or_Create_Session (Initial_Request);
       Cookie_Request : Web.Request.Request_Type := Web.Request.Create ("GET", "/");
       Removed : Natural;
+      Raised  : Boolean := False;
    begin
       Test_Live.With_State (Session, Increment_State'Access);
       Web.Request.Set_Header (Cookie_Request, "Cookie", "wf_session=" & Session);
       Assert (Test_Live.Require_Session (Cookie_Request) = Session, "session exists before cleanup");
+
+      begin
+         Test_Live.With_State ("../../not-a-session", Increment_State'Access);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "invalid with_state session rejected");
+
+      Raised := False;
+      begin
+         Test_Live.With_State (Session, null);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "null with_state process rejected");
 
       Test_Live.Set_Session_Timeout (0);
       Removed := Test_Live.Cleanup_Sessions;
@@ -296,6 +319,7 @@ package body Web_Live_Tests is
       pragma Unreferenced (Item);
       Config  : Web.Config.Config_Type := Web.Config.Default_Config;
       Session : constant String := Test_Live.Find_Or_Create_Session (Web.Request.Create ("GET", "/"));
+      Response : Web.Response.Response_Type;
    begin
       Test_Live.Set_Secure_Cookies (False);
       Assert
@@ -307,12 +331,71 @@ package body Web_Live_Tests is
       Assert
         (Ada.Strings.Fixed.Index (Test_Live.Session_Cookie_Header (Session), "; Secure") > 0,
          "secure cookie attribute emitted");
+      Response := Test_Live.Html_Response (Web.Request.Create ("GET", "/"), "<p>ok</p>");
+      Assert
+        (Ada.Strings.Fixed.Index (Web.Response.Header (Response, "Set-Cookie"), "wf_session=") = 1,
+         "request html response helper sets session cookie");
 
       Config.Secure_Cookies := False;
       Config.Session_Timeout := 3_600;
       Test_Live.Configure (Config);
       Assert (not Test_Live.Secure_Cookies, "secure cookie setting follows config");
    end Test_Secure_Cookie_Settings;
+
+   procedure Test_Resource_Counters (Item : in out Fixture) is
+      pragma Unreferenced (Item);
+      Request : constant Web.Request.Request_Type := Web.Request.Create ("GET", "/");
+      Session : String (1 .. 32);
+      Server  : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
+      Client  : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
+      Worker  : Server_Task;
+   begin
+      Test_Live.Set_Session_Timeout (0);
+      declare
+         Ignored : constant Natural := Test_Live.Cleanup_Sessions;
+      begin
+         null;
+      end;
+      Assert (Test_Live.Session_Count = 0, "initial session count");
+      Assert (Test_Live.Active_WebSocket_Count = 0, "initial websocket count");
+
+      Session := Test_Live.Find_Or_Create_Session (Request);
+      Assert (Test_Live.Session_Count = 1, "session counter increments");
+      Assert (Test_Live.Active_WebSocket_Count = 0, "no websocket before attach");
+
+      GNAT.Sockets.Initialize;
+      GNAT.Sockets.Create_Socket_Pair (Server, Client);
+      Worker.Start (Server, Session);
+      delay 0.05;
+
+      Assert (Test_Live.Session_Count = 1, "session remains counted");
+      Assert (Test_Live.Active_WebSocket_Count = 1, "websocket counter increments");
+
+      Send_Raw (Client, Masked_Frame (8, ""));
+      declare
+         Close_Frame : constant String := Receive_Server_Frame (Client);
+      begin
+         Assert (Character'Pos (Close_Frame (Close_Frame'First)) = 16#88#, "counter close response");
+      end;
+
+      GNAT.Sockets.Close_Socket (Client);
+      delay 0.05;
+
+      Assert (Test_Live.Active_WebSocket_Count = 0, "websocket counter decrements");
+      Assert (Test_Live.Cleanup_Sessions = 1, "counter session cleaned");
+      Assert (Test_Live.Session_Count = 0, "session counter after cleanup");
+      Test_Live.Configure (Web.Config.Default_Config);
+   exception
+      when others =>
+         begin
+            GNAT.Sockets.Close_Socket (Client);
+         exception
+            when others =>
+               null;
+         end;
+         Test_Live.Configure (Web.Config.Default_Config);
+         raise;
+   end Test_Resource_Counters;
 
    procedure Test_WebSocket_Message_Limit (Item : in out Fixture) is
       pragma Unreferenced (Item);
@@ -356,6 +439,8 @@ package body Web_Live_Tests is
       Session : constant String := Test_Live.Find_Or_Create_Session (Initial_Request);
       Cookie_Request : Web.Request.Request_Type := Web.Request.Create ("GET", "/");
       New_Session : String (1 .. 32);
+      Conn : Web.Connection.Connection_Type;
+      Raised : Boolean := False;
    begin
       Web.Request.Set_Header (Cookie_Request, "Cookie", "wf_session=" & Session);
       Assert (Test_Live.Require_Session (Cookie_Request) = Session, "valid session cookie accepted");
@@ -363,9 +448,20 @@ package body Web_Live_Tests is
       Web.Request.Set_Header (Cookie_Request, "Cookie", "wf_session=../../not-a-session");
       Assert (Test_Live.Require_Session (Cookie_Request) = "", "invalid session cookie ignored");
 
+      Web.Request.Set_Header (Cookie_Request, "Cookie", "wf_session=" & Session & "; wf_session=" & Session);
+      Assert (Test_Live.Require_Session (Cookie_Request) = "", "duplicate session cookie rejected");
+
       New_Session := Test_Live.Find_Or_Create_Session (Cookie_Request);
       Assert (Web.Security.Is_Valid_Session_Id (New_Session), "replacement session id is valid");
       Assert (New_Session /= "../../not-a-session", "replacement does not reuse invalid cookie");
+
+      begin
+         Test_Live.Run_Connection (Conn, "../../not-a-session");
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "invalid websocket session rejected before socket use");
    end Test_Invalid_Session_Cookie;
 
    procedure Test_Background_Cleanup (Item : in out Fixture) is
@@ -375,13 +471,22 @@ package body Web_Live_Tests is
       Session : constant String := Test_Live.Find_Or_Create_Session (Initial_Request);
       Cookie_Request : Web.Request.Request_Type := Web.Request.Create ("GET", "/");
    begin
+      Test_Live.Stop_Cleanup_Task;
+      Assert (not Test_Live.Cleanup_Task_Running, "cleanup task initially stopped");
+
       Web.Request.Set_Header (Cookie_Request, "Cookie", "wf_session=" & Session);
       Assert (Test_Live.Require_Session (Cookie_Request) = Session, "session exists before worker");
 
       Test_Live.Set_Session_Timeout (0);
       Test_Live.Start_Cleanup_Task (1);
+      Assert (Test_Live.Cleanup_Task_Running, "cleanup task running after start");
+      Test_Live.Start_Cleanup_Task (1);
+      Assert (Test_Live.Cleanup_Task_Running, "cleanup task still running after repeated start");
       delay 1.20;
       Test_Live.Stop_Cleanup_Task;
+      Assert (not Test_Live.Cleanup_Task_Running, "cleanup task stopped");
+      Test_Live.Stop_Cleanup_Task;
+      Assert (not Test_Live.Cleanup_Task_Running, "cleanup task stop is idempotent");
       Test_Live.Set_Session_Timeout (3_600);
 
       Assert (Test_Live.Require_Session (Cookie_Request) = "", "background cleanup expired session");

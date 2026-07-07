@@ -16,6 +16,10 @@ package Web_Transport_Tests is
    --  @param Item AUnit fixture.
    procedure Test_Static_Binary_Serving (Item : in out Fixture);
 
+   --  Test large static files are represented as streamed file responses.
+   --  @param Item AUnit fixture.
+   procedure Test_Static_Large_File_Streaming (Item : in out Fixture);
+
    --  Test static traversal and read failure handling.
    --  @param Item AUnit fixture.
    procedure Test_Static_Read_Failures (Item : in out Fixture);
@@ -48,6 +52,10 @@ package Web_Transport_Tests is
    --  @param Item AUnit fixture.
    procedure Test_Method_Rejection (Item : in out Fixture);
 
+   --  Test custom error response handlers.
+   --  @param Item AUnit fixture.
+   procedure Test_Error_Handlers (Item : in out Fixture);
+
    --  Test that pipelined requests are rejected over a socket.
    --  @param Item AUnit fixture.
    procedure Test_Pipelining_Rejection (Item : in out Fixture);
@@ -71,4 +79,8 @@ package Web_Transport_Tests is
    --  Test TLS server policy validation.
    --  @param Item AUnit fixture.
    procedure Test_TLS_Policy_Validation (Item : in out Fixture);
+
+   --  Test connection wrapper handle validation.
+   --  @param Item AUnit fixture.
+   procedure Test_Connection_Validation (Item : in out Fixture);
 end Web_Transport_Tests;

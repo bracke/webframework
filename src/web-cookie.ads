@@ -1,12 +1,16 @@
-with Ada.Containers.Indefinite_Ordered_Maps;
+with Ada.Containers.Indefinite_Hashed_Maps;
+with Ada.Strings.Hash;
 
 package Web.Cookie is
-   package Cookie_Maps is new Ada.Containers.Indefinite_Ordered_Maps
+   package Cookie_Maps is new Ada.Containers.Indefinite_Hashed_Maps
      (Key_Type     => String,
-      Element_Type => String);
+      Element_Type => String,
+      Hash         => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
 
    type Cookie_Jar is record
       Values : Cookie_Maps.Map;
+      Counts : Cookie_Maps.Map;
    end record;
 
    type Same_Site_Mode is (Strict, Lax, None);
@@ -35,6 +39,12 @@ package Web.Cookie is
    --  @param Name Cookie name.
    --  @return Cookie value or an empty string.
    function Value (Jar : Cookie_Jar; Name : String) return String;
+
+   --  Return the number of valid cookie occurrences for a name.
+   --  @param Jar Parsed cookie jar.
+   --  @param Name Cookie name.
+   --  @return Number of valid occurrences.
+   function Count (Jar : Cookie_Jar; Name : String) return Natural;
 
    --  Build a Set-Cookie header value.
    --  @param Name Cookie name.

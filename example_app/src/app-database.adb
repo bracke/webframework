@@ -15,17 +15,20 @@ package body App.Database is
    protected body Gate is
       entry Acquire when not Busy is
       begin
+         --  Serialize DB access across websocket handlers and startup/shutdown.
          Busy := True;
       end Acquire;
 
       procedure Release is
       begin
+         --  Always clear busy state before other requests can continue.
          Busy := False;
       end Release;
    end Gate;
 
    procedure Open_If_Needed is
    begin
+      --  Open lazily once, reuse handle for subsequent requests.
       if Standard.Database.Is_Open (DB_Handle) then
          return;
       end if;
@@ -43,6 +46,7 @@ package body App.Database is
 
    procedure Initialize is
    begin
+      --  App startup hook: ensure DB handle is created before first request.
       Gate.Acquire;
       begin
          Open_If_Needed;
@@ -56,6 +60,7 @@ package body App.Database is
 
    procedure With_Database (Process : not null access procedure (DB : in out Standard.Database.Handle)) is
    begin
+      --  Execute storage callback under gate lock to avoid races in callbacks.
       Gate.Acquire;
       begin
          Open_If_Needed;
@@ -70,6 +75,7 @@ package body App.Database is
 
    procedure Close is
    begin
+      --  Safe shutdown path: close handle only if open.
       Gate.Acquire;
       begin
          if Standard.Database.Is_Open (DB_Handle) then

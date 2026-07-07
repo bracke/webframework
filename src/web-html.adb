@@ -1,7 +1,19 @@
+with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 
 package body Web.Html is
    use Ada.Strings.Unbounded;
+
+   function Decimal_Entity (Ch : Character) return String is
+   begin
+      return "&#" & Ada.Strings.Fixed.Trim (Natural'Image (Character'Pos (Ch)), Ada.Strings.Both) & ";";
+   end Decimal_Entity;
+
+   function Is_Control_Character (Ch : Character) return Boolean is
+      Position : constant Natural := Character'Pos (Ch);
+   begin
+      return Position < 32 or else Position = 127 or else Position in 128 .. 159;
+   end Is_Control_Character;
 
    function Escape_Common (Text : String; Attribute_Mode : Boolean) return String is
       Result : Unbounded_String;
@@ -23,7 +35,11 @@ package body Web.Html is
                   Append (Result, "'");
                end if;
             when others =>
-               Append (Result, Ch);
+               if Is_Control_Character (Ch) then
+                  Append (Result, Decimal_Entity (Ch));
+               else
+                  Append (Result, Ch);
+               end if;
          end case;
       end loop;
       return To_String (Result);

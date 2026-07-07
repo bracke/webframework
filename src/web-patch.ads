@@ -99,15 +99,36 @@ package Web.Patch is
    --  @return Target DOM id.
    function Target (Item : Patch) return String;
 
+   --  Process the patch target without returning a copied string.
+   --  @param Item Patch value.
+   --  @return No return value.
+   generic
+      with procedure Process (Value : String);
+   procedure With_Target (Item : Patch);
+
    --  Return the patch name field.
    --  @param Item Patch value.
    --  @return Attribute name or class.
    function Name (Item : Patch) return String;
 
+   --  Process the patch name field without returning a copied string.
+   --  @param Item Patch value.
+   --  @return No return value.
+   generic
+      with procedure Process (Value : String);
+   procedure With_Name (Item : Patch);
+
    --  Return the patch value field.
    --  @param Item Patch value.
    --  @return Patch payload.
    function Value (Item : Patch) return String;
+
+   --  Process the patch value field without returning a copied string.
+   --  @param Item Patch value.
+   --  @return No return value.
+   generic
+      with procedure Process (Value : String);
+   procedure With_Value (Item : Patch);
 
    --  Return whether force is enabled.
    --  @param Item Patch value.

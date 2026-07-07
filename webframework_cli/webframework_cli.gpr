@@ -1,4 +1,6 @@
 with "../../project_tools/project_tools.gpr";
+with "../../terminal_styles/terminal_styles.gpr";
+with "../webframework.gpr";
 
 project Webframework_Cli is
    for Source_Dirs use ("src");

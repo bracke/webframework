@@ -4,8 +4,10 @@ with Ada.Streams;
 with Ada.Streams.Stream_IO;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
+with System;
 with AUnit.Assertions;
 with AUnit.Test_Caller;
+with GNAT.Sockets;
 with Web.Config;
 with Web.Connection;
 with Web.Errors;
@@ -20,7 +22,33 @@ with Web.WebSocket;
 package body Web_Transport_Tests is
    package Caller is new AUnit.Test_Caller (Fixture);
    use AUnit.Assertions;
+   use type GNAT.Sockets.Socket_Type;
    use type Web.WebSocket.Opcode;
+
+   Not_Found_Invoked : Boolean := False;
+   Bad_Request_Invoked : Boolean := False;
+
+   function Not_Found_Handler
+     (Request : Web.Request.Request_Type;
+      Status  : Positive;
+      Detail  : String) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Request);
+   begin
+      Not_Found_Invoked := True;
+      return Web.Response.Create (Status, "<h1>custom 404</h1>", "text/html; charset=utf-8");
+   end Not_Found_Handler;
+
+   function Bad_Request_Handler
+     (Request : Web.Request.Request_Type;
+      Status  : Positive;
+      Detail  : String) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Request);
+   begin
+      Bad_Request_Invoked := True;
+      return Web.Response.Create (Status, "<h1>custom 400</h1>", "text/html; charset=utf-8");
+   end Bad_Request_Handler;
 
    function Raising_Handler
      (Request : Web.Request.Request_Type) return Web.Response.Response_Type
@@ -47,6 +75,8 @@ package body Web_Transport_Tests is
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("static binary serving", Test_Static_Binary_Serving'Access));
       AUnit.Test_Suites.Add_Test
+        (Suite, Caller.Create ("static large file streaming", Test_Static_Large_File_Streaming'Access));
+      AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("static read failures", Test_Static_Read_Failures'Access));
       AUnit.Test_Suites.Add_Test (Suite, Caller.Create ("http parse", Test_HTTP_Parse'Access));
       AUnit.Test_Suites.Add_Test (Suite, Caller.Create ("http body parse", Test_HTTP_Body_Parse'Access));
@@ -59,6 +89,8 @@ package body Web_Transport_Tests is
         (Suite, Caller.Create ("server config", Test_Server_Config'Access));
       AUnit.Test_Suites.Add_Test (Suite, Caller.Create ("http method rejection", Test_Method_Rejection'Access));
       AUnit.Test_Suites.Add_Test
+        (Suite, Caller.Create ("custom error handlers", Test_Error_Handlers'Access));
+      AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("http pipelining rejection", Test_Pipelining_Rejection'Access));
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("websocket accept", Test_WebSocket_Accept'Access));
@@ -70,6 +102,8 @@ package body Web_Transport_Tests is
         (Suite, Caller.Create ("websocket hostile frames", Test_WebSocket_Hostile_Frames'Access));
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("tls policy validation", Test_TLS_Policy_Validation'Access));
+      AUnit.Test_Suites.Add_Test
+        (Suite, Caller.Create ("connection validation", Test_Connection_Validation'Access));
    end Add_Tests;
 
    procedure Test_Static_Content_Types (Item : in out Fixture) is
@@ -80,6 +114,9 @@ package body Web_Transport_Tests is
       Assert (Web.Static.Content_Type ("app.js") = "application/javascript; charset=utf-8", "js");
       Assert (Web.Static.Content_Type ("logo.png") = "image/png", "png");
       Assert (Web.Static.Content_Type ("font.woff2") = "font/woff2", "woff2");
+      Assert (Web.Static.Content_Type ("INDEX.HTML") = "text/html; charset=utf-8", "uppercase html");
+      Assert (Web.Static.Content_Type ("Style.CSS") = "text/css; charset=utf-8", "mixed-case css");
+      Assert (Web.Static.Content_Type ("Logo.PNG") = "image/png", "mixed-case png");
    end Test_Static_Content_Types;
 
    procedure Write_Binary_File (Path : String) is
@@ -99,9 +136,57 @@ package body Web_Transport_Tests is
       when others =>
          if Ada.Streams.Stream_IO.Is_Open (File) then
             Ada.Streams.Stream_IO.Close (File);
+      end if;
+      raise;
+   end Write_Binary_File;
+
+   procedure Write_Oversized_File (Path : String) is
+      use type Ada.Streams.Stream_Element_Offset;
+
+      File    : Ada.Streams.Stream_IO.File_Type;
+      Chunk   : constant Ada.Streams.Stream_Element_Array (1 .. 4096) := (others => 16#41#);
+      Written : Natural := 0;
+   begin
+      Ada.Streams.Stream_IO.Create (File, Ada.Streams.Stream_IO.Out_File, Path);
+      while Written <= Web.Security.Max_Request_Size loop
+         Ada.Streams.Stream_IO.Write (File, Chunk);
+         Written := Written + Natural (Chunk'Length);
+      end loop;
+      Ada.Streams.Stream_IO.Close (File);
+   exception
+      when others =>
+         if Ada.Streams.Stream_IO.Is_Open (File) then
+            Ada.Streams.Stream_IO.Close (File);
+         end if;
+      raise;
+   end Write_Oversized_File;
+
+   procedure Write_Large_Static_File (Path : String) is
+      use type Ada.Streams.Stream_Element_Offset;
+
+      File       : Ada.Streams.Stream_IO.File_Type;
+      Chunk      : constant Ada.Streams.Stream_Element_Array (1 .. 4096) := (others => 16#78#);
+      Remaining  : Natural := 70_000;
+      Write_Size : Natural;
+   begin
+      Ada.Streams.Stream_IO.Create (File, Ada.Streams.Stream_IO.Out_File, Path);
+      while Remaining > 0 loop
+         Write_Size := Natural'Min (Remaining, Natural (Chunk'Length));
+         Ada.Streams.Stream_IO.Write
+           (File,
+            Chunk
+              (Chunk'First
+               .. Chunk'First + Ada.Streams.Stream_Element_Offset (Write_Size) - 1));
+         Remaining := Remaining - Write_Size;
+      end loop;
+      Ada.Streams.Stream_IO.Close (File);
+   exception
+      when others =>
+         if Ada.Streams.Stream_IO.Is_Open (File) then
+            Ada.Streams.Stream_IO.Close (File);
          end if;
          raise;
-   end Write_Binary_File;
+   end Write_Large_Static_File;
 
    procedure Test_Static_Binary_Serving (Item : in out Fixture) is
       pragma Unreferenced (Item);
@@ -132,10 +217,46 @@ package body Web_Transport_Tests is
       Ada.Directories.Delete_File (Path);
    end Test_Static_Binary_Serving;
 
+   procedure Test_Static_Large_File_Streaming (Item : in out Fixture) is
+      pragma Unreferenced (Item);
+      Directory  : constant String := "/tmp/webframework-large-static-test";
+      Path       : constant String := Directory & "/large.css";
+      Large_Size : constant Natural := 70_000;
+   begin
+      if not Ada.Directories.Exists (Directory) then
+         Ada.Directories.Create_Directory (Directory);
+      end if;
+
+      Write_Large_Static_File (Path);
+
+      declare
+         Response : constant Web.Response.Response_Type :=
+           Web.Static.Serve ("/static", Directory, "/static/large.css");
+         Payload  : constant String := Web.Response.Content_Body (Response);
+         Wire     : constant String := Web.Response.Serialize (Response);
+      begin
+         Assert (Web.Response.Status (Response) = 200, "large static response status");
+         Assert (Web.Response.Is_File_Body (Response), "large static response is file-backed");
+         Assert (Web.Response.File_Body_Path (Response) = Path, "large static file path stored");
+         Assert (Web.Response.Body_Length (Response) = Large_Size, "large static content length");
+         Assert (Payload = "", "large static body is not materialized");
+         Assert
+           (Ada.Strings.Fixed.Index (Wire, "Content-Type: text/css; charset=utf-8") > 0,
+            "large static content type");
+         Assert
+           (Ada.Strings.Fixed.Index (Wire, "Content-Length: 70000") > 0,
+            "large static serialized content length");
+         Assert (Wire'Length < Large_Size, "large static serialization omits file bytes");
+      end;
+
+      Ada.Directories.Delete_File (Path);
+   end Test_Static_Large_File_Streaming;
+
    procedure Test_Static_Read_Failures (Item : in out Fixture) is
       pragma Unreferenced (Item);
       Directory : constant String := "/tmp/webframework-static-failure";
       Nested    : constant String := Directory & "/nested";
+      Large     : constant String := Directory & "/large.bin";
       Response  : Web.Response.Response_Type;
    begin
       if not Ada.Directories.Exists (Directory) then
@@ -149,6 +270,21 @@ package body Web_Transport_Tests is
       Response := Web.Static.Serve ("/static", Directory, "/static/../secret.txt");
       Assert (Web.Response.Status (Response) = 400, "static traversal rejected");
 
+      Response := Web.Static.Serve ("/static", Directory, "/static/%2e%2e/secret.txt");
+      Assert (Web.Response.Status (Response) = 400, "encoded static traversal rejected");
+
+      Response := Web.Static.Serve ("/static", Directory, "/static/nested%5cfile.txt");
+      Assert (Web.Response.Status (Response) = 400, "encoded static backslash rejected");
+
+      Response := Web.Static.Serve ("static", Directory, "/static/nested");
+      Assert (Web.Response.Status (Response) = 400, "static invalid prefix rejected");
+
+      Response := Web.Static.Serve ("/static?x=1", Directory, "/static/nested");
+      Assert (Web.Response.Status (Response) = 400, "static prefix query rejected");
+
+      Response := Web.Static.Serve ("/static", "../secret", "/static/nested");
+      Assert (Web.Response.Status (Response) = 400, "static unsafe directory rejected");
+
       Response := Web.Static.Serve ("/static", Directory, "/staticx/nested");
       Assert (Web.Response.Status (Response) = 404, "static prefix boundary enforced");
 
@@ -157,6 +293,11 @@ package body Web_Transport_Tests is
 
       Response := Web.Static.Serve ("/static", Directory, "/static/nested");
       Assert (Web.Response.Status (Response) = 404, "static directories are not served");
+
+      Write_Oversized_File (Large);
+      Response := Web.Static.Serve ("/static", Directory, "/static/large.bin");
+      Assert (Web.Response.Status (Response) = 400, "oversized static file rejected");
+      Ada.Directories.Delete_File (Large);
    end Test_Static_Read_Failures;
 
    procedure Test_HTTP_Parse (Item : in out Fixture) is
@@ -235,6 +376,26 @@ package body Web_Transport_Tests is
          & CRLF,
          "duplicate headers rejected");
       Expect_Bad_Request
+        ("POST / HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "post parse rejected");
+      Expect_Bad_Request
+        ("GET  / HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "double method-target space rejected");
+      Expect_Bad_Request
+        ("GET /  HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "double target-version space rejected");
+      Expect_Bad_Request
+        ("GET" & Character'Val (9) & "/ HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "request line tab rejected");
+      Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF
          & "Host localhost" & CRLF
          & CRLF,
@@ -256,13 +417,103 @@ package body Web_Transport_Tests is
          "control character in header value rejected");
       Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF
+         & "Host: local" & Character'Val (9) & "host" & CRLF
+         & CRLF,
+         "tab in header value rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
          & "Host: local" & Character'Val (127) & "host" & CRLF
          & CRLF,
          "delete byte in header value rejected");
       Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF
+         & "Host: local" & Character'Val (128) & "host" & CRLF
+         & CRLF,
+         "c1 control in header value rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
          & CRLF,
          "missing host rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host:" & CRLF
+         & CRLF,
+         "empty host rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host:   " & CRLF
+         & CRLF,
+         "blank host rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: user@example.test" & CRLF
+         & CRLF,
+         "host userinfo rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: example.test/path" & CRLF
+         & CRLF,
+         "host path rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: example.test?x=1" & CRLF
+         & CRLF,
+         "host query rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: example.test#frag" & CRLF
+         & CRLF,
+         "host fragment rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: example.test:abc" & CRLF
+         & CRLF,
+         "host invalid port rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: example..test" & CRLF
+         & CRLF,
+         "host empty label rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: -bad.example" & CRLF
+         & CRLF,
+         "host leading hyphen rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: bad-.example" & CRLF
+         & CRLF,
+         "host trailing hyphen rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: 999.1.2.3" & CRLF
+         & CRLF,
+         "host invalid ipv4 literal rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: [::1" & CRLF
+         & CRLF,
+         "host malformed ipv6 rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: [:::]" & CRLF
+         & CRLF,
+         "host triple colon ipv6 rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: [1:2:3]" & CRLF
+         & CRLF,
+         "host short uncompressed ipv6 rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: [gg::1]" & CRLF
+         & CRLF,
+         "host invalid ipv6 hextet rejected");
+      Expect_Parses
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: Example.Test:8443" & CRLF
+         & CRLF,
+         "host authority accepted");
       Expect_Bad_Request
         ("GET http://example.test/ HTTP/1.1" & CRLF
          & "Host: example.test" & CRLF
@@ -273,6 +524,31 @@ package body Web_Transport_Tests is
          & "Host: localhost" & CRLF
          & CRLF,
          "unsafe request target rejected");
+      Expect_Bad_Request
+        ("GET /bad/%2e%2e/target HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "encoded dot traversal rejected");
+      Expect_Bad_Request
+        ("GET /bad%2f..%2ftarget HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "encoded slash traversal rejected");
+      Expect_Bad_Request
+        ("GET /bad%5ctarget HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "encoded backslash rejected");
+      Expect_Bad_Request
+        ("GET /bad%zztarget HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "bad percent escape rejected");
+      Expect_Bad_Request
+        ("GET /bad%2 HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & CRLF,
+         "truncated percent escape rejected");
       Expect_Bad_Request
         ("GET /?q=bad" & Character'Val (1) & "query HTTP/1.1" & CRLF
          & "Host: localhost" & CRLF
@@ -301,17 +577,76 @@ package body Web_Transport_Tests is
         ("GET / HTTP/1.1" & CRLF & "Transfer-Encoding: chunked" & CRLF & CRLF,
          "chunked rejected");
       Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Transfer-Encoding: chunked;foo=bar" & CRLF & CRLF,
+         "parameterized chunked rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Transfer-Encoding:" & CRLF & CRLF,
+         "empty transfer encoding rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Transfer-Encoding:   " & CRLF & CRLF,
+         "blank transfer encoding rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Transfer-Encoding: identity" & CRLF & CRLF,
+         "identity transfer encoding rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Transfer-Encoding: notchunked" & CRLF & CRLF,
+         "unknown transfer encoding rejected");
+      Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF & "Content-Encoding: gzip" & CRLF & CRLF,
          "content encoding rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Content-Encoding:" & CRLF & CRLF,
+         "empty content encoding rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Content-Encoding:   " & CRLF & CRLF,
+         "blank content encoding rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Content-Encoding: identity" & CRLF & CRLF,
+         "identity content encoding rejected");
       Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF & "Content-Type: multipart/form-data" & CRLF & CRLF,
          "multipart rejected");
       Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Content-Type: multipart/form-data; boundary=x" & CRLF & CRLF,
+         "multipart with boundary rejected");
+      Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF & "Content-Length: nope" & CRLF & CRLF,
          "bad content length rejected");
       Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Content-Length:" & CRLF & CRLF,
+         "empty content length rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF & "Content-Length:   " & CRLF & CRLF,
+         "blank content length rejected");
+      Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF & "Content-Length: +7" & CRLF & CRLF,
          "signed content length rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Content-Length: 999999999999999999999999999999999999" & CRLF
+         & CRLF,
+         "overflow content length rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & "Content-Length: 7" & CRLF
+         & CRLF
+         & "abc",
+         "short body rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & "Content-Length: 3" & CRLF
+         & CRLF
+         & "abcdef",
+         "long body rejected");
+      Expect_Bad_Request
+        ("GET / HTTP/1.1" & CRLF
+         & "Host: localhost" & CRLF
+         & "Content-Length: 0" & CRLF
+         & "Content-Length: 7" & CRLF
+         & CRLF,
+         "duplicate content length rejected");
       Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF
          & "Host: localhost" & CRLF
@@ -331,12 +666,13 @@ package body Web_Transport_Tests is
          & "Accept-Encoding: xgzipx" & CRLF
          & CRLF,
          "encoding token substrings ignored");
-      Expect_Parses
+      Expect_Bad_Request
         ("GET / HTTP/1.1" & CRLF
          & "Host: localhost" & CRLF
-         & "Transfer-Encoding: notchunked" & CRLF
+         & "Accept-Encoding: gzip;q=0" & CRLF
+         & "Accept-Encoding: deflate" & CRLF
          & CRLF,
-         "transfer token substrings ignored");
+         "duplicate accept encoding rejected");
    end Test_HTTP_Rejections;
 
    procedure Test_Invalid_Registrations (Item : in out Fixture) is
@@ -361,6 +697,15 @@ package body Web_Transport_Tests is
       end;
       Assert (Raised, "route traversal rejected");
 
+      Raised := False;
+      begin
+         Web.Server.Get ("/bad/%2e%2e/route", Raising_Handler'Access);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "encoded route traversal rejected");
+
       Web.Server.Get ("/duplicate-route-test", Raising_Handler'Access);
       Raised := False;
       begin
@@ -380,6 +725,15 @@ package body Web_Transport_Tests is
       end;
       Assert (Raised, "websocket path with query rejected");
 
+      Raised := False;
+      begin
+         Web.Server.WebSocket ("/bad%5cws", Noop_WebSocket'Access);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "encoded websocket backslash rejected");
+
       Web.Server.WebSocket ("/duplicate-ws-test", Noop_WebSocket'Access);
       Raised := False;
       begin
@@ -398,6 +752,15 @@ package body Web_Transport_Tests is
             Raised := True;
       end;
       Assert (Raised, "relative static prefix rejected");
+
+      Raised := False;
+      begin
+         Web.Server.Static ("/bad%2f..%2fstatic", "public");
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "encoded static traversal rejected");
 
       Raised := False;
       begin
@@ -439,11 +802,125 @@ package body Web_Transport_Tests is
       Assert (Raised, "zero request limit rejected");
 
       Config := Web.Config.Default_Config;
+      Config.Max_Connections := 0;
+      Raised := False;
+      begin
+         Web.Server.Configure (Config);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "zero connection limit rejected");
+
+      Config := Web.Config.Default_Config;
+      Web.Config.Set_Allowed_Host (Config, "bad host ");
+      Raised := False;
+      begin
+         Web.Server.Configure (Config);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "invalid allowed host rejected");
+
+      Config := Web.Config.Default_Config;
+      Web.Config.Set_Allowed_Host (Config, "LOCALHOST");
+      Web.Server.Configure (Config);
+
+      Config := Web.Config.Default_Config;
+      Web.Config.Set_Allowed_Host (Config, "example.production.test:8443");
+      Web.Server.Configure (Config);
+      declare
+         Request : Web.Request.Request_Type := Web.Request.Create ("GET", "/");
+      begin
+         Web.Request.Set_Header (Request, "Host", "example.production.test:8443");
+         Assert
+           (Web.Security.Require_Allowed_Origin
+              (Request, "example.production.test:8443"),
+            "long allowed host setter accepted");
+      end;
+
+      Raised := False;
+      begin
+         Web.Config.Set_Allowed_Host (Config, (1 .. 300 => 'a'));
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "oversized config string rejected");
+
+      Raised := False;
+      begin
+         Web.Server.Run ("127.0.0.1", 0);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "zero bind port rejected");
+
+      Raised := False;
+      begin
+         Web.Server.Run ("127.0.0.1", 65_536);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "oversized bind port rejected");
+
+      Raised := False;
+      begin
+         Web.Server.Run ("", 8080);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "empty bind host rejected");
+
+      Raised := False;
+      begin
+         Web.Server.Run ("localhost", 8080);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "non-numeric bind host rejected");
+
+      Raised := False;
+      begin
+         Web.Server.Run ("127.0.0.1" & Character'Val (9), 8080);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "bind host control byte rejected");
+
+      Config := Web.Config.Default_Config;
       Config.Enable_Compression := False;
       Config.Compression_Min_Size := 8_192;
+      Config.Max_Connections := 64;
+      Config.Use_X_Forwarded_For := True;
       Web.Server.Configure (Config);
       Assert (not Config.Enable_Compression, "compression can be disabled in config");
       Assert (Config.Compression_Min_Size = 8_192, "compression threshold can be configured");
+      Assert (Config.Max_Connections = 64, "connection limit can be configured");
+      Assert (Config.Use_X_Forwarded_For, "forwarded ip source can be enabled in config");
+
+      declare
+         Health : constant Web.Response.Response_Type := Web.Server.Health_Response;
+         Report : constant String := Web.Server.Configuration_Report;
+      begin
+         Assert (Web.Response.Status (Health) = 200, "health response status");
+         Assert (Web.Response.Content_Body (Health) = "ok", "health response body");
+         Assert
+           (Ada.Strings.Fixed.Index (Report, "max_connections=64") > 0,
+            "configuration report includes connection limit");
+         Assert
+           (Ada.Strings.Fixed.Index (Report, "compression=disabled") > 0,
+            "configuration report includes compression mode");
+         Assert
+           (Ada.Strings.Fixed.Index (Report, "use_x_forwarded_for=enabled") > 0,
+            "configuration report includes forwarded ip mode");
+      end;
 
       Web.Server.Configure (Web.Config.Default_Config);
    exception
@@ -459,6 +936,52 @@ package body Web_Transport_Tests is
       Assert (Web.Response.Status (Web.Server.Dispatch (Request)) = 400, "post rejected");
    end Test_Method_Rejection;
 
+   procedure Test_Error_Handlers (Item : in out Fixture) is
+      pragma Unreferenced (Item);
+
+      Response : Web.Response.Response_Type;
+      Bad_Request : Web.Request.Request_Type;
+   begin
+      Not_Found_Invoked := False;
+      Bad_Request_Invoked := False;
+      Web.Server.Register_Error_Handler (404, Not_Found_Handler'Access);
+      Web.Server.Register_Error_Handler (400, Bad_Request_Handler'Access);
+
+      Response := Web.Server.Dispatch (Web.Request.Create ("GET", "/__missing"));
+      Assert (Not_Found_Invoked, "404 handler invoked");
+      Assert (Web.Response.Status (Response) = 404, "404 status");
+      Assert
+        (Ada.Strings.Fixed.Index (Web.Response.Content_Body (Response), "custom 404") > 0,
+         "custom 404 content");
+
+      Bad_Request := Web.Request.Create ("POST", "/");
+      Response := Web.Server.Dispatch (Bad_Request);
+      Assert (Bad_Request_Invoked, "400 handler invoked");
+      Assert (Web.Response.Status (Response) = 400, "400 status");
+      Assert
+        (Ada.Strings.Fixed.Index (Web.Response.Content_Body (Response), "custom 400") > 0,
+         "custom 400 content");
+
+      Web.Server.Clear_Error_Handler (404);
+      Web.Server.Clear_Error_Handler (400);
+      Not_Found_Invoked := False;
+      Bad_Request_Invoked := False;
+
+      Response := Web.Server.Dispatch (Web.Request.Create ("GET", "/__missing"));
+      Assert (Web.Response.Status (Response) = 404, "default 404 status");
+      Assert (not Not_Found_Invoked, "handler removed");
+      Assert (Web.Response.Content_Body (Response) = "Not found", "default 404 body");
+
+      Response := Web.Server.Dispatch (Web.Request.Create ("POST", "/"));
+      Assert (Web.Response.Status (Response) = 400, "default 400 status");
+      Assert (not Bad_Request_Invoked, "400 handler removed");
+      Assert
+        (Ada.Strings.Fixed.Index (Web.Response.Content_Body (Response), "Bad request") > 0
+         or else
+         Ada.Strings.Fixed.Index (Web.Response.Content_Body (Response), "method not allowed") > 0,
+         "default 400 body");
+   end Test_Error_Handlers;
+
    procedure Test_Pipelining_Rejection (Item : in out Fixture) is
       pragma Unreferenced (Item);
       CRLF : constant String := Character'Val (13) & Character'Val (10);
@@ -468,15 +991,44 @@ package body Web_Transport_Tests is
          "GET /one HTTP/1.1" & CRLF & "Host: localhost" & CRLF & CRLF
          & "GET /two HTTP/1.1" & CRLF & "Host: localhost" & CRLF & CRLF,
          "pipelining rejected");
+      Expect_Bad_Request
+        ("GET /one HTTP/1.1" & CRLF & "Host: localhost" & CRLF & CRLF & "extra",
+         "body without content length rejected");
    end Test_Pipelining_Rejection;
 
    procedure Test_WebSocket_Accept (Item : in out Fixture) is
       pragma Unreferenced (Item);
+      Raised : Boolean := False;
    begin
       Assert
         (Web.WebSocket.Accept_Key ("dGhlIHNhbXBsZSBub25jZQ==") =
          "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
          "RFC6455 accept key");
+
+      begin
+         declare
+            Ignored : constant String := Web.WebSocket.Accept_Key ("short");
+         begin
+            null;
+         end;
+      exception
+         when Web.Errors.Protocol_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "direct short websocket key rejected");
+
+      Raised := False;
+      begin
+         declare
+            Ignored : constant String := Web.WebSocket.Accept_Key ("AAAAAAAAAAAAAAAAAAAAAAA!");
+         begin
+            null;
+         end;
+      exception
+         when Web.Errors.Protocol_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "direct malformed websocket key rejected");
    end Test_WebSocket_Accept;
 
    procedure Test_WebSocket_Upgrade_Detection (Item : in out Fixture) is
@@ -493,6 +1045,18 @@ package body Web_Transport_Tests is
            & CRLF);
    begin
       Assert (Web.WebSocket.Is_Upgrade (Request), "upgrade detected");
+
+      Request :=
+        Web.Server.Parse_Request
+          ("GET /ws HTTP/1.1" & CRLF
+           & "Host: localhost" & CRLF
+           & "Upgrade: websocket" & CRLF
+           & "Connection: keep-alive, Upgrade" & CRLF
+           & "Sec-WebSocket-Version: 13" & CRLF
+           & "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" & CRLF
+           & CRLF);
+      Assert (Web.WebSocket.Is_Upgrade (Request), "comma-separated connection upgrade accepted");
+
       Request := Web.Request.Create ("GET", "/");
       Assert (not Web.WebSocket.Is_Upgrade (Request), "normal request is not upgrade");
 
@@ -544,6 +1108,20 @@ package body Web_Transport_Tests is
       Web.Request.Set_Header (Request, "Sec-WebSocket-Version", "13");
       Web.Request.Set_Header (Request, "Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
       Assert (not Web.WebSocket.Is_Upgrade (Request), "connection token must match exactly");
+
+      Request := Web.Request.Create ("GET", "/ws");
+      Web.Request.Set_Header (Request, "Upgrade", "websocket;permessage-deflate");
+      Web.Request.Set_Header (Request, "Connection", "Upgrade");
+      Web.Request.Set_Header (Request, "Sec-WebSocket-Version", "13");
+      Web.Request.Set_Header (Request, "Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
+      Assert (not Web.WebSocket.Is_Upgrade (Request), "upgrade token parameters rejected");
+
+      Request := Web.Request.Create ("GET", "/ws");
+      Web.Request.Set_Header (Request, "Upgrade", "websocket");
+      Web.Request.Set_Header (Request, "Connection", "Upgrade;foo=bar");
+      Web.Request.Set_Header (Request, "Sec-WebSocket-Version", "13");
+      Web.Request.Set_Header (Request, "Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
+      Assert (not Web.WebSocket.Is_Upgrade (Request), "connection token parameters rejected");
    end Test_WebSocket_Upgrade_Detection;
 
    procedure Test_WebSocket_Frame (Item : in out Fixture) is
@@ -558,10 +1136,45 @@ package body Web_Transport_Tests is
         & Character'Val (16#7F#)
         & Character'Val (16#93#);
       Frame : constant Web.WebSocket.Frame := Web.WebSocket.Decode_Frame (Frame_Data, 128);
+      Raised : Boolean := False;
+      Saw_Payload : Boolean := False;
+
+      procedure Check_Payload (Payload : String);
+
+      procedure Check_Payload (Payload : String) is
+      begin
+         Saw_Payload := Payload = "Hi";
+      end Check_Payload;
+
+      procedure With_Payload is new Web.WebSocket.With_Payload (Check_Payload);
    begin
       Assert (Frame.Frame_Type = Web.WebSocket.Text_Frame, "text frame");
       Assert (Web.WebSocket.Payload (Frame) = "Hi", "payload unmasked");
+      With_Payload (Frame);
+      Assert (Saw_Payload, "payload callback accessor");
       Assert (Web.WebSocket.Encode_Text ("Hi")'Length = 4, "server frame encoded");
+
+      begin
+         declare
+            Ignored : constant String :=
+              Web.WebSocket.Encode_Text (String'(1 => Character'Val (16#C0#)));
+         begin
+            null;
+         end;
+      exception
+         when Web.Errors.Protocol_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "invalid server text utf8 rejected");
+
+      Raised := False;
+      begin
+         Web.WebSocket.Send_Pong (GNAT.Sockets.No_Socket, (1 .. 126 => 'x'));
+      exception
+         when Web.Errors.Protocol_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "oversized server pong rejected before send");
    end Test_WebSocket_Frame;
 
    procedure Expect_Protocol_Error (Data : String; Max_Size : Natural; Name : String) is
@@ -587,7 +1200,22 @@ package body Web_Transport_Tests is
         & Character'Val (16#02#)
         & Character'Val (16#03#)
         & Character'Val (16#04#);
+      Zero_Mask : constant String :=
+        Character'Val (0)
+        & Character'Val (0)
+        & Character'Val (0)
+        & Character'Val (0);
+      Valid_Close : constant Web.WebSocket.Frame :=
+        Web.WebSocket.Decode_Frame
+          (Character'Val (16#88#)
+           & Character'Val (16#85#)
+           & Zero_Mask
+           & Character'Val (16#03#)
+           & Character'Val (16#E8#)
+           & "bye",
+           128);
    begin
+      Assert (Valid_Close.Frame_Type = Web.WebSocket.Close_Frame, "valid close reason accepted");
       Expect_Protocol_Error
         (Character'Val (16#81#) & Character'Val (2) & "Hi",
          128,
@@ -600,6 +1228,13 @@ package body Web_Transport_Tests is
         (Character'Val (16#82#) & Character'Val (16#80#) & Mask,
          128,
          "binary websocket frame rejected");
+      Expect_Protocol_Error
+        (Character'Val (16#81#)
+         & Character'Val (16#81#)
+         & Zero_Mask
+         & Character'Val (16#C0#),
+         128,
+         "invalid text frame utf8 rejected");
       Expect_Protocol_Error
         (Character'Val (16#81#) & Character'Val (16#83#) & Mask & "abc",
          2,
@@ -637,6 +1272,15 @@ package body Web_Transport_Tests is
          & Character'Val (16#EF#),
          128,
          "reserved close code rejected");
+      Expect_Protocol_Error
+        (Character'Val (16#88#)
+         & Character'Val (16#83#)
+         & Zero_Mask
+         & Character'Val (16#03#)
+         & Character'Val (16#E8#)
+         & Character'Val (16#C0#),
+         128,
+         "invalid close reason utf8 rejected");
       Expect_Protocol_Error
         (Character'Val (16#89#) & Character'Val (16#FE#) & Character'Val (0) & Character'Val (126),
          256,
@@ -722,4 +1366,57 @@ package body Web_Transport_Tests is
       end;
       Assert (Raised, "TLS configuration control bytes rejected");
    end Test_TLS_Policy_Validation;
+
+   procedure Test_Connection_Validation (Item : in out Fixture) is
+      pragma Unreferenced (Item);
+      Conn   : Web.Connection.Connection_Type;
+      Server : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
+      Client : GNAT.Sockets.Socket_Type := GNAT.Sockets.No_Socket;
+      Raised : Boolean := False;
+   begin
+      begin
+         Web.Connection.Open_Plain (Conn, GNAT.Sockets.No_Socket);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "plain connection no-socket rejected");
+
+      Raised := False;
+      begin
+         Web.Connection.Open_TLS (Conn, GNAT.Sockets.No_Socket, System.Null_Address);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "tls connection no-socket rejected");
+
+      GNAT.Sockets.Initialize;
+      GNAT.Sockets.Create_Socket_Pair (Server, Client);
+
+      Raised := False;
+      begin
+         Web.Connection.Open_TLS (Conn, Server, System.Null_Address);
+      exception
+         when Web.Errors.Security_Error =>
+            Raised := True;
+      end;
+      Assert (Raised, "tls connection null handle rejected");
+
+      Web.Connection.Open_Plain (Conn, Server);
+      Assert (Web.Connection.Socket (Conn) = Server, "plain connection stores socket");
+      Assert (not Web.Connection.Is_TLS (Conn), "plain connection is not tls");
+      Web.Connection.Close (Conn);
+      GNAT.Sockets.Close_Socket (Client);
+   exception
+      when others =>
+         Web.Connection.Close (Conn);
+         begin
+            GNAT.Sockets.Close_Socket (Client);
+         exception
+            when others =>
+               null;
+         end;
+         raise;
+   end Test_Connection_Validation;
 end Web_Transport_Tests;

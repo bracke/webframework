@@ -1,4 +1,6 @@
+with Ada.Directories;
 with Ada.Streams;
+with Ada.Streams.Stream_IO;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Ada.Text_IO;
@@ -29,6 +31,9 @@ package body Web_E2E_Tests is
    LF : constant String := (1 => Character'Val (10));
    Test_Cert_Path : constant String := "/tmp/webframework-test-cert.pem";
    Test_Key_Path : constant String := "/tmp/webframework-test-key.pem";
+   Static_Directory : constant String := "/tmp/webframework-e2e-static";
+   Static_Image_Path : constant String := Static_Directory & "/image.png";
+   Static_Style_Path : constant String := Static_Directory & "/style.css";
    Test_Certificate : constant String :=
      "-----BEGIN CERTIFICATE-----" & LF
      & "MIIDCTCCAfGgAwIBAgIUW4pBchTw00Odpz3pMkmmX7gYyP8wDQYJKoZIhvcNAQEL" & LF
@@ -135,6 +140,33 @@ package body Web_E2E_Tests is
          "<!doctype html><html><body><span id=""counter-value"">0</span></body></html>");
    end Home;
 
+   function No_Transform_Page (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+      pragma Unreferenced (Request);
+      Response : Web.Response.Response_Type :=
+        Web.Response.Html ("<!doctype html><html><body>no transform</body></html>");
+   begin
+      Web.Response.Set_Header (Response, "Cache-Control", "private, no-transform");
+      return Response;
+   end No_Transform_Page;
+
+   function Already_Encoded_Page (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+      pragma Unreferenced (Request);
+      Response : Web.Response.Response_Type :=
+        Web.Response.Html ("<!doctype html><html><body>encoded</body></html>");
+   begin
+      Web.Response.Set_Header (Response, "Content-Encoding", "gzip");
+      return Response;
+   end Already_Encoded_Page;
+
+   function Binary_Response (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+      pragma Unreferenced (Request);
+   begin
+      return Web.Response.Create
+        (200,
+         Character'Val (16#89#) & "PNG" & Character'Val (13) & Character'Val (10),
+         "image/png");
+   end Binary_Response;
+
    task body Server_Task is
       Server_Port : Natural;
    begin
@@ -174,6 +206,27 @@ package body Web_E2E_Tests is
          end if;
          raise;
    end Write_Text_File;
+
+   procedure Write_Binary_File (Path : String) is
+      File   : Ada.Streams.Stream_IO.File_Type;
+      Buffer : constant Ada.Streams.Stream_Element_Array :=
+        (1 => 16#89#,
+         2 => 16#50#,
+         3 => 16#4E#,
+         4 => 16#47#,
+         5 => 16#0D#,
+         6 => 16#0A#);
+   begin
+      Ada.Streams.Stream_IO.Create (File, Ada.Streams.Stream_IO.Out_File, Path);
+      Ada.Streams.Stream_IO.Write (File, Buffer);
+      Ada.Streams.Stream_IO.Close (File);
+   exception
+      when others =>
+         if Ada.Streams.Stream_IO.Is_Open (File) then
+            Ada.Streams.Stream_IO.Close (File);
+         end if;
+         raise;
+   end Write_Binary_File;
 
    function Free_Port return Natural is
       Socket  : GNAT.Sockets.Socket_Type;
@@ -286,11 +339,15 @@ package body Web_E2E_Tests is
 
    function Read_Until_Close (Socket : GNAT.Sockets.Socket_Type) return String;
 
-   function Get_Response (Port : Natural; Encoding : String := "") return String is
+   function Get_Response
+     (Port     : Natural;
+      Encoding : String := "";
+      Path     : String := "/e2e") return String
+   is
       Socket : GNAT.Sockets.Socket_Type := Connect (Port);
       Header : Unbounded_String :=
         To_Unbounded_String
-          ("GET /e2e HTTP/1.1" & CRLF
+          ("GET " & Path & " HTTP/1.1" & CRLF
            & "Host: 127.0.0.1" & CRLF);
    begin
       if Encoding'Length > 0 then
@@ -311,7 +368,8 @@ package body Web_E2E_Tests is
    procedure Assert_Inflates
      (Response : String;
       Header   : Zlib.Header_Type;
-      Name     : String)
+      Name     : String;
+      Expected : String := "id=""counter-value""")
    is
       Status   : Zlib.Status_Code;
       Inflated : constant Zlib.Byte_Array :=
@@ -319,7 +377,7 @@ package body Web_E2E_Tests is
    begin
       Assert (Status = Zlib.Ok, Name & " response inflates");
       Assert
-        (Ada.Strings.Fixed.Index (To_String (Inflated), "id=""counter-value""") > 0,
+        (Ada.Strings.Fixed.Index (To_String (Inflated), Expected) > 0,
          Name & " response body");
    end Assert_Inflates;
 
@@ -529,14 +587,30 @@ package body Web_E2E_Tests is
       Websocket : GNAT.Sockets.Socket_Type;
       Config : Web.Config.Config_Type := Web.Config.Default_Config;
    begin
+      Web.Server.Stop;
+      Assert (not Web.Server.Running, "server initially stopped");
+
       Web.Server.Configure (Web.Config.Default_Config);
       Config.Compression_Min_Size := 0;
       Web.Server.Configure (Config);
+      if not Ada.Directories.Exists (Static_Directory) then
+         Ada.Directories.Create_Directory (Static_Directory);
+      end if;
+      Write_Binary_File (Static_Image_Path);
+      Write_Text_File
+        (Static_Style_Path,
+         "body { color: #112233; background: #ffffff; }" & LF
+         & ".counter { font-weight: 700; }");
       Web.Server.Get ("/e2e", Home'Access);
+      Web.Server.Get ("/no-transform", No_Transform_Page'Access);
+      Web.Server.Get ("/encoded", Already_Encoded_Page'Access);
+      Web.Server.Get ("/binary", Binary_Response'Access);
+      Web.Server.Static ("/assets", Static_Directory);
       Web.Server.WebSocket ("/e2e-ws", Test_Live.WebSocket_Handler'Access);
       Worker.Start (Port);
 
       Http := Connect (Port);
+      Assert (Web.Server.Running, "server running after first connection");
       Send_All
         (Http,
          "GET /e2e HTTP/1.1" & CRLF
@@ -564,10 +638,33 @@ package body Web_E2E_Tests is
             Junk_Q_Response : constant String := Get_Response (Port, "gzip;q=0.900x, deflate;q=0.100");
             Long_Q_Response : constant String := Get_Response (Port, "gzip;q=0.9000, deflate;q=0.100");
             Empty_Q_Response : constant String := Get_Response (Port, "gzip;q=0., deflate;q=0.100");
+            Duplicate_Gzip_Response : constant String := Get_Response (Port, "gzip;q=0, gzip");
+            Duplicate_Wildcard_Response : constant String := Get_Response (Port, "*;q=0, *");
+            Empty_Item_Response : constant String := Get_Response (Port, "gzip, , deflate");
+            Invalid_Item_Response : constant String := Get_Response (Port, "gzip, bad coding");
             No_Representation_Response : constant String :=
               Get_Response (Port, "gzip;q=0, deflate;q=0, identity;q=0");
+            Duplicate_Required_Response : constant String :=
+              Get_Response (Port, "gzip;q=0, gzip, deflate;q=0, identity;q=0");
+            Invalid_Required_Response : constant String :=
+              Get_Response (Port, "gzip, bad coding, identity;q=0");
             Bad_Identity_Response : constant String :=
               Get_Response (Port, "gzip;q=0, deflate;q=0, identity;q=0.000x");
+            No_Transform_Response : constant String :=
+              Get_Response (Port, "gzip", "/no-transform");
+            No_Transform_Required : constant String :=
+              Get_Response (Port, "gzip, identity;q=0", "/no-transform");
+            Encoded_Response : constant String :=
+              Get_Response (Port, "gzip, identity;q=0", "/encoded");
+            Encoded_Required : constant String :=
+              Get_Response (Port, "gzip;q=0, identity;q=0", "/encoded");
+            Binary_Response : constant String := Get_Response (Port, "gzip", "/binary");
+            Binary_Required : constant String :=
+              Get_Response (Port, "gzip, identity;q=0", "/binary");
+            Static_Response : constant String := Get_Response (Port, "gzip", "/assets/image.png");
+            Static_Required : constant String :=
+              Get_Response (Port, "gzip, identity;q=0", "/assets/image.png");
+            Static_CSS_Response : constant String := Get_Response (Port, "gzip", "/assets/style.css");
          begin
             Assert
               (Ada.Strings.Fixed.Index (Gzip_Response, "Content-Encoding: gzip") > 0,
@@ -606,11 +703,96 @@ package body Web_E2E_Tests is
               (Ada.Strings.Fixed.Index (Empty_Q_Response, "Content-Encoding: deflate") > 0,
                "empty fractional q value disables encoding");
             Assert
+              (Ada.Strings.Fixed.Index (Duplicate_Gzip_Response, "Content-Encoding:") = 0,
+               "duplicate gzip coding is unavailable");
+            Assert
+              (Ada.Strings.Fixed.Index (Duplicate_Wildcard_Response, "Content-Encoding:") = 0,
+               "duplicate wildcard coding is unavailable");
+            Assert
+              (Ada.Strings.Fixed.Index (Empty_Item_Response, "Content-Encoding:") = 0,
+               "empty accept encoding item is unavailable");
+            Assert
+              (Ada.Strings.Fixed.Index (Invalid_Item_Response, "Content-Encoding:") = 0,
+               "invalid accept encoding item is unavailable");
+            Assert
               (Ada.Strings.Fixed.Index (No_Representation_Response, "HTTP/1.1 406 Not Acceptable") > 0,
                "identity q zero returns not acceptable");
             Assert
+              (Ada.Strings.Fixed.Index (No_Representation_Response, "Vary: Accept-Encoding") > 0,
+               "not acceptable response varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Duplicate_Required_Response, "HTTP/1.1 406 Not Acceptable") > 0,
+               "duplicate required coding returns not acceptable");
+            Assert
+              (Ada.Strings.Fixed.Index (Invalid_Required_Response, "HTTP/1.1 406 Not Acceptable") > 0,
+               "invalid required coding returns not acceptable");
+            Assert
               (Ada.Strings.Fixed.Index (Bad_Identity_Response, "HTTP/1.1 406 Not Acceptable") > 0,
                "malformed identity q value returns not acceptable");
+            Assert
+              (Ada.Strings.Fixed.Index (No_Transform_Response, "Content-Encoding:") = 0,
+               "no-transform response is not compressed");
+            Assert
+              (Ada.Strings.Fixed.Index (No_Transform_Response, "Vary: Accept-Encoding") > 0,
+               "no-transform response varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (No_Transform_Required, "HTTP/1.1 406 Not Acceptable") > 0,
+               "no-transform response rejects identity refusal");
+            Assert
+              (Ada.Strings.Fixed.Index (No_Transform_Required, "Vary: Accept-Encoding") > 0,
+               "no-transform rejection varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Encoded_Response, "HTTP/1.1 200 OK") > 0,
+               "already encoded response is acceptable when encoding is accepted");
+            Assert
+              (Ada.Strings.Fixed.Index (Encoded_Response, "Content-Encoding: gzip") > 0,
+               "already encoded response keeps content encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Encoded_Response, "Vary: Accept-Encoding") > 0,
+               "already encoded response varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Encoded_Required, "HTTP/1.1 406 Not Acceptable") > 0,
+               "already encoded response rejects identity refusal");
+            Assert
+              (Ada.Strings.Fixed.Index (Binary_Response, "HTTP/1.1 200 OK") > 0,
+               "binary response is served when identity is acceptable");
+            Assert
+              (Ada.Strings.Fixed.Index (Binary_Response, "Content-Encoding:") = 0,
+               "binary response is not compressed");
+            Assert
+              (Ada.Strings.Fixed.Index (Binary_Response, "Vary: Accept-Encoding") > 0,
+               "binary response varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Binary_Required, "HTTP/1.1 406 Not Acceptable") > 0,
+               "binary response rejects identity refusal");
+            Assert
+              (Ada.Strings.Fixed.Index (Binary_Required, "Vary: Accept-Encoding") > 0,
+               "binary rejection varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Response, "HTTP/1.1 200 OK") > 0,
+               "static binary response is served when identity is acceptable");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Response, "Content-Type: image/png") > 0,
+               "static binary response content type");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Response, "Content-Encoding:") = 0,
+               "static binary response is not compressed");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Response, "Vary: Accept-Encoding") > 0,
+               "static binary response varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Required, "HTTP/1.1 406 Not Acceptable") > 0,
+               "static binary response rejects identity refusal");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Required, "Vary: Accept-Encoding") > 0,
+               "static binary rejection varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_CSS_Response, "Content-Type: text/css; charset=utf-8") > 0,
+               "static text content type");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_CSS_Response, "Content-Encoding: gzip") > 0,
+               "static text response is compressed");
+            Assert_Inflates (Static_CSS_Response, Zlib.GZip, "static css gzip", ".counter");
             Assert_Inflates (Gzip_Response, Zlib.GZip, "gzip");
             Assert_Inflates (Deflate_Response, Zlib.Zlib_Header, "deflate");
          end;
@@ -619,10 +801,17 @@ package body Web_E2E_Tests is
          Web.Server.Configure (Config);
          declare
             Disabled_By_Config : constant String := Get_Response (Port, "gzip");
+            Disabled_Required : constant String := Get_Response (Port, "gzip, identity;q=0");
          begin
             Assert
               (Ada.Strings.Fixed.Index (Disabled_By_Config, "Content-Encoding:") = 0,
                "config disables response compression");
+            Assert
+              (Ada.Strings.Fixed.Index (Disabled_Required, "HTTP/1.1 406 Not Acceptable") > 0,
+               "disabled compression rejects identity refusal");
+            Assert
+              (Ada.Strings.Fixed.Index (Disabled_Required, "Vary: Accept-Encoding") > 0,
+               "disabled compression not acceptable varies by accept encoding");
          end;
 
          Config.Enable_Compression := True;
@@ -630,6 +819,11 @@ package body Web_E2E_Tests is
          Web.Server.Configure (Config);
          declare
             Below_Threshold : constant String := Get_Response (Port, "gzip");
+            Required_Compressed : constant String := Get_Response (Port, "gzip, identity;q=0");
+            Static_Below_Threshold : constant String :=
+              Get_Response (Port, "gzip", "/assets/style.css");
+            Static_Required_Compressed : constant String :=
+              Get_Response (Port, "gzip, identity;q=0", "/assets/style.css");
          begin
             Assert
               (Ada.Strings.Fixed.Index (Below_Threshold, "Content-Encoding:") = 0,
@@ -637,6 +831,30 @@ package body Web_E2E_Tests is
             Assert
               (Ada.Strings.Fixed.Index (Below_Threshold, "HTTP/1.1 200 OK") > 0,
                "identity fallback remains acceptable by default");
+            Assert
+              (Ada.Strings.Fixed.Index (Below_Threshold, "Vary: Accept-Encoding") > 0,
+               "threshold response varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Required_Compressed, "Content-Encoding: gzip") > 0,
+               "identity refusal compresses below threshold");
+            Assert_Inflates (Required_Compressed, Zlib.GZip, "below threshold gzip");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Below_Threshold, "HTTP/1.1 200 OK") > 0,
+               "static threshold response remains ok");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Below_Threshold, "Content-Encoding:") = 0,
+               "static threshold skips small response");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Below_Threshold, "Vary: Accept-Encoding") > 0,
+               "static threshold response varies by accept encoding");
+            Assert
+              (Ada.Strings.Fixed.Index (Static_Required_Compressed, "Content-Encoding: gzip") > 0,
+               "static identity refusal compresses below threshold");
+            Assert_Inflates
+              (Static_Required_Compressed,
+               Zlib.GZip,
+               "static below threshold gzip",
+               ".counter");
          end;
 
          Config.Compression_Min_Size := 0;
@@ -699,11 +917,30 @@ package body Web_E2E_Tests is
       end;
 
       Web.Server.Stop;
+      Assert (not Web.Server.Running, "server stopped");
       Web.Server.Configure (Web.Config.Default_Config);
+      if Ada.Directories.Exists (Static_Image_Path) then
+         Ada.Directories.Delete_File (Static_Image_Path);
+      end if;
+      if Ada.Directories.Exists (Static_Style_Path) then
+         Ada.Directories.Delete_File (Static_Style_Path);
+      end if;
+      if Ada.Directories.Exists (Static_Directory) then
+         Ada.Directories.Delete_Directory (Static_Directory);
+      end if;
    exception
       when others =>
          Web.Server.Stop;
          Web.Server.Configure (Web.Config.Default_Config);
+         if Ada.Directories.Exists (Static_Image_Path) then
+            Ada.Directories.Delete_File (Static_Image_Path);
+         end if;
+         if Ada.Directories.Exists (Static_Style_Path) then
+            Ada.Directories.Delete_File (Static_Style_Path);
+         end if;
+         if Ada.Directories.Exists (Static_Directory) then
+            Ada.Directories.Delete_Directory (Static_Directory);
+         end if;
          raise;
    end Test_Server_Live_Flow;
 
@@ -715,6 +952,9 @@ package body Web_E2E_Tests is
       Conn : Web.Connection.Connection_Type;
       Client_Context : Web.TLS.Context;
    begin
+      Web.Server.Stop;
+      Assert (not Web.Server.Running, "TLS server initially stopped");
+
       Write_Text_File (Test_Cert_Path, Test_Certificate);
       Write_Text_File (Test_Key_Path, Test_Private_Key);
       Web.Server.Get ("/tls-e2e", Home'Access);
@@ -723,6 +963,7 @@ package body Web_E2E_Tests is
 
       Web.TLS.Initialize_Client_No_Verify (Client_Context);
       Socket := Connect (Port);
+      Assert (Web.Server.Running, "TLS server running after first connection");
       Web.Connection.Open_TLS
         (Conn,
          Socket,
@@ -807,6 +1048,7 @@ package body Web_E2E_Tests is
       Web.Connection.Close (Conn);
       Web.TLS.Finalize (Client_Context);
       Web.Server.Stop;
+      Assert (not Web.Server.Running, "TLS server stopped");
    exception
       when others =>
          Web.Connection.Close (Conn);

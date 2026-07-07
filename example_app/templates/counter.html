@@ -1,4 +1,7 @@
-<section>
-  <button id="counter-inc" data-wf-click="counter.increment">Increment</button>
-  <strong id="counter-value">{{counter}}</strong>
+<section class="panel counter-panel" aria-labelledby="counter-heading">
+  <h2 id="counter-heading">Counter</h2>
+  <div class="counter-row">
+    <strong id="counter-value" class="counter-value">{{counter}}</strong>
+    <button id="counter-inc" type="button" data-wf-click="counter.increment">Increment</button>
+  </div>
 </section>

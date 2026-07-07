@@ -9,7 +9,7 @@ executables = ["example_app"]
 project-files = ["example_app.gpr"]
 
 [[depends-on]]
-gnat = ">=13"
+gnat_native = "=15.2.1"
 
 [[depends-on]]
 webframework = "*"
@@ -20,6 +20,9 @@ templates = "*"
 [[depends-on]]
 database = "*"
 
+[[depends-on]]
+terminal_styles = "*"
+
 [[pins]]
 webframework = { path = ".." }
 
@@ -28,3 +31,6 @@ templates = { path = "../../template" }
 
 [[pins]]
 database = { path = "../../database" }
+
+[[pins]]
+terminal_styles = { path = "../../terminal_styles" }

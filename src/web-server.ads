@@ -9,6 +9,16 @@ package Web.Server is
    type Route_Handler is access function
      (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
 
+   --  Error page handler signature.
+   --  @param Request Parsed request that caused the error.
+   --  @param Status HTTP status code in the range 100 .. 599.
+   --  @param Detail Optional status-specific error detail.
+   --  @return Custom response to return for that status code.
+   type Error_Handler is access function
+     (Request : Web.Request.Request_Type;
+      Status  : Positive;
+      Detail  : String) return Web.Response.Response_Type;
+
    type WebSocket_Handler is access procedure
      (Conn    : in out Web.Connection.Connection_Type;
       Request : Web.Request.Request_Type);
@@ -25,8 +35,21 @@ package Web.Server is
    --  @return No return value.
    procedure WebSocket (Path : String; Handler : WebSocket_Handler);
 
+   --  Register a custom error response handler.
+   --  @param Status HTTP status code in the range 100 .. 599.
+   --  @param Handler Error response handler.
+   --  @return No return value.
+   procedure Register_Error_Handler
+     (Status  : Positive;
+      Handler : Error_Handler);
+
+   --  Remove a custom error response handler and restore default behavior.
+   --  @param Status HTTP status code in the range 100 .. 599.
+   --  @return No return value.
+   procedure Clear_Error_Handler (Status : Positive);
+
    --  Register a static file mount.
-   --  @param Url_Prefix URL prefix.
+   --  @param Url_Prefix URL path prefix.
    --  @param Directory Filesystem directory.
    --  @return No return value.
    procedure Static (Url_Prefix : String; Directory : String);
@@ -45,6 +68,14 @@ package Web.Server is
    --  @param Config Framework configuration.
    --  @return No return value.
    procedure Configure (Config : Web.Config.Config_Type);
+
+   --  Return a stable health-check response for embedding applications.
+   --  @return Plain text 200 response.
+   function Health_Response return Web.Response.Response_Type;
+
+   --  Return a short validated runtime configuration summary.
+   --  @return Human-readable configuration report.
+   function Configuration_Report return String;
 
    --  Run the GNAT.Sockets HTTP server.
    --  @param Host Bind host.
@@ -92,4 +123,8 @@ package Web.Server is
    --  Stop a running GNAT.Sockets HTTP server.
    --  @return No return value.
    procedure Stop;
+
+   --  Check whether the server listener is currently running.
+   --  @return True when a listener is active and stop has not been requested.
+   function Running return Boolean;
 end Web.Server;

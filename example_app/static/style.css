@@ -1,15 +1,115 @@
 body {
+  background: #f6f7f9;
   color: #202124;
   font-family: system-ui, sans-serif;
   margin: 0;
 }
 
 main {
-  margin: 2rem auto;
+  margin: 0 auto;
   max-width: 46rem;
+  padding: 2rem 1rem 3rem;
+}
+
+h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem;
+}
+
+h2 {
+  font-size: 1rem;
+  margin: 0 0 1rem;
+}
+
+label {
+  display: block;
+  font-weight: 650;
+  margin-bottom: 0.4rem;
+}
+
+.panel-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d7dce2;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.counter-row,
+.inline-form {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.counter-value {
+  display: inline-grid;
+  font-size: 2rem;
+  min-width: 3rem;
+  place-items: center;
 }
 
 button,
 input {
   font: inherit;
+}
+
+input {
+  border: 1px solid #aeb6c2;
+  border-radius: 6px;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+}
+
+button {
+  background: #155eef;
+  border: 1px solid #155eef;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 650;
+  padding: 0.55rem 0.8rem;
+}
+
+button:hover {
+  background: #0f49c8;
+}
+
+.status {
+  color: #475467;
+  min-height: 1.4rem;
+}
+
+.todo-list {
+  margin: 1rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.todo-item,
+.todo-empty {
+  margin: 0.35rem 0;
+}
+
+.todo-empty {
+  color: #667085;
+}
+
+@media (max-width: 34rem) {
+  .counter-row,
+  .inline-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  button,
+  input {
+    width: 100%;
+  }
 }

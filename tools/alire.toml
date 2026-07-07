@@ -1,0 +1,22 @@
+name = "webframework_tools"
+description = "Release and stress tools for webframework"
+version = "0.1.0-dev"
+licenses = "MIT"
+
+executables = ["release_smoke", "stress_harness", "fuzz_corpus", "soak_harness", "benchmark", "release_check"]
+project-files = ["tools.gpr"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+project_tools = "*"
+
+[[depends-on]]
+webframework = "*"
+
+[[pins]]
+project_tools = { path = "../../project_tools" }
+
+[[pins]]
+webframework = { path = ".." }

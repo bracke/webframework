@@ -24,6 +24,10 @@ package Web_Live_Tests is
    --  @param Item AUnit fixture.
    procedure Test_Secure_Cookie_Settings (Item : in out Fixture);
 
+   --  Test live session resource counters.
+   --  @param Item AUnit fixture.
+   procedure Test_Resource_Counters (Item : in out Fixture);
+
    --  Test configured WebSocket message size limits.
    --  @param Item AUnit fixture.
    procedure Test_WebSocket_Message_Limit (Item : in out Fixture);

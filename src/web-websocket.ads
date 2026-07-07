@@ -1,14 +1,16 @@
 with GNAT.Sockets;
-with Ada.Strings.Unbounded;
 with Web.Connection;
 with Web.Request;
+with Web.Security;
 
 package Web.WebSocket is
    type Opcode is (Text_Frame, Close_Frame, Ping_Frame, Pong_Frame);
 
-   type Frame is record
+   subtype Frame_Payload_Length is Natural range 0 .. Web.Security.Max_WebSocket_Message;
+
+   type Frame (Payload_Length : Frame_Payload_Length := 0) is record
       Frame_Type : Opcode := Text_Frame;
-      Payload    : Ada.Strings.Unbounded.Unbounded_String;
+      Payload_Text : String (1 .. Payload_Length);
    end record;
 
    --  Validate whether a request is a WebSocket upgrade.
@@ -56,6 +58,25 @@ package Web.WebSocket is
    --  @param Item Decoded frame.
    --  @return Payload text.
    function Payload (Item : Frame) return String;
+
+   --  Process a decoded frame payload without returning a copied string.
+   --  @param Item Decoded frame.
+   --  @return No return value.
+   generic
+      with procedure Process (Payload : String);
+   procedure With_Payload (Item : Frame);
+
+   --  Receive and process one complete frame without returning a public frame value.
+   --  @param Conn Connected transport.
+   --  @param Max_Size Maximum allowed payload size.
+   --  @return No return value.
+   generic
+      with procedure Process
+        (Kind    : Opcode;
+         Payload : String);
+   procedure Receive_And_Process
+     (Conn     : in out Web.Connection.Connection_Type;
+      Max_Size : Natural);
 
    --  Send text on a WebSocket.
    --  @param Socket Connected socket.

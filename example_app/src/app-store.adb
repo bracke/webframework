@@ -37,17 +37,20 @@ package body App.Store is
 
    function To_Wide (Text : String) return Wide_Wide_String is
    begin
+      --  Use explicit conversion helpers for database text values.
       return Ada.Characters.Conversions.To_Wide_Wide_String (Text);
    end To_Wide;
 
    function To_Narrow (Text : Wide_Wide_String) return String is
    begin
+      --  Convert values returned by Database back into native UTF-8 strings.
       return Ada.Characters.Conversions.To_String (Text);
    end To_Narrow;
 
    function New_Schema return Standard.Database.Schema.Table_Schema is
       Result : Standard.Database.Schema.Table_Schema;
    begin
+      --  Define table schema once and memoize the in-memory copy.
       Result.Name := To_Unbounded_Wide_Wide_String ("todos");
       Standard.Database.Schema.Add_Column
         (Result,
@@ -66,6 +69,7 @@ package body App.Store is
    function To_Row (Item : Todo_Row) return Standard.Database.Rows.Row is
       Result : Standard.Database.Rows.Row;
    begin
+      --  Project internal row records into generic database row format.
       Standard.Database.Rows.Append
         (Result,
          Standard.Database.Values.From_Integer (Integer (Item.Id)));
@@ -77,6 +81,7 @@ package body App.Store is
 
    function From_Row (Row : Standard.Database.Rows.Row) return Todo_Row is
    begin
+      --  Project database row back into typed in-process representation.
       return
         (Id    => Natural (Standard.Database.Rows.Get (Row, 0).Int),
          Title => Standard.Database.Rows.Get (Row, 1).Text);
@@ -84,11 +89,13 @@ package body App.Store is
 
    function Key_Of (Item : Todo_Row) return Natural is
    begin
+      --  Use database id as primary key for typed table indexing.
       return Item.Id;
    end Key_Of;
 
    function Key_Value (Key : Natural) return Standard.Database.Values.Value is
    begin
+      --  Convert typed key into database-safe value object.
       return Standard.Database.Values.From_Integer (Integer (Key));
    end Key_Value;
 
@@ -96,14 +103,16 @@ package body App.Store is
      (Result  : Standard.Database.Status.Result;
       Message : String) is
    begin
+      --  Normalize low-level DB status into a storage exception for callers.
       if not Standard.Database.Status.Is_Ok (Result) then
-         raise Program_Error with Message;
+         raise Storage_Error with Message;
       end if;
    end Raise_On_Error;
 
    procedure Ensure_Registered (DB : in out Standard.Database.Handle) is
       Result : Standard.Database.Status.Result;
    begin
+      --  Lazily initialize table schema once per process.
       if Registered then
          return;
       end if;
@@ -128,6 +137,7 @@ package body App.Store is
       Result : Standard.Database.Status.Result;
       Next   : Natural := 1;
    begin
+      --  Compute next id by scanning existing ids and taking max + 1.
       Result :=
         Todo_Tables.Scan
           (Tx,
@@ -164,6 +174,7 @@ package body App.Store is
          Tx     : Standard.Database.Transactions.Transaction;
          Result : Standard.Database.Status.Result;
       begin
+         --  Transactional write path: start, insert, commit, otherwise rollback.
          Ensure_Registered (DB);
          Standard.Database.Transactions.Begin_Write (DB, Tx);
          Result :=
@@ -183,6 +194,7 @@ package body App.Store is
          end if;
       end Insert_Todo;
    begin
+      --  Serializes open/commit lifecycle through App.Database gate.
       App.Database.With_Database (Insert_Todo'Access);
    end Add_Todo;
 
@@ -194,6 +206,7 @@ package body App.Store is
          Result  : Standard.Database.Status.Result;
          Cursor  : Todo_Tables.Cursor;
       begin
+         --  Read path loads ordered list into a simple vector for template rendering.
          Ensure_Registered (DB);
          Standard.Database.Transactions.Begin_Read (DB, Tx);
          Result :=
@@ -232,8 +245,5 @@ package body App.Store is
    begin
       App.Database.With_Database (Read_Todos'Access);
       return Result_Items;
-   exception
-      when others =>
-         return Todo_Vectors.Empty_Vector;
    end Todos;
 end App.Store;

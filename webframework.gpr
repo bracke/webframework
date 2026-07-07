@@ -18,17 +18,18 @@ project Webframework is
       "Web.Errors",
       "Web.Events",
       "Web.Html",
-      "Web.Live",
-      "Web.Logging",
-      "Web.Patch",
-      "Web.Protocol",
-      "Web.Request",
-      "Web.Response",
-      "Web.Security",
-      "Web.Server",
-      "Web.Static",
-      "Web.TLS",
-      "Web.WebSocket");
+     "Web.Live",
+     "Web.Logging",
+     "Web.Patch",
+     "Web.Protocol",
+     "Web.Request",
+     "Web.Response",
+     "Web.Security",
+     "Web.Application",
+     "Web.Server",
+     "Web.Static",
+     "Web.TLS",
+     "Web.WebSocket");
    package Compiler is
       for Default_Switches ("Ada") use
         ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");

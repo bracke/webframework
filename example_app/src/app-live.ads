@@ -1,8 +1,5 @@
-with App.Dispatcher;
-with App.State;
-with Web.Live;
+--  Compatibility wrapper for live session behavior.
+with App.Runtime;
 
-package App.Live is new Web.Live
-  (App_State     => App.State.App_State,
-   Initial_State => App.State.Initial_State,
-   Dispatch      => App.Dispatcher.Dispatch);
+--  This package is now a rename to the convenience façade nested live package.
+package App.Live renames App.Runtime.Live;

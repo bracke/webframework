@@ -1,5 +1,12 @@
-<form id="profile-form" data-wf-submit="profile.save">
-  <input name="name" id="name">
-  <button>Save</button>
-  <p id="profile-status"></p>
+<section class="panel" aria-labelledby="profile-heading">
+  <h2 id="profile-heading">Profile</h2>
+  <form id="profile-form" data-wf-submit="profile.save">
+    <label for="name">Name</label>
+    <div class="inline-form">
+      <input name="name" id="name" autocomplete="name">
+      <button type="submit">Save</button>
+    </div>
+    <p id="profile-status" class="status" aria-live="polite"></p>
+  </form>
+</section>
 </form>

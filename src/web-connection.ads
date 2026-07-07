@@ -8,7 +8,7 @@ package Web.Connection is
 
    --  Initialize a plain TCP connection wrapper.
    --  @param Item Connection wrapper.
-   --  @param Socket Connected TCP socket.
+   --  @param Socket Connected TCP socket, not No_Socket.
    --  @return No return value.
    procedure Open_Plain
      (Item   : in out Connection_Type;
@@ -16,8 +16,8 @@ package Web.Connection is
 
    --  Initialize a TLS connection wrapper.
    --  @param Item Connection wrapper.
-   --  @param Socket Connected TCP socket.
-   --  @param TLS_Handle Opaque TLS connection handle.
+   --  @param Socket Connected TCP socket, not No_Socket.
+   --  @param TLS_Handle Opaque TLS connection handle, not null.
    --  @return No return value.
    procedure Open_TLS
      (Item       : in out Connection_Type;

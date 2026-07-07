@@ -6,7 +6,22 @@ website = ""
 tags = ["web", "scaffold", "tooling"]
 
 [[depends-on]]
-gnat = ">=13"
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+project_tools = "*"
+
+[[depends-on]]
+terminal_styles = "*"
+
+[[depends-on]]
+webframework = "*"
 
 [[pins]]
 project_tools = { path = "../../project_tools" }
+
+[[pins]]
+terminal_styles = { path = "../../terminal_styles" }
+
+[[pins]]
+webframework = { path = ".." }

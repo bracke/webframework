@@ -6,7 +6,7 @@ website = ""
 tags = ["web", "websocket", "http", "server-driven"]
 
 [[depends-on]]
-gnat = ">=13"
+gnat_native = "=15.2.1"
 
 [[depends-on]]
 cryptolib = "*"
@@ -17,6 +17,9 @@ ssh_lib = "*"
 [[depends-on]]
 zlib = "*"
 
+[[depends-on]]
+terminal_styles = "*"
+
 [[pins]]
 cryptolib = { path = "../cryptolib" }
 
@@ -25,3 +28,6 @@ ssh_lib = { path = "../sshlib" }
 
 [[pins]]
 zlib = { path = "../zlib" }
+
+[[pins]]
+terminal_styles = { path = "../terminal_styles" }

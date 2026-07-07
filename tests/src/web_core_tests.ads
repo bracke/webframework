@@ -28,6 +28,10 @@ package Web_Core_Tests is
    --  @param Item AUnit fixture.
    procedure Test_Response (Item : in out Fixture);
 
+   --  Test logging configuration helpers.
+   --  @param Item AUnit fixture.
+   procedure Test_Logging (Item : in out Fixture);
+
    --  Test security helpers.
    --  @param Item AUnit fixture.
    procedure Test_Security (Item : in out Fixture);

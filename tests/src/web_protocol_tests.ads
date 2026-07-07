@@ -28,6 +28,10 @@ package Web_Protocol_Tests is
    --  @param Item AUnit fixture.
    procedure Test_Encode (Item : in out Fixture);
 
+   --  Test helper functions for event field access.
+   --  @param Item AUnit fixture.
+   procedure Test_Event_Helpers (Item : in out Fixture);
+
    --  Test generic dispatcher behavior.
    --  @param Item AUnit fixture.
    procedure Test_Dispatcher (Item : in out Fixture);

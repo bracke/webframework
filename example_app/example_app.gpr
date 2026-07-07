@@ -1,4 +1,5 @@
 with "../webframework.gpr";
+with "../terminal_styles/terminal_styles.gpr";
 with "../../template/templates.gpr";
 with "../../database/database.gpr";
 

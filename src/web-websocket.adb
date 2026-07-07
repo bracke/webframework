@@ -99,16 +99,20 @@ package body Web.WebSocket is
    end To_Stream_Array;
 
    function Is_Upgrade (Request : Web.Request.Request_Type) return Boolean is
+      Connection_Value : constant String := Web.Request.Header (Request, "Connection");
+      Upgrade_Value : constant String := Web.Request.Header (Request, "Upgrade");
+      Key_Value : constant String := Web.Request.Header (Request, "Sec-WebSocket-Key");
+      Version_Value : constant String := Web.Request.Header (Request, "Sec-WebSocket-Version");
    begin
       return Web.Request.Method (Request) = "GET"
-        and then Web.Request.Has_Header (Request, "Upgrade")
-        and then Web.Request.Has_Header (Request, "Connection")
-        and then Web.Request.Has_Header (Request, "Sec-WebSocket-Key")
-        and then Web.Request.Has_Header (Request, "Sec-WebSocket-Version")
-        and then Has_Token (Web.Request.Header (Request, "Upgrade"), "websocket")
-        and then Has_Token (Web.Request.Header (Request, "Connection"), "upgrade")
-        and then Web.Request.Header (Request, "Sec-WebSocket-Version") = "13"
-        and then Is_Valid_Client_Key (Web.Request.Header (Request, "Sec-WebSocket-Key"));
+        and then Upgrade_Value'Length > 0
+        and then Connection_Value'Length > 0
+        and then Key_Value'Length > 0
+        and then Version_Value'Length > 0
+        and then Has_Token (Upgrade_Value, "websocket")
+        and then Has_Token (Connection_Value, "upgrade")
+        and then Version_Value = "13"
+        and then Is_Valid_Client_Key (Key_Value);
    end Is_Upgrade;
 
    function Base64 (Bytes : Ada.Streams.Stream_Element_Array) return String is
@@ -152,8 +156,14 @@ package body Web.WebSocket is
 
    function Accept_Key (Key : String) return String is
    begin
+      if not Is_Valid_Client_Key (Key) then
+         raise Web.Errors.Protocol_Error with "invalid websocket key";
+      end if;
+
       return Base64 (To_Stream_Array (CryptoLib.Hashes.SHA1 (To_Bytes (Key & Magic))));
    end Accept_Key;
+
+   function Is_Valid_UTF8 (Value : String) return Boolean;
 
    function Encode_Frame (Op : Natural; Text : String) return String is
       Result : Unbounded_String;
@@ -175,6 +185,10 @@ package body Web.WebSocket is
 
    function Encode_Text (Text : String) return String is
    begin
+      if not Is_Valid_UTF8 (Text) then
+         raise Web.Errors.Protocol_Error with "invalid websocket text utf8";
+      end if;
+
       return Encode_Frame (1, Text);
    end Encode_Text;
 
@@ -185,6 +199,10 @@ package body Web.WebSocket is
 
    function Encode_Pong (Text : String) return String is
    begin
+      if Text'Length > 125 then
+         raise Web.Errors.Protocol_Error with "oversized websocket control frame";
+      end if;
+
       return Encode_Frame (10, Text);
    end Encode_Pong;
 
@@ -197,6 +215,65 @@ package body Web.WebSocket is
       return Code in 3_000 .. 4_999;
    end Is_Valid_Close_Code;
 
+   function Is_Valid_UTF8 (Value : String) return Boolean is
+      Index_Value : Natural := Value'First;
+      B1          : Natural;
+      B2          : Natural;
+      B3          : Natural;
+      B4          : Natural;
+   begin
+      while Index_Value <= Value'Last loop
+         B1 := Character'Pos (Value (Index_Value));
+
+         if B1 <= 16#7F# then
+            Index_Value := Index_Value + 1;
+         elsif B1 in 16#C2# .. 16#DF# then
+            if Index_Value + 1 > Value'Last then
+               return False;
+            end if;
+            B2 := Character'Pos (Value (Index_Value + 1));
+            if B2 not in 16#80# .. 16#BF# then
+               return False;
+            end if;
+            Index_Value := Index_Value + 2;
+         elsif B1 in 16#E0# .. 16#EF# then
+            if Index_Value + 2 > Value'Last then
+               return False;
+            end if;
+            B2 := Character'Pos (Value (Index_Value + 1));
+            B3 := Character'Pos (Value (Index_Value + 2));
+            if B3 not in 16#80# .. 16#BF#
+              or else (B1 = 16#E0# and then B2 not in 16#A0# .. 16#BF#)
+              or else (B1 = 16#ED# and then B2 not in 16#80# .. 16#9F#)
+              or else (B1 /= 16#E0# and then B1 /= 16#ED# and then B2 not in 16#80# .. 16#BF#)
+            then
+               return False;
+            end if;
+            Index_Value := Index_Value + 3;
+         elsif B1 in 16#F0# .. 16#F4# then
+            if Index_Value + 3 > Value'Last then
+               return False;
+            end if;
+            B2 := Character'Pos (Value (Index_Value + 1));
+            B3 := Character'Pos (Value (Index_Value + 2));
+            B4 := Character'Pos (Value (Index_Value + 3));
+            if B3 not in 16#80# .. 16#BF#
+              or else B4 not in 16#80# .. 16#BF#
+              or else (B1 = 16#F0# and then B2 not in 16#90# .. 16#BF#)
+              or else (B1 = 16#F4# and then B2 not in 16#80# .. 16#8F#)
+              or else (B1 /= 16#F0# and then B1 /= 16#F4# and then B2 not in 16#80# .. 16#BF#)
+            then
+               return False;
+            end if;
+            Index_Value := Index_Value + 4;
+         else
+            return False;
+         end if;
+      end loop;
+
+      return True;
+   end Is_Valid_UTF8;
+
    function Decode_Frame (Data : String; Max_Size : Natural) return Frame is
       First_Byte : Natural;
       Second_Byte : Natural;
@@ -204,7 +281,6 @@ package body Web.WebSocket is
       Masked : Boolean;
       Cursor : Natural := Data'First;
       Mask : String (1 .. 4);
-      Payload : Unbounded_String;
       Op : Natural;
    begin
       if Data'Length < 2 then
@@ -269,46 +345,96 @@ package body Web.WebSocket is
          Cursor := Cursor + 1;
       end loop;
 
-      for Offset in 0 .. Payload_Length - 1 loop
-         Append
-           (Payload,
-            Character'Val
-              (Natural
-                 (Interfaces.Unsigned_8 (Character'Pos (Data (Cursor + Offset)))
-                  xor Interfaces.Unsigned_8 (Character'Pos (Mask (Offset mod 4 + 1))))));
-      end loop;
+      declare
+         Payload_Text : String (1 .. Payload_Length);
+         Text_Is_ASCII : Boolean := True;
+         Close_Reason_Is_ASCII : Boolean := True;
+      begin
+         for Offset in 0 .. Payload_Length - 1 loop
+            declare
+               Data_Byte : constant Interfaces.Unsigned_8 :=
+                 Interfaces.Unsigned_8 (Character'Pos (Data (Cursor + Offset)));
+               Mask_Byte : constant Interfaces.Unsigned_8 :=
+                 Interfaces.Unsigned_8 (Character'Pos (Mask (Offset mod 4 + 1)));
+            begin
+               Payload_Text (Payload_Text'First + Offset) :=
+                 Character'Val (Natural (Data_Byte xor Mask_Byte));
+               if Natural (Data_Byte xor Mask_Byte) > 16#7F# then
+                  Text_Is_ASCII := False;
+                  if Offset >= 2 then
+                     Close_Reason_Is_ASCII := False;
+                  end if;
+               end if;
+            end;
+         end loop;
 
-      if Op = 8 and then Payload_Length >= 2 then
-         declare
-            Payload_Text : constant String := To_String (Payload);
-            Code         : constant Natural :=
-              Character'Pos (Payload_Text (Payload_Text'First)) * 256
-              + Character'Pos (Payload_Text (Payload_Text'First + 1));
-         begin
-            if not Is_Valid_Close_Code (Code) then
-               raise Web.Errors.Protocol_Error with "invalid websocket close code";
-            end if;
-         end;
-      end if;
+         if Op = 8 and then Payload_Length >= 2 then
+            declare
+               Code : constant Natural :=
+                 Character'Pos (Payload_Text (Payload_Text'First)) * 256
+                 + Character'Pos (Payload_Text (Payload_Text'First + 1));
+            begin
+               if not Is_Valid_Close_Code (Code) then
+                  raise Web.Errors.Protocol_Error with "invalid websocket close code";
+               end if;
 
-      case Op is
-         when 1 =>
-            return (Text_Frame, Payload);
-         when 8 =>
-            return (Close_Frame, Payload);
-         when 9 =>
-            return (Ping_Frame, Payload);
-         when 10 =>
-            return (Pong_Frame, Payload);
-         when others =>
-            raise Web.Errors.Protocol_Error with "unsupported websocket opcode";
-      end case;
+               if Payload_Length > 2
+                 and then not Close_Reason_Is_ASCII
+                 and then not Is_Valid_UTF8 (Payload_Text (Payload_Text'First + 2 .. Payload_Text'Last))
+               then
+                  raise Web.Errors.Protocol_Error with "invalid websocket close reason";
+               end if;
+            end;
+         end if;
+
+         case Op is
+            when 1 =>
+               if not Text_Is_ASCII and then not Is_Valid_UTF8 (Payload_Text) then
+                  raise Web.Errors.Protocol_Error with "invalid websocket text utf8";
+               end if;
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Text_Frame,
+                  Payload_Text   => Payload_Text);
+            when 8 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Close_Frame,
+                  Payload_Text   => Payload_Text);
+            when 9 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Ping_Frame,
+                  Payload_Text   => Payload_Text);
+            when 10 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Pong_Frame,
+                  Payload_Text   => Payload_Text);
+            when others =>
+               raise Web.Errors.Protocol_Error with "unsupported websocket opcode";
+         end case;
+      end;
    end Decode_Frame;
 
    function Payload (Item : Frame) return String is
    begin
-      return To_String (Item.Payload);
+      return Item.Payload_Text;
    end Payload;
+
+   procedure With_Payload (Item : Frame) is
+   begin
+      Process (Item.Payload_Text);
+   end With_Payload;
+
+   procedure Receive_And_Process
+     (Conn     : in out Web.Connection.Connection_Type;
+      Max_Size : Natural)
+   is
+      Item : constant Frame := Receive_Frame (Conn, Max_Size);
+   begin
+      Process (Item.Frame_Type, Item.Payload_Text);
+   end Receive_And_Process;
 
    function Read_Exact
      (Socket : GNAT.Sockets.Socket_Type;
@@ -335,6 +461,25 @@ package body Web.WebSocket is
       return Result;
    end Read_Exact;
 
+   function Read_Exact_Bytes
+     (Socket : GNAT.Sockets.Socket_Type;
+      Count  : Natural) return Ada.Streams.Stream_Element_Array
+   is
+      Buffer : Ada.Streams.Stream_Element_Array (1 .. Ada.Streams.Stream_Element_Offset (Count));
+      Last   : Ada.Streams.Stream_Element_Offset;
+      Cursor : Ada.Streams.Stream_Element_Offset := Buffer'First;
+   begin
+      while Cursor <= Buffer'Last loop
+         GNAT.Sockets.Receive_Socket (Socket, Buffer (Cursor .. Buffer'Last), Last);
+         if Last < Cursor then
+            raise Web.Errors.Protocol_Error with "websocket socket closed";
+         end if;
+         Cursor := Last + 1;
+      end loop;
+
+      return Buffer;
+   end Read_Exact_Bytes;
+
    function Read_Exact
      (Conn  : in out Web.Connection.Connection_Type;
       Count : Natural) return String
@@ -360,36 +505,295 @@ package body Web.WebSocket is
       return Result;
    end Read_Exact;
 
+   function Read_Exact_Bytes
+     (Conn  : in out Web.Connection.Connection_Type;
+      Count : Natural) return Ada.Streams.Stream_Element_Array
+   is
+      Buffer : Ada.Streams.Stream_Element_Array (1 .. Ada.Streams.Stream_Element_Offset (Count));
+      Last   : Ada.Streams.Stream_Element_Offset;
+      Cursor : Ada.Streams.Stream_Element_Offset := Buffer'First;
+   begin
+      while Cursor <= Buffer'Last loop
+         Web.Connection.Receive (Conn, Buffer (Cursor .. Buffer'Last), Last);
+         if Last < Cursor then
+            raise Web.Errors.Protocol_Error with "websocket socket closed";
+         end if;
+         Cursor := Last + 1;
+      end loop;
+
+      return Buffer;
+   end Read_Exact_Bytes;
+
+   procedure Validate_Frame_Before_Payload
+     (Header         : Ada.Streams.Stream_Element_Array;
+      Payload_Length : Natural)
+   is
+      First_Byte : constant Natural := Natural (Header (Header'First));
+      Op         : constant Natural := First_Byte mod 16;
+   begin
+      if First_Byte mod 16#80# >= 16#10# then
+         raise Web.Errors.Protocol_Error with "websocket extensions are not supported";
+      end if;
+
+      if First_Byte < 16#80# then
+         raise Web.Errors.Protocol_Error with "fragmented websocket frame";
+      end if;
+
+      if Op in 8 .. 10 and then Payload_Length > 125 then
+         raise Web.Errors.Protocol_Error with "oversized websocket control frame";
+      end if;
+
+      if Op = 8 and then Payload_Length = 1 then
+         raise Web.Errors.Protocol_Error with "invalid websocket close frame";
+      end if;
+   end Validate_Frame_Before_Payload;
+
+   function Decode_Received_Frame
+     (Header           : Ada.Streams.Stream_Element_Array;
+      Payload_Length   : Natural;
+      Mask_And_Payload : Ada.Streams.Stream_Element_Array) return Frame
+   is
+      use type Ada.Streams.Stream_Element_Offset;
+
+      First_Byte : constant Natural := Natural (Header (Header'First));
+      Second_Byte : constant Natural := Natural (Header (Header'First + 1));
+      Masked     : constant Boolean := Second_Byte >= 16#80#;
+      Op         : constant Natural := First_Byte mod 16;
+      Payload_Start : constant Ada.Streams.Stream_Element_Offset := Mask_And_Payload'First + 4;
+   begin
+      if not Masked then
+         raise Web.Errors.Protocol_Error with "client frame is not masked";
+      end if;
+
+      if Mask_And_Payload'Length /= Payload_Length + 4 then
+         raise Web.Errors.Protocol_Error with "short websocket frame";
+      end if;
+
+      declare
+         Payload_Text : String (1 .. Payload_Length);
+         Text_Is_ASCII : Boolean := True;
+         Close_Reason_Is_ASCII : Boolean := True;
+         Mask_0 : constant Interfaces.Unsigned_8 :=
+           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First));
+         Mask_1 : constant Interfaces.Unsigned_8 :=
+           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First + 1));
+         Mask_2 : constant Interfaces.Unsigned_8 :=
+           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First + 2));
+         Mask_3 : constant Interfaces.Unsigned_8 :=
+           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First + 3));
+      begin
+         for Offset in 0 .. Payload_Length - 1 loop
+            declare
+               Data_Byte : constant Interfaces.Unsigned_8 :=
+                 Interfaces.Unsigned_8
+                   (Mask_And_Payload
+                      (Payload_Start + Ada.Streams.Stream_Element_Offset (Offset)));
+               Mask_Byte : constant Interfaces.Unsigned_8 :=
+                 (case Offset mod 4 is
+                     when 0 => Mask_0,
+                     when 1 => Mask_1,
+                     when 2 => Mask_2,
+                     when others => Mask_3);
+            begin
+               Payload_Text (Payload_Text'First + Offset) :=
+                 Character'Val (Natural (Data_Byte xor Mask_Byte));
+               if Natural (Data_Byte xor Mask_Byte) > 16#7F# then
+                  Text_Is_ASCII := False;
+                  if Offset >= 2 then
+                     Close_Reason_Is_ASCII := False;
+                  end if;
+               end if;
+            end;
+         end loop;
+
+         if Op = 8 and then Payload_Length >= 2 then
+            declare
+               Code : constant Natural :=
+                 Character'Pos (Payload_Text (Payload_Text'First)) * 256
+                 + Character'Pos (Payload_Text (Payload_Text'First + 1));
+            begin
+               if not Is_Valid_Close_Code (Code) then
+                  raise Web.Errors.Protocol_Error with "invalid websocket close code";
+               end if;
+
+               if Payload_Length > 2
+                 and then not Close_Reason_Is_ASCII
+                 and then not Is_Valid_UTF8 (Payload_Text (Payload_Text'First + 2 .. Payload_Text'Last))
+               then
+                  raise Web.Errors.Protocol_Error with "invalid websocket close reason";
+               end if;
+            end;
+         end if;
+
+         case Op is
+            when 1 =>
+               if not Text_Is_ASCII and then not Is_Valid_UTF8 (Payload_Text) then
+                  raise Web.Errors.Protocol_Error with "invalid websocket text utf8";
+               end if;
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Text_Frame,
+                  Payload_Text   => Payload_Text);
+            when 8 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Close_Frame,
+                  Payload_Text   => Payload_Text);
+            when 9 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Ping_Frame,
+                  Payload_Text   => Payload_Text);
+            when 10 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Pong_Frame,
+                  Payload_Text   => Payload_Text);
+            when others =>
+               raise Web.Errors.Protocol_Error with "unsupported websocket opcode";
+         end case;
+      end;
+   end Decode_Received_Frame;
+
+   function Decode_Received_Payload
+     (Header         : Ada.Streams.Stream_Element_Array;
+      Payload_Length : Natural;
+      Mask           : Ada.Streams.Stream_Element_Array;
+      Payload_Data   : Ada.Streams.Stream_Element_Array) return Frame
+   is
+      use type Ada.Streams.Stream_Element_Offset;
+
+      First_Byte : constant Natural := Natural (Header (Header'First));
+      Second_Byte : constant Natural := Natural (Header (Header'First + 1));
+      Masked     : constant Boolean := Second_Byte >= 16#80#;
+      Op         : constant Natural := First_Byte mod 16;
+      Mask_0     : constant Interfaces.Unsigned_8 := Interfaces.Unsigned_8 (Mask (Mask'First));
+      Mask_1     : constant Interfaces.Unsigned_8 := Interfaces.Unsigned_8 (Mask (Mask'First + 1));
+      Mask_2     : constant Interfaces.Unsigned_8 := Interfaces.Unsigned_8 (Mask (Mask'First + 2));
+      Mask_3     : constant Interfaces.Unsigned_8 := Interfaces.Unsigned_8 (Mask (Mask'First + 3));
+   begin
+      if not Masked then
+         raise Web.Errors.Protocol_Error with "client frame is not masked";
+      end if;
+
+      if Mask'Length /= 4 or else Payload_Data'Length /= Payload_Length then
+         raise Web.Errors.Protocol_Error with "short websocket frame";
+      end if;
+
+      declare
+         Payload_Text : String (1 .. Payload_Length);
+         Text_Is_ASCII : Boolean := True;
+         Close_Reason_Is_ASCII : Boolean := True;
+      begin
+         for Offset in 0 .. Payload_Length - 1 loop
+            declare
+               Data_Byte : constant Interfaces.Unsigned_8 :=
+                 Interfaces.Unsigned_8
+                   (Payload_Data (Payload_Data'First + Ada.Streams.Stream_Element_Offset (Offset)));
+               Mask_Byte : constant Interfaces.Unsigned_8 :=
+                 (case Offset mod 4 is
+                     when 0 => Mask_0,
+                     when 1 => Mask_1,
+                     when 2 => Mask_2,
+                     when others => Mask_3);
+               Decoded : constant Natural := Natural (Data_Byte xor Mask_Byte);
+            begin
+               Payload_Text (Payload_Text'First + Offset) := Character'Val (Decoded);
+               if Decoded > 16#7F# then
+                  Text_Is_ASCII := False;
+                  if Offset >= 2 then
+                     Close_Reason_Is_ASCII := False;
+                  end if;
+               end if;
+            end;
+         end loop;
+
+         if Op = 8 and then Payload_Length >= 2 then
+            declare
+               Code : constant Natural :=
+                 Character'Pos (Payload_Text (Payload_Text'First)) * 256
+                 + Character'Pos (Payload_Text (Payload_Text'First + 1));
+            begin
+               if not Is_Valid_Close_Code (Code) then
+                  raise Web.Errors.Protocol_Error with "invalid websocket close code";
+               end if;
+
+               if Payload_Length > 2
+                 and then not Close_Reason_Is_ASCII
+                 and then not Is_Valid_UTF8 (Payload_Text (Payload_Text'First + 2 .. Payload_Text'Last))
+               then
+                  raise Web.Errors.Protocol_Error with "invalid websocket close reason";
+               end if;
+            end;
+         end if;
+
+         case Op is
+            when 1 =>
+               if not Text_Is_ASCII and then not Is_Valid_UTF8 (Payload_Text) then
+                  raise Web.Errors.Protocol_Error with "invalid websocket text utf8";
+               end if;
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Text_Frame,
+                  Payload_Text   => Payload_Text);
+            when 8 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Close_Frame,
+                  Payload_Text   => Payload_Text);
+            when 9 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Ping_Frame,
+                  Payload_Text   => Payload_Text);
+            when 10 =>
+               return
+                 (Payload_Length => Payload_Length,
+                  Frame_Type     => Pong_Frame,
+                  Payload_Text   => Payload_Text);
+            when others =>
+               raise Web.Errors.Protocol_Error with "unsupported websocket opcode";
+         end case;
+      end;
+   end Decode_Received_Payload;
+
    function Receive_Frame
      (Socket   : GNAT.Sockets.Socket_Type;
       Max_Size : Natural) return Frame
    is
-      Header         : constant String := Read_Exact (Socket, 2);
-      Length_Code    : constant Natural := Character'Pos (Header (Header'First + 1)) mod 16#80#;
+      use type Ada.Streams.Stream_Element_Offset;
+
+      Header         : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Socket, 2);
+      Length_Code    : constant Natural := Natural (Header (Header'First + 1)) mod 16#80#;
       Payload_Length : Natural := Length_Code;
-      Extra          : Unbounded_String;
    begin
       if Length_Code = 126 then
          declare
-            Bytes : constant String := Read_Exact (Socket, 2);
+            Bytes : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Socket, 2);
          begin
             Payload_Length :=
-              Character'Pos (Bytes (Bytes'First)) * 256
-              + Character'Pos (Bytes (Bytes'First + 1));
-            Append (Extra, Bytes);
+              Natural (Bytes (Bytes'First)) * 256
+              + Natural (Bytes (Bytes'First + 1));
+            if Payload_Length <= 125 then
+               raise Web.Errors.Protocol_Error with "non-minimal websocket length";
+            end if;
          end;
       elsif Length_Code = 127 then
          raise Web.Errors.Protocol_Error with "oversized websocket frame";
       end if;
+
+      Validate_Frame_Before_Payload (Header, Payload_Length);
 
       if Payload_Length > Max_Size then
          raise Web.Errors.Protocol_Error with "oversized websocket message";
       end if;
 
       declare
-         Mask_And_Payload : constant String := Read_Exact (Socket, 4 + Payload_Length);
+         Mask : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Socket, 4);
+         Payload_Data : constant Ada.Streams.Stream_Element_Array :=
+           Read_Exact_Bytes (Socket, Payload_Length);
       begin
-         return Decode_Frame (Header & To_String (Extra) & Mask_And_Payload, Max_Size);
+         return Decode_Received_Payload (Header, Payload_Length, Mask, Payload_Data);
       end;
    end Receive_Frame;
 
@@ -397,32 +801,39 @@ package body Web.WebSocket is
      (Conn     : in out Web.Connection.Connection_Type;
       Max_Size : Natural) return Frame
    is
-      Header         : constant String := Read_Exact (Conn, 2);
-      Length_Code    : constant Natural := Character'Pos (Header (Header'First + 1)) mod 16#80#;
+      use type Ada.Streams.Stream_Element_Offset;
+
+      Header         : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Conn, 2);
+      Length_Code    : constant Natural := Natural (Header (Header'First + 1)) mod 16#80#;
       Payload_Length : Natural := Length_Code;
-      Extra          : Unbounded_String;
    begin
       if Length_Code = 126 then
          declare
-            Bytes : constant String := Read_Exact (Conn, 2);
+            Bytes : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Conn, 2);
          begin
             Payload_Length :=
-              Character'Pos (Bytes (Bytes'First)) * 256
-              + Character'Pos (Bytes (Bytes'First + 1));
-            Append (Extra, Bytes);
+              Natural (Bytes (Bytes'First)) * 256
+              + Natural (Bytes (Bytes'First + 1));
+            if Payload_Length <= 125 then
+               raise Web.Errors.Protocol_Error with "non-minimal websocket length";
+            end if;
          end;
       elsif Length_Code = 127 then
          raise Web.Errors.Protocol_Error with "oversized websocket frame";
       end if;
+
+      Validate_Frame_Before_Payload (Header, Payload_Length);
 
       if Payload_Length > Max_Size then
          raise Web.Errors.Protocol_Error with "oversized websocket message";
       end if;
 
       declare
-         Mask_And_Payload : constant String := Read_Exact (Conn, 4 + Payload_Length);
+         Mask : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Conn, 4);
+         Payload_Data : constant Ada.Streams.Stream_Element_Array :=
+           Read_Exact_Bytes (Conn, Payload_Length);
       begin
-         return Decode_Frame (Header & To_String (Extra) & Mask_And_Payload, Max_Size);
+         return Decode_Received_Payload (Header, Payload_Length, Mask, Payload_Data);
       end;
    end Receive_Frame;
 

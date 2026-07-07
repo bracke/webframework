@@ -2,6 +2,7 @@ with Ada.Characters.Handling;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Web.Errors;
+with Web.Security;
 
 package body Web.Cookie is
    use Ada.Strings.Fixed;
@@ -58,6 +59,7 @@ package body Web.Cookie is
            or else Character'Pos (Ch) = 59
            or else Character'Pos (Ch) = 92
            or else Character'Pos (Ch) = 127
+           or else (Character'Pos (Ch) >= 128 and then Character'Pos (Ch) <= 159)
          then
             return False;
          end if;
@@ -72,17 +74,51 @@ package body Web.Cookie is
          return False;
       end if;
 
+      if Value (Value'First) /= '/' then
+         return False;
+      end if;
+
       for Ch of Value loop
          if Character'Pos (Ch) < 32
            or else Ch = ';'
            or else Character'Pos (Ch) = 127
+           or else (Character'Pos (Ch) >= 128 and then Character'Pos (Ch) <= 159)
          then
             return False;
          end if;
       end loop;
 
-      return True;
+      return Web.Security.Is_Safe_Path (Value)
+        and then Web.Security.Is_Safe_Decoded_Path (Value);
    end Is_Cookie_Path;
+
+   procedure Note_Cookie
+     (Jar   : in out Cookie_Jar;
+      Name  : String;
+      Value : String)
+   is
+      Previous : Natural := 0;
+      Count_Position : Cookie_Maps.Cursor := Jar.Counts.Find (Name);
+      Value_Position : Cookie_Maps.Cursor;
+      Inserted       : Boolean;
+   begin
+      if Cookie_Maps.Has_Element (Count_Position) then
+         Previous := Natural'Value (Cookie_Maps.Element (Count_Position));
+      end if;
+
+      if Cookie_Maps.Has_Element (Count_Position) then
+         Jar.Counts.Replace_Element (Count_Position, Trimmed (Natural'Image (Previous + 1)));
+      else
+         Jar.Counts.Insert (Name, Trimmed (Natural'Image (Previous + 1)));
+      end if;
+
+      Cookie_Maps.Insert
+        (Container => Jar.Values,
+         Key       => Name,
+         New_Item  => Value,
+         Position  => Value_Position,
+         Inserted  => Inserted);
+   end Note_Cookie;
 
    function Parse (Header : String) return Cookie_Jar is
       Jar   : Cookie_Jar;
@@ -104,9 +140,8 @@ package body Web.Cookie is
             begin
                if Is_Cookie_Name (Name)
                  and then Is_Cookie_Value (Item)
-                 and then not Jar.Values.Contains (Name)
                then
-                  Jar.Values.Include (Name, Item);
+                  Note_Cookie (Jar, Name, Item);
                end if;
             end;
          end if;
@@ -119,17 +154,42 @@ package body Web.Cookie is
 
    function Has (Jar : Cookie_Jar; Name : String) return Boolean is
    begin
+      if not Is_Cookie_Name (Name) then
+         raise Web.Errors.Security_Error with "invalid cookie name";
+      end if;
+
       return Jar.Values.Contains (Name);
    end Has;
 
    function Value (Jar : Cookie_Jar; Name : String) return String is
+      Position : Cookie_Maps.Cursor;
    begin
-      if Jar.Values.Contains (Name) then
-         return Jar.Values.Element (Name);
+      if not Is_Cookie_Name (Name) then
+         raise Web.Errors.Security_Error with "invalid cookie name";
+      end if;
+
+      Position := Jar.Values.Find (Name);
+      if Cookie_Maps.Has_Element (Position) then
+         return Cookie_Maps.Element (Position);
       end if;
 
       return "";
    end Value;
+
+   function Count (Jar : Cookie_Jar; Name : String) return Natural is
+      Position : Cookie_Maps.Cursor;
+   begin
+      if not Is_Cookie_Name (Name) then
+         raise Web.Errors.Security_Error with "invalid cookie name";
+      end if;
+
+      Position := Jar.Counts.Find (Name);
+      if Cookie_Maps.Has_Element (Position) then
+         return Natural'Value (Cookie_Maps.Element (Position));
+      end if;
+
+      return 0;
+   end Count;
 
    function Set_Cookie
      (Name      : String;
@@ -156,6 +216,10 @@ package body Web.Cookie is
 
       if Same_Site = None and then not Secure then
          raise Web.Errors.Security_Error with "SameSite=None cookies must be Secure";
+      end if;
+
+      if Max_Age < -1 then
+         raise Web.Errors.Security_Error with "invalid cookie max-age";
       end if;
 
       Append (Result, "; Path=" & Path);

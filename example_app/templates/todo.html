@@ -1,5 +1,12 @@
-<form id="todo-form" data-wf-submit="todo.add">
-  <input name="title" id="title">
-  <button>Add</button>
-</form>
-<ul id="todo-list"><!-- wf:todos --></ul>
+<section class="panel todo-panel" aria-labelledby="todo-heading">
+  <h2 id="todo-heading">Todos</h2>
+  <form id="todo-form" data-wf-submit="todo.add">
+    <label for="title">Todo</label>
+    <div class="inline-form">
+      <input name="title" id="title" autocomplete="off">
+      <button type="submit">Add</button>
+    </div>
+    <p id="todo-status" class="status" aria-live="polite"></p>
+  </form>
+  <ul id="todo-list" class="todo-list"><!-- wf:todos --></ul>
+</section>
