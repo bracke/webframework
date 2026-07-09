@@ -52,6 +52,20 @@ package Web.Response is
    --  @return Bad request response.
    function Bad_Request return Response_Type;
 
+   --  Create a 400 response with a message.
+   --  @param Message Error message.
+   --  @return Bad request response.
+   function Bad_Request (Message : String) return Response_Type;
+
+   --  Create a 401 response.
+   --  @return Unauthorized response.
+   function Unauthorized return Response_Type;
+
+   --  Create a 401 response with a message.
+   --  @param Message Error message.
+   --  @return Unauthorized response.
+   function Unauthorized (Message : String) return Response_Type;
+
    --  Create a 406 response.
    --  @return Not acceptable response.
    function Not_Acceptable return Response_Type;
@@ -59,6 +73,12 @@ package Web.Response is
    --  Create a 500 response.
    --  @return Internal server error response.
    function Internal_Server_Error return Response_Type;
+
+   --  Generate an error HTML page with code, message, and timestamp.
+   --  @param Code HTTP status code.
+   --  @param Message Error message.
+   --  @return HTML error page.
+   function Generate_Error_Page (Code : Positive; Message : String) return String;
 
    --  Add or replace a response header.
    --  @param Response Response to update.

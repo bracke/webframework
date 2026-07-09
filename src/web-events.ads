@@ -144,11 +144,50 @@ package Web.Events is
       with procedure Process (Value : String);
    procedure With_Field (Item : Event; Name : String);
 
+   --  Set the acknowledgment id for an event.
+   --  @param Item Event to update.
+   --  @param Value Ack id value.
+   --  @return No return value.
+   procedure Set_Ack_Id (Item : in out Event; Value : String);
+
+   --  Set the message id for an event.
+   --  @param Item Event to update.
+   --  @param Value Message id value.
+   --  @return No return value.
+   procedure Set_Message_Id (Item : in out Event; Value : String);
+
+   --  Check whether the event requires acknowledgment.
+   --  @param Item Event value.
+   --  @return True when event has a non-empty ackId.
+   function Has_Ack_Id (Item : Event) return Boolean;
+
+   --  Return the acknowledgment id.
+   --  @param Item Event value.
+   --  @return Ack id or empty string.
+   function Get_Ack_Id (Item : Event) return String;
+
+   --  Return the message id.
+   --  @param Item Event value.
+   --  @return Message id or empty string.
+   function Get_Message_Id (Item : Event) return String;
+
+   --  Check whether the event has a priority field.
+   --  @param Item Event value.
+   --  @return True when event has a non-empty priority.
+   function Has_Priority (Item : Event) return Boolean;
+
+   --  Return the message priority.
+   --  @param Item Event value.
+   --  @return Priority value or empty string.
+   function Get_Priority (Item : Event) return String;
+
 private
    type Event is record
       Event_Type : Event_Kind := Hello_Event;
       Element    : Ada.Strings.Unbounded.Unbounded_String;
       Act        : Ada.Strings.Unbounded.Unbounded_String;
       Fields     : Field_Maps.Map;
+      Ack_Id     : Ada.Strings.Unbounded.Unbounded_String;
+      Message_Id : Ada.Strings.Unbounded.Unbounded_String;
    end record;
 end Web.Events;

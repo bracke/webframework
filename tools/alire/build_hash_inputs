@@ -1,5 +1,5 @@
 dependency:project_tools=0.1.0=e3f3a06e9600cea82634637823ae1842b32c03bd80fe9ac57721dd4e6a4c1c49
-dependency:webframework=0.1.0-dev=cd22d094f57b0250e9587c83f0ecb57b4308655d50828b822009635382456de3
+dependency:webframework=0.1.0-dev=ed0e4f245cf8d641fd62be6cfede566349deb6fc126d09b7ec49df90c6e74582
 external:LIBRARY_TYPE=default
 external:WEBFRAMEWORK_TOOLS_LIBRARY_TYPE=default
 profile:webframework_tools=DEVELOPMENT

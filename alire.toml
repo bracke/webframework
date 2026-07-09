@@ -2,7 +2,7 @@ name = "webframework"
 description = "Ada-first server-driven web framework using HTTP/1.1 and WebSockets"
 version = "0.1.0-dev"
 licenses = "MIT"
-website = ""
+website = "https://github.com/bracke/webframework"
 tags = ["web", "websocket", "http", "server-driven"]
 
 [[depends-on]]

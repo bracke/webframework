@@ -6,14 +6,18 @@ with Ada.Strings.Unbounded;
 with Ada.Strings.Fixed;
 with Ada.Text_IO;
 with Terminal_Styles;
+with App.Auth;
+with App.Auth_Handlers;
 with App.Counter;
 with App.Database;
 with App.Runtime;
 with App.Pages;
 with App.Profile;
+with App.State;
 with App.Todo;
 with Web.Config;
 with Web.Logging;
+with Web.Html;
 
 --  Main example application entry point.
 --  Demonstrates full-page rendering, websocket action dispatch, and persistence.
@@ -39,6 +43,10 @@ procedure Example_App is
       Private_Key     : Unbounded_String;
       Log_Level      : Web.Logging.Level_Type := Web.Logging.Debug_Level;
       Structured_Log : Boolean := False;
+      --  Connection hardening settings
+      Ping_Interval  : Natural := 30;      --  Ping interval in seconds (0 = disabled)
+      Rate_Limit     : Natural := 100;     --  Messages per minute limit (0 = disabled)
+      Deduplication_Window : Natural := 60; --  Deduplication window in seconds (0 = disabled)
    end record;
 
    --  Stable process exit codes used by startup checks and wrappers.
@@ -72,6 +80,9 @@ procedure Example_App is
       Log_Message
         ("  --log-level [debug|info|warn|error]", Terminal_Styles.Role_Muted);
       Log_Message ("  --log-structured", Terminal_Styles.Role_Muted);
+      Log_Message ("  --ping-interval SECONDS", Terminal_Styles.Role_Muted);
+      Log_Message ("  --rate-limit COUNT", Terminal_Styles.Role_Muted);
+      Log_Message ("  --deduplication-window SECONDS", Terminal_Styles.Role_Muted);
    end Usage;
 
    --  Helper to keep logging visible in both framework sink and console output.
@@ -221,6 +232,12 @@ procedure Example_App is
                Result.Log_Level := Parse_Log_Level (Next_Value (Argument));
             elsif Argument = "--log-structured" then
                Result.Structured_Log := True;
+            elsif Argument = "--ping-interval" then
+               Result.Ping_Interval := Natural'Value (Next_Value (Argument));
+            elsif Argument = "--rate-limit" then
+               Result.Rate_Limit := Natural'Value (Next_Value (Argument));
+            elsif Argument = "--deduplication-window" then
+               Result.Deduplication_Window := Natural'Value (Next_Value (Argument));
             elsif Argument'Length > 0 and then Argument (Argument'First) = '-' then
                raise Constraint_Error with "unknown option: " & Argument;
             elsif Index = 1 then
@@ -270,8 +287,23 @@ procedure Example_App is
    begin
       App.Runtime.Configure (Config);
 
+      --  Enable connection hardening features
+      App.Runtime.Set_Ping_Interval (Settings.Ping_Interval);
+      App.Runtime.Set_Rate_Limit (Settings.Rate_Limit);
+      App.Runtime.Set_Deduplication_Window (Settings.Deduplication_Window);
+
       --  Emit a compact startup report with resolved routing/security values.
       Log_Info ("webframework: " & App.Runtime.Configuration_Report);
+      declare
+         Ping_Interval_Value : constant Natural := App.Runtime.Ping_Interval;
+         Rate_Limit_Value : constant Natural := App.Runtime.Rate_Limit;
+         Deduplication_Value : constant Natural := App.Runtime.Deduplication_Window;
+         Msg1 : constant String := "connection hardening: ping_interval=" & Natural'Image (Ping_Interval_Value);
+         Msg2 : constant String := Msg1 & ", rate_limit=" & Natural'Image (Rate_Limit_Value);
+         Full_Msg : constant String := Msg2 & ", deduplication_window=" & Natural'Image (Deduplication_Value);
+      begin
+         Log_Info (Full_Msg);
+      end;
       Log_Info
         ("webframework: allowed_host=" & Effective_Allowed_Host (Settings)
          & " allowed_origin=" & Allowed_Origin (Settings));
@@ -288,6 +320,7 @@ procedure Example_App is
    end Run_Server;
 
    Settings : Settings_Type;
+   Startup_Failure : Boolean := False;
    begin
       --  Startup sequence: parse settings, initialize logging and DB,
       --  configure live sessions, register routes/handlers, run server.
@@ -299,28 +332,55 @@ procedure Example_App is
       Apply_Logging (Settings);
       --  Initialize persistence before accepting connections.
       App.Database.Initialize;
+      --  Initialize authentication system (creates users table and admin user).
+      App.Auth.Initialize;
       null;
       --  Action-to-handler mapping for websocket events.
       App.Runtime.Register ("counter.increment", App.Counter.Increment'Access);
       App.Runtime.Register ("profile.save", App.Profile.Save'Access);
       App.Runtime.Register ("todo.add", App.Todo.Add'Access);
+      --  Authentication handlers
+      App.Runtime.Register ("auth.login", App.Auth_Handlers.Handle_Login'Access);
+      App.Runtime.Register ("auth.logout", App.Auth_Handlers.Handle_Logout'Access);
       App.Runtime.Register_Error_Handler (404, App.Pages.Error_Not_Found'Access);
       App.Runtime.Register_Error_Handler (400, App.Pages.Error_Bad_Request'Access);
       App.Runtime.Register_Error_Handler (500, App.Pages.Error_Server'Access);
       --  HTTP + websocket + static route wiring.
       App.Runtime.Get ("/", App.Pages.Home'Access);
+      App.Runtime.Get ("/login", App.Pages.Login'Access);
+      App.Runtime.Post ("/api/login", App.Pages.Api_Login'Access);
+      App.Runtime.Post ("/api/logout", App.Pages.Api_Logout'Access);
       App.Runtime.Get ("/health", App.Pages.Health'Access);
       App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
       App.Runtime.Static ("/static", Static_Directory);
       --  Blocking call that owns the main process lifetime.
       Run_Server (Settings);
    exception
-      --  Convert startup failures to a nonzero exit with readable diagnostics.
+      --  Handle startup errors with usage message
    when Error : Constraint_Error =>
       Log_Error ("error: example_app: " & Ada.Exceptions.Exception_Message (Error));
       Usage;
       Ada.Command_Line.Set_Exit_Status (Exit_Usage);
    when Error : others =>
-      Log_Error ("error: example_app: " & Ada.Exceptions.Exception_Message (Error));
-      Ada.Command_Line.Set_Exit_Status (Exit_Startup_Failure);
+      --  Last-chance exception handler: ensure server stops cleanly
+      --  for any exception that occurs during startup or server runtime.
+      declare
+         Server_Was_Running : constant Boolean := App.Runtime.Server_Running;
+      begin
+         --  Attempt graceful shutdown if server is running
+         if Server_Was_Running then
+            begin
+               Log_Info ("shutting down server gracefully after exception...");
+               App.Runtime.Stop;
+            exception
+               when Error2 : others =>
+                  Log_Error ("error during shutdown: " & Ada.Exceptions.Exception_Message (Error2));
+            end;
+            delay 1.0; --  Give cleanup more time to complete (wake-up + close listener)
+         end if;
+         
+         --  Log the original error
+         Log_Error ("error: example_app: " & Ada.Exceptions.Exception_Message (Error));
+         Ada.Command_Line.Set_Exit_Status (Exit_Startup_Failure);
+      end;
    end Example_App;

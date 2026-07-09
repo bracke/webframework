@@ -82,6 +82,47 @@ button:hover {
   background: #0f49c8;
 }
 
+/* Header and navigation */
+header {
+  background: #ffffff;
+  border-bottom: 1px solid #d7dce2;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+header nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+.nav-home {
+  color: #155eef;
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 1.1rem;
+}
+
+.nav-home:hover {
+  text-decoration: underline;
+}
+
+.nav-logout {
+  background: #ef4444;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-weight: 650;
+  padding: 0.5rem 1rem;
+}
+
+.nav-logout:hover {
+  background: #dc2626;
+}
+
 .status {
   color: #475467;
   min-height: 1.4rem;
@@ -112,4 +153,65 @@ button:hover {
   input {
     width: 100%;
   }
+}
+
+/* Connection status indicator - button-sized, bottom-right */
+.wf-connection-status {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 5rem;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wf-connection-connected {
+  background: #10b981;
+  color: white;
+}
+
+.wf-connection-connecting {
+  background: #f59e0b;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+.wf-connection-disconnected {
+  background: #ef4444;
+  color: white;
+}
+
+.wf-reconnect-btn {
+  background: white;
+  color: #ef4444;
+  border: none;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 0.3rem;
+  transition: all 0.2s ease;
+}
+
+.wf-reconnect-btn:hover {
+  background: #fef2f2;
+  transform: translateY(-1px);
+}
+
+.wf-reconnect-btn:active {
+  transform: translateY(0);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }

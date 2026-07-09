@@ -1,9 +1,11 @@
+with Ada.Calendar;
 with Ada.Characters.Handling;
 with Ada.Containers;
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Strings.Fixed;
 with Ada.Strings.Hash;
 with Ada.Strings.Unbounded;
+with Ada.Text_IO;
 with Interfaces;
 with Web.Errors;
 with Zlib;
@@ -861,24 +863,161 @@ package body Web.Response is
       return Create (200, Content, "text/plain; charset=utf-8");
    end Text;
 
+   --  Error template HTML with placeholders for CODE, MESSAGE, and TIMESTAMP.
+   Error_Template_Content : constant String := 
+     "<!DOCTYPE html>" & 
+     "<html lang=""en"">" & 
+     "<head>" & 
+     "<meta charset=""UTF-8"">" & 
+     "<meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">" & 
+     "<title>Error {{CODE}} - {{MESSAGE}}</title>" & 
+     "<style>" & 
+     "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; " &
+     "background-color: #f8f9fa; margin: 0; padding: 2rem; " &
+     "display: flex; justify-content: center; align-items: center; min-height: 100vh; }" & 
+     ".error-container { background: white; border-radius: 8px; " &
+     "box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 2rem; max-width: 600px; width: 100%; }" & 
+     ".error-code { color: #dc3545; font-size: 4rem; font-weight: 700; line-height: 1; margin-bottom: 0.5rem; }" & 
+     ".error-title { color: #495057; font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }" & 
+     ".error-details { color: #6c757d; margin-bottom: 1.5rem; }" & 
+     ".error-time { color: #868e96; font-size: 0.875rem; }" & 
+     ".error-border { height: 4px; background: linear-gradient(90deg, #dc3545, #fd7e14); " &
+     "border-radius: 2px; margin-bottom: 1rem; }" & 
+     "</style>" & 
+     "</head>" & 
+     "<body>" & 
+     "<div class=""error-container"">" & 
+     "<div class=""error-code"">{{CODE}}</div>" & 
+     "<div class=""error-border""></div>" & 
+     "<div class=""error-title"">{{MESSAGE}}</div>" & 
+     "<div class=""error-details"">An error occurred while processing your request.</div>" & 
+     "<div class=""error-time"">{{TIMESTAMP}}</div>" & 
+     "</div>" & 
+     "</body>" & 
+     "</html>";
+
+   --  Format a natural number as two-digit text (e.g., 5 -> "05").
+   --  @param Value Number to format.
+   --  @return Two-digit string representation.
+   function Two_Digit_Text (Value : Natural) return String is
+   begin
+      if Value < 10 then
+         return "0" & Trim (Natural'Image (Value), Ada.Strings.Both);
+      end if;
+      return Trim (Natural'Image (Value), Ada.Strings.Both);
+   end Two_Digit_Text;
+
+   --  Format current timestamp in ISO 8601 format for error pages.
+   --  @return Formatted timestamp string.
+   function Format_Timestamp return String is
+      Now : constant Ada.Calendar.Time := Ada.Calendar.Clock;
+      Year : Ada.Calendar.Year_Number;
+      Month : Ada.Calendar.Month_Number;
+      Day : Ada.Calendar.Day_Number;
+      Day_Seconds : Duration;
+      Total_Seconds : Natural;
+      Hour_Value : Natural;
+      Minute_Value : Natural;
+      Second_Value : Natural;
+   begin
+      Ada.Calendar.Split (Now, Year, Month, Day, Day_Seconds);
+      Total_Seconds := Natural (Day_Seconds);
+      Hour_Value := Total_Seconds / 3_600;
+      Minute_Value := (Total_Seconds mod 3_600) / 60;
+      Second_Value := Total_Seconds mod 60;
+      
+      return Trim (Integer'Image (Integer (Year)), Ada.Strings.Both)
+        & "-"
+        & Two_Digit_Text (Natural (Month))
+        & "-"
+        & Two_Digit_Text (Natural (Day))
+        & "T"
+        & Two_Digit_Text (Hour_Value)
+        & ":"
+        & Two_Digit_Text (Minute_Value)
+        & ":"
+        & Two_Digit_Text (Second_Value)
+        & "Z";
+   end Format_Timestamp;
+
+   --  Helper to replace all occurrences of a substring in an Unbounded_String.
+   --  @param Source Source string.
+   --  @param Target Target substring to replace.
+   --  @param Replacement Replacement string.
+   --  @return String with all occurrences replaced.
+   function Replace_All_Internal 
+     (Source     : Unbounded_String;
+      Target     : String;
+      Replacement : String) return Unbounded_String is
+      Result : Unbounded_String := Source;
+      Start : Positive := 1;
+      Pos : Natural;
+   begin
+      if Target'Length = 0 then
+         return Result;
+      end if;
+      
+      loop
+         Pos := Index (Result, Target, Start);
+         exit when Pos = 0;
+         Replace_Slice (Result, Pos, Pos + Target'Length - 1, Replacement);
+         Start := Pos + Replacement'Length;
+      end loop;
+      
+      return Result;
+   end Replace_All_Internal;
+
+   --  Generate error HTML by replacing placeholders in the error template.
+   --  @param Code HTTP status code.
+   --  @param Message Error message.
+   --  @return Rendered HTML error page.
+   function Generate_Error_Page 
+     (Code    : Positive;
+      Message : String) return String is
+      Timestamp : constant String := Format_Timestamp;
+      Code_Text : constant String := Trim (Positive'Image (Code), Ada.Strings.Both);
+      Result : Unbounded_String;
+   begin
+      Result := To_Unbounded_String (Error_Template_Content);
+      Result := Replace_All_Internal (Result, "{{CODE}}", Code_Text);
+      Result := Replace_All_Internal (Result, "{{MESSAGE}}", Message);
+      Result := Replace_All_Internal (Result, "{{TIMESTAMP}}", Timestamp);
+      return To_String (Result);
+   end Generate_Error_Page;
+
    function Not_Found return Response_Type is
    begin
-      return Create (404, "Not found", "text/plain; charset=utf-8");
+      return Create (404, Generate_Error_Page (404, "Not found"), "text/html; charset=utf-8");
    end Not_Found;
 
    function Bad_Request return Response_Type is
    begin
-      return Create (400, "Bad request", "text/plain; charset=utf-8");
+      return Create (400, Generate_Error_Page (400, "Bad request"), "text/html; charset=utf-8");
    end Bad_Request;
+
+   function Bad_Request (Message : String) return Response_Type is
+   begin
+      return Create (400, Generate_Error_Page (400, Message), "text/html; charset=utf-8");
+   end Bad_Request;
+
+   function Unauthorized return Response_Type is
+   begin
+      return Create (401, Generate_Error_Page (401, "Unauthorized"), "text/html; charset=utf-8");
+   end Unauthorized;
+
+   function Unauthorized (Message : String) return Response_Type is
+   begin
+      return Create (401, Generate_Error_Page (401, Message), "text/html; charset=utf-8");
+   end Unauthorized;
 
    function Not_Acceptable return Response_Type is
    begin
-      return Create (406, "Not acceptable", "text/plain; charset=utf-8");
+      return Create (406, Generate_Error_Page (406, "Not acceptable"), "text/html; charset=utf-8");
    end Not_Acceptable;
 
    function Internal_Server_Error return Response_Type is
    begin
-      return Create (500, "Internal server error", "text/plain; charset=utf-8");
+      return Create (500, Generate_Error_Page (500, "Internal server error"), "text/html; charset=utf-8");
    end Internal_Server_Error;
 
    procedure Set_Header

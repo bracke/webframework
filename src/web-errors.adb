@@ -1,6 +1,8 @@
 with Ada.Exceptions;
 with Web.Logging;
 
+with Ada.Calendar;
+
 package body Web.Errors is
    use type Web.Config.Mode_Type;
 
@@ -13,7 +15,7 @@ package body Web.Errors is
       Web.Logging.Error (Ada.Exceptions.Exception_Information (Occurrence));
 
       if Mode = Web.Config.Development and then Message'Length > 0 then
-         return Web.Response.Create (500, Message, "text/plain; charset=utf-8");
+         return Web.Response.Create (500, Web.Response.Generate_Error_Page (500, Message), "text/html; charset=utf-8");
       end if;
 
       return Web.Response.Internal_Server_Error;

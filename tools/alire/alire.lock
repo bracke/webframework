@@ -77,6 +77,15 @@ versions = "^1.0.0"
 lockfiled = true
 path = "../../sshlib"
 [[solution.state]]
+crate = "terminal_styles"
+fulfilment = "linked"
+pinned = false
+transitivity = "direct"
+versions = "~0.1.0-dev"
+[solution.state.link]
+lockfiled = true
+path = "../../terminal_styles"
+[[solution.state]]
 crate = "webframework"
 fulfilment = "linked"
 pinned = false

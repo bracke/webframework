@@ -1250,7 +1250,7 @@ package body Web.Server is
 
       Route_Maps.Insert
         (Container => Routes,
-         Key       => Path,
+         Key       => "GET " & Path,
          New_Item  => Handler,
          Position  => Position,
          Inserted  => Inserted);
@@ -1258,6 +1258,26 @@ package body Web.Server is
          raise Web.Errors.Security_Error with "duplicate route path";
       end if;
    end Get;
+
+   procedure Post (Path : String; Handler : Route_Handler) is
+      Position : Route_Maps.Cursor;
+      Inserted : Boolean;
+   begin
+      Require_Registration_Path (Path, "route");
+      if Handler = null then
+         raise Web.Errors.Security_Error with "route handler is null";
+      end if;
+
+      Route_Maps.Insert
+        (Container => Routes,
+         Key       => "POST " & Path,
+         New_Item  => Handler,
+         Position  => Position,
+         Inserted  => Inserted);
+      if not Inserted then
+         raise Web.Errors.Security_Error with "duplicate route path";
+      end if;
+   end Post;
 
    procedure WebSocket (Path : String; Handler : WebSocket_Handler) is
       Position : Socket_Maps.Cursor;
@@ -1459,10 +1479,6 @@ package body Web.Server is
             raise Web.Errors.Bad_Request_Error with "invalid method";
          end if;
 
-         if Method_Text /= "GET" then
-            raise Web.Errors.Bad_Request_Error with "method is not supported";
-         end if;
-
          if Version_Text /= "HTTP/1.1" then
             raise Web.Errors.Bad_Request_Error with "only HTTP/1.1 is supported";
          end if;
@@ -1608,20 +1624,24 @@ package body Web.Server is
    end Static_Prefix_Matches;
 
    function Dispatch (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+      Method : constant String := Web.Request.Method (Request);
+      Path : constant String := Web.Request.Path (Request);
+      Route_Key : constant String := Method & " " & Path;
    begin
-      if not Web.Request.Method_Is (Request, "GET") then
-         return Build_Error_Response (Request, 400, "method not allowed");
+      --  Only allow GET and POST methods
+      if Method /= "GET" and Method /= "POST" then
+         return Build_Error_Response (Request, 405, "method not allowed");
       end if;
 
       declare
-         Path : constant String := Web.Request.Path (Request);
-         Cursor : constant Route_Maps.Cursor := Routes.Find (Path);
+         Cursor : constant Route_Maps.Cursor := Routes.Find (Route_Key);
       begin
          if Route_Maps.Has_Element (Cursor) then
             return Route_Maps.Element (Cursor) (Request);
          end if;
 
-         if Static_Prefix_Matches (Path) then
+         --  Static files are only served via GET
+         if Method = "GET" and Static_Prefix_Matches (Path) then
             return Web.Static.Serve (To_String (Static_Prefix_Text), To_String (Static_Dir_Text), Path);
          end if;
       end;
@@ -2178,6 +2198,8 @@ package body Web.Server is
       Require_Bind_Host (Host);
       GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket (Listener);
+      --  Allow port reuse to avoid "Address already in use" errors on quick restarts
+      GNAT.Sockets.Set_Socket_Option (Listener, GNAT.Sockets.Socket_Level, (GNAT.Sockets.Reuse_Address, True));
       Address.Addr := GNAT.Sockets.Inet_Addr (Host);
       Address.Port := GNAT.Sockets.Port_Type (Port);
       GNAT.Sockets.Bind_Socket (Listener, Address);

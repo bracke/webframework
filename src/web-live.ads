@@ -117,4 +117,41 @@ package Web.Live is
    procedure WebSocket_Handler
      (Conn    : in out Web.Connection.Connection_Type;
       Request : Web.Request.Request_Type);
+
+   --  Set the ping interval for connection health checks.
+   --  @param Seconds Ping interval in seconds; zero disables ping.
+   --  @return No return value.
+   procedure Set_Ping_Interval (Seconds : Natural);
+
+   --  Get the current ping interval.
+   --  @return Ping interval in seconds.
+   function Ping_Interval return Natural;
+
+   --  Set the maximum number of messages per minute allowed from a client.
+   --  @param Count Maximum messages per minute; zero disables rate limiting.
+   --  @return No return value.
+   procedure Set_Rate_Limit (Count : Natural);
+
+   --  Get the current rate limit.
+   --  @return Maximum messages per minute.
+   function Rate_Limit return Natural;
+
+   --  Set the message retention window for deduplication (in seconds).
+   --  @param Seconds Deduplication window; zero disables deduplication.
+   --  @return No return value.
+   procedure Set_Deduplication_Window (Seconds : Natural);
+
+   --  Get the current deduplication window.
+   --  @return Deduplication window in seconds.
+   function Deduplication_Window return Natural;
+
+   --  Check if a session is currently connected via WebSocket.
+   --  @param Id Session id.
+   --  @return True if session has active WebSocket connection.
+   function Is_Connected (Id : String) return Boolean;
+
+   --  Get connection statistics for a session.
+   --  @param Id Session id.
+   --  @return Statistics string or empty if not found.
+   function Connection_Stats (Id : String) return String;
 end Web.Live;

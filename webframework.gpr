@@ -8,7 +8,6 @@ project Webframework is
    for Library_Dir use "lib";
    for Library_Name use "webframework";
    for Library_Kind use "static";
-   for Library_Options use ("-lssl", "-lcrypto");
    for Library_Interface use
      ("Web",
       "Web.Connection",

@@ -29,6 +29,12 @@ package Web.Server is
    --  @return No return value.
    procedure Get (Path : String; Handler : Route_Handler);
 
+   --  Register a POST route.
+   --  @param Path Exact route path.
+   --  @param Handler Route handler.
+   --  @return No return value.
+   procedure Post (Path : String; Handler : Route_Handler);
+
    --  Register a WebSocket route.
    --  @param Path Exact route path.
    --  @param Handler WebSocket handler.

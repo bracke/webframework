@@ -9,7 +9,7 @@ abstract project Webframework_Tools_Config is
 
    Alire_Host_Arch := "x86_64";
 
-   Alire_Host_Distro := "ubuntu";
+   Alire_Host_Distro := "distribution_unknown";
    Ada_Compiler_Switches := External_As_List ("ADAFLAGS", " ");
    Ada_Compiler_Switches := Ada_Compiler_Switches &
           (

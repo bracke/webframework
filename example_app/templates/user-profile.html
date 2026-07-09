@@ -1,0 +1,76 @@
+<div class="user-profile-container">
+  <h3>User Profile</h3>
+  <div class="user-profile-info">
+    <p><strong>Username:</strong> <span id="user-profile-username">{{USERNAME}}</span></p>
+    <p><strong>User ID:</strong> <span id="user-profile-userid">{{USERID}}</span></p>
+  </div>
+  <div class="user-profile-actions">
+    <button id="logout-btn" class="btn btn-secondary">Logout</button>
+  </div>
+</div>
+
+<style>
+  .user-profile-container {
+    max-width: 400px;
+    margin: 1rem 0;
+    padding: 1rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .user-profile-info {
+    margin-bottom: 1rem;
+  }
+  
+  .user-profile-info p {
+    margin: 0.5rem 0;
+    color: #495057;
+  }
+  
+  .user-profile-info strong {
+    color: #343a40;
+  }
+  
+  .btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+  }
+  
+  .btn-secondary {
+    background-color: #6c757d;
+    color: white;
+  }
+  
+  .btn-secondary:hover {
+    background-color: #5a6268;
+  }
+</style>
+
+<script>
+// Handle logout
+window.addEventListener('DOMContentLoaded', function() {
+  const logoutBtn = document.getElementById('logout-btn');
+  
+  logoutBtn.addEventListener('click', async function() {
+    try {
+      const response = await fetch('/api/logout', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        // Logout successful, redirect to login
+        window.location.href = '/login';
+      } else {
+        alert('Logout failed');
+      }
+    } catch (err) {
+      alert('Logout failed: ' + err.message);
+    }
+  });
+});
+</script>

@@ -93,6 +93,11 @@ package body Web.Application is
       Web.Server.Get (Path, Handler);
    end Get;
 
+   procedure Post (Path : String; Handler : Route_Handler_Access) is
+   begin
+      Web.Server.Post (Path, Handler);
+   end Post;
+
    procedure WebSocket (Path : String; Handler : WebSocket_Handler_Access) is
    begin
       Web.Server.WebSocket (Path, Handler);
@@ -144,4 +149,45 @@ package body Web.Application is
    begin
       return Web.Server.Health_Response;
    end Health_Response;
+
+   --  Connection hardening functions
+   procedure Set_Ping_Interval (Seconds : Natural) is
+   begin
+      Live.Set_Ping_Interval (Seconds);
+   end Set_Ping_Interval;
+
+   function Ping_Interval return Natural is
+   begin
+      return Live.Ping_Interval;
+   end Ping_Interval;
+
+   procedure Set_Rate_Limit (Count : Natural) is
+   begin
+      Live.Set_Rate_Limit (Count);
+   end Set_Rate_Limit;
+
+   function Rate_Limit return Natural is
+   begin
+      return Live.Rate_Limit;
+   end Rate_Limit;
+
+   procedure Set_Deduplication_Window (Seconds : Natural) is
+   begin
+      Live.Set_Deduplication_Window (Seconds);
+   end Set_Deduplication_Window;
+
+   function Deduplication_Window return Natural is
+   begin
+      return Live.Deduplication_Window;
+   end Deduplication_Window;
+
+   function Is_Connected (Id : String) return Boolean is
+   begin
+      return Live.Is_Connected (Id);
+   end Is_Connected;
+
+   function Connection_Stats (Id : String) return String is
+   begin
+      return Live.Connection_Stats (Id);
+   end Connection_Stats;
 end Web.Application;

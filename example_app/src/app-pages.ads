@@ -44,4 +44,26 @@ package App.Pages is
      (Request : Web.Request.Request_Type;
       Status  : Positive;
       Detail  : String) return Web.Response.Response_Type;
+
+   --  Render the login page.
+   --  @param Request HTTP request.
+   --  @return HTTP response.
+   function Login (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
+   --  Handle login API endpoint.
+   --  @param Request HTTP request containing username and password.
+   --  @return HTTP response.
+   function Api_Login (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
+   --  Handle logout API endpoint.
+   --  @param Request HTTP request.
+   --  @return HTTP response.
+   function Api_Logout (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
+   --  Redirect to login page.
+   --  @param Request HTTP request.
+   --  @param Session_Id Session identifier for cookie.
+   --  @return Redirect response.
+   function Redirect_To_Login
+     (Request : Web.Request.Request_Type; Session_Id : String) return Web.Response.Response_Type;
 end App.Pages;

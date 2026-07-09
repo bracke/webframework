@@ -337,7 +337,22 @@ package body Web.Protocol is
       end case;
    end Skip_Value;
 
-   type Root_Key_Kind is (Type_Key, Version_Key, Id_Key, Action_Key, Fields_Key, Unknown_Key);
+   --  Skip to the next field in a JSON object (after current field value).
+   --  Handles comma separators and whitespace.
+   --  @param Message JSON message.
+   --  @param Cursor Current cursor position.
+   procedure Skip_To_Next_Field (Message : String; Cursor : in out Natural) is
+   begin
+      Skip_Spaces (Message, Cursor);
+      if Cursor <= Message'Last and then Message (Cursor) = ',' then
+         Cursor := Cursor + 1;
+         Skip_Spaces (Message, Cursor);
+      end if;
+   end Skip_To_Next_Field;
+
+   type Root_Key_Kind is 
+     (Type_Key, Version_Key, Id_Key, Action_Key, Fields_Key,
+      Ack_Id_Key, Message_Id_Key, Reconnecting_Key, Last_Message_Id_Key, Unknown_Key);
    type Client_Message_Kind is
      (Hello_Message, Click_Message, Submit_Message, Input_Message, Change_Message, Unknown_Message);
 
@@ -353,6 +368,14 @@ package body Web.Protocol is
          return Action_Key;
       elsif Text = "fields" then
          return Fields_Key;
+      elsif Text = "ackId" then
+         return Ack_Id_Key;
+      elsif Text = "messageId" then
+         return Message_Id_Key;
+      elsif Text = "reconnecting" then
+         return Reconnecting_Key;
+      elsif Text = "lastMessageId" then
+         return Last_Message_Id_Key;
       end if;
 
       return Unknown_Key;
@@ -1062,4 +1085,331 @@ package body Web.Protocol is
          return Result;
       end;
    end Encode_Patches;
+
+   --  Check if a client message contains a reconnecting flag.
+   function Has_Reconnecting (Message : String) return Boolean is
+      Cursor : Natural := Message'First;
+      Found_Type : Boolean := False;
+      Found_Reconnecting : Boolean := False;
+      Reconnecting_Value : Boolean := False;
+   begin
+      Skip_Spaces (Message, Cursor);
+      Require (Cursor <= Message'Last and then Message (Cursor) = '{', "message must be object");
+      Cursor := Cursor + 1;
+
+      loop
+         Skip_Spaces (Message, Cursor);
+         exit when Cursor > Message'Last or else Message (Cursor) = '}';
+
+         declare
+            Key : constant Root_Key_Kind := Parse_Root_Key (Message, Cursor);
+         begin
+            if Key = Reconnecting_Key then
+               Skip_Spaces (Message, Cursor);
+               Require (Cursor <= Message'Last and then Message (Cursor) = ':', "expected colon");
+               Cursor := Cursor + 1;
+               Skip_Spaces (Message, Cursor);
+               if Cursor <= Message'Last and then Message (Cursor) = 't' then
+                  Reconnecting_Value := True;
+                  Cursor := Cursor + 3; -- Skip "true"
+               elsif Cursor <= Message'Last and then Message (Cursor) = 'f' then
+                  Reconnecting_Value := False;
+                  cursor := Cursor + 4; -- Skip "false"
+               end if;
+               Found_Reconnecting := True;
+               return Reconnecting_Value;
+            end if;
+         exception
+            when others =>
+               Skip_To_Next_Field (Message, Cursor);
+         end;
+
+         Skip_To_Next_Field (Message, Cursor);
+      end loop;
+
+      return Found_Reconnecting and Reconnecting_Value;
+   exception
+      when others =>
+         return False;
+   end Has_Reconnecting;
+
+   --  Get the last message ID from a client message.
+   function Get_Last_Message_Id (Message : String) return Natural is
+      Cursor : Natural := Message'First;
+      Found_Last_Id : Boolean := False;
+      Last_Id_Value : Natural := 0;
+   begin
+      Skip_Spaces (Message, Cursor);
+      Require (Cursor <= Message'Last and then Message (Cursor) = '{', "message must be object");
+      Cursor := Cursor + 1;
+
+      loop
+         Skip_Spaces (Message, Cursor);
+         exit when Cursor > Message'Last or else Message (Cursor) = '}';
+
+         declare
+            Key : constant Root_Key_Kind := Parse_Root_Key (Message, Cursor);
+         begin
+            if Key = Last_Message_Id_Key then
+               Skip_Spaces (Message, Cursor);
+               Require (Cursor <= Message'Last and then Message (Cursor) = ':', "expected colon");
+               Cursor := Cursor + 1;
+               Skip_Spaces (Message, Cursor);
+               Last_Id_Value := Parse_Natural (Message, Cursor);
+               Found_Last_Id := True;
+               return Last_Id_Value;
+            end if;
+         exception
+            when others =>
+               Skip_To_Next_Field (Message, Cursor);
+         end;
+
+         Skip_To_Next_Field (Message, Cursor);
+      end loop;
+
+      if Found_Last_Id then
+         return Last_Id_Value;
+      else
+         return 0;
+      end if;
+   exception
+      when others =>
+         return 0;
+   end Get_Last_Message_Id;
+
+   --  Check if an event requires acknowledgment.
+   function Requires_Ack (Event : Web.Events.Event) return Boolean is
+   begin
+      return Web.Events.Has_Ack_Id (Event);
+   exception
+      when others =>
+         return False;
+   end Requires_Ack;
+
+   --  Get the acknowledgment ID from an event.
+   function Get_Ack_Id (Event : Web.Events.Event) return String is
+   begin
+      return Web.Events.Get_Ack_Id (Event);
+   exception
+      when others =>
+         return "";
+   end Get_Ack_Id;
+
+   --  Get the message ID from an event.
+   function Get_Message_Id (Event : Web.Events.Event) return String is
+   begin
+      return Web.Events.Get_Message_Id (Event);
+   exception
+      when others =>
+         return "";
+   end Get_Message_Id;
+
+   --  Check if message is a ping message.
+   function Is_Ping_Message (Message : String) return Boolean is
+      Cursor : Natural := Message'First;
+      Type_Value : Unbounded_String;
+   begin
+      Skip_Spaces (Message, Cursor);
+      Require (Cursor <= Message'Last and then Message (Cursor) = '{', "message must be object");
+      Cursor := Cursor + 1;
+
+      loop
+         Skip_Spaces (Message, Cursor);
+         exit when Cursor > Message'Last or else Message (Cursor) = '}';
+
+         declare
+            Key : constant Root_Key_Kind := Parse_Root_Key (Message, Cursor);
+         begin
+            if Key = Type_Key then
+               Skip_Spaces (Message, Cursor);
+               Require (Cursor <= Message'Last and then Message (Cursor) = ':', "expected colon");
+               Cursor := Cursor + 1;
+               Skip_Spaces (Message, Cursor);
+               Type_Value := Parse_String_Unbounded (Message, Cursor);
+               return To_String (Type_Value) = "ping";
+            end if;
+         exception
+            when others => null;
+         end;
+
+         Skip_To_Next_Field (Message, Cursor);
+      end loop;
+
+      return False;
+   exception
+      when others =>
+         return False;
+   end Is_Ping_Message;
+
+   --  Check if message is a pong message.
+   function Is_Pong_Message (Message : String) return Boolean is
+      Type_Value : Unbounded_String;
+      Cursor : Natural := Message'First;
+   begin
+      Skip_Spaces (Message, Cursor);
+      Require (Cursor <= Message'Last and then Message (Cursor) = '{', "message must be object");
+      Cursor := Cursor + 1;
+
+      loop
+         Skip_Spaces (Message, Cursor);
+         exit when Cursor > Message'Last or else Message (Cursor) = '}';
+
+         declare
+            Key : constant Root_Key_Kind := Parse_Root_Key (Message, Cursor);
+         begin
+            if Key = Type_Key then
+               Skip_Spaces (Message, Cursor);
+               Require (Cursor <= Message'Last and then Message (Cursor) = ':', "expected colon");
+               Cursor := Cursor + 1;
+               Skip_Spaces (Message, Cursor);
+               Type_Value := Parse_String_Unbounded (Message, Cursor);
+               return To_String (Type_Value) = "pong";
+            end if;
+         exception
+            when others => null;
+         end;
+
+         Skip_To_Next_Field (Message, Cursor);
+      end loop;
+
+      return False;
+   exception
+      when others =>
+         return False;
+   end Is_Pong_Message;
+
+   --  Check if message is a server reconnect request.
+   function Is_Server_Reconnect (Message : String) return Boolean is
+      Type_Value : Unbounded_String;
+      Cursor : Natural := Message'First;
+   begin
+      Skip_Spaces (Message, Cursor);
+      Require (Cursor <= Message'Last and then Message (Cursor) = '{', "message must be object");
+      Cursor := Cursor + 1;
+
+      loop
+         Skip_Spaces (Message, Cursor);
+         exit when Cursor > Message'Last or else Message (Cursor) = '}';
+
+         declare
+            Key : constant Root_Key_Kind := Parse_Root_Key (Message, Cursor);
+         begin
+            if Key = Type_Key then
+               Skip_Spaces (Message, Cursor);
+               Require (Cursor <= Message'Last and then Message (Cursor) = ':', "expected colon");
+               Cursor := Cursor + 1;
+               Skip_Spaces (Message, Cursor);
+               Type_Value := Parse_String_Unbounded (Message, Cursor);
+               return To_String (Type_Value) = "server_reconnect";
+            end if;
+         exception
+            when others => null;
+         end;
+
+         Skip_To_Next_Field (Message, Cursor);
+      end loop;
+
+      return False;
+   exception
+      when others =>
+         return False;
+   end Is_Server_Reconnect;
+
+   --  Check if message is an acknowledgment message.
+   function Is_Ack_Message (Message : String) return Boolean is
+      Type_Value : Unbounded_String;
+      Cursor : Natural := Message'First;
+   begin
+      Skip_Spaces (Message, Cursor);
+      Require (Cursor <= Message'Last and then Message (Cursor) = '{', "message must be object");
+      Cursor := Cursor + 1;
+
+      loop
+         Skip_Spaces (Message, Cursor);
+         exit when Cursor > Message'Last or else Message (Cursor) = '}';
+
+         declare
+            Key : constant Root_Key_Kind := Parse_Root_Key (Message, Cursor);
+         begin
+            if Key = Type_Key then
+               Skip_Spaces (Message, Cursor);
+               Require (Cursor <= Message'Last and then Message (Cursor) = ':', "expected colon");
+               Cursor := Cursor + 1;
+               Skip_Spaces (Message, Cursor);
+               Type_Value := Parse_String_Unbounded (Message, Cursor);
+               return To_String (Type_Value) = "ack";
+            end if;
+         exception
+            when others => null;
+         end;
+
+         Skip_To_Next_Field (Message, Cursor);
+      end loop;
+
+      return False;
+   exception
+      when others =>
+         return False;
+   end Is_Ack_Message;
+
+   --  Get the acknowledgment ID from an ack message.
+   function Get_Ack_Id_From_Message (Message : String) return String is
+      Cursor : Natural := Message'First;
+      Ack_Id_Value : Unbounded_String;
+   begin
+      Skip_Spaces (Message, Cursor);
+      Require (Cursor <= Message'Last and then Message (Cursor) = '{', "message must be object");
+      Cursor := Cursor + 1;
+
+      loop
+         Skip_Spaces (Message, Cursor);
+         exit when Cursor > Message'Last or else Message (Cursor) = '}';
+
+         declare
+            Key : constant Root_Key_Kind := Parse_Root_Key (Message, Cursor);
+         begin
+            if Key = Ack_Id_Key then
+               Skip_Spaces (Message, Cursor);
+               Require (Cursor <= Message'Last and then Message (Cursor) = ':', "expected colon");
+               Cursor := Cursor + 1;
+               Skip_Spaces (Message, Cursor);
+               Ack_Id_Value := Parse_String_Unbounded (Message, Cursor);
+               return To_String (Ack_Id_Value);
+            end if;
+         exception
+            when others => null;
+         end;
+
+         Skip_To_Next_Field (Message, Cursor);
+      end loop;
+
+      return "";
+   exception
+      when others =>
+         return "";
+   end Get_Ack_Id_From_Message;
+
+   --  Create a ping message for connection health checks.
+   function Create_Ping_Message return String is
+   begin
+      return "{""type"":""ping"",""version"":1}";
+   end Create_Ping_Message;
+
+   --  Create a pong response message.
+   function Create_Pong_Message return String is
+   begin
+      return "{""type"":""pong"",""version"":1}";
+   end Create_Pong_Message;
+
+   --  Create an acknowledgment message for a given ackId.
+   function Create_Ack_Message (Ack_Id : String) return String is
+   begin
+      return "{" & """type"":""" & "ack" & """" & "," & """ackId"":""" & Ack_Id & """" & "}";
+   end Create_Ack_Message;
+
+   --  Create a server reconnect request message.
+   function Create_Server_Reconnect_Message return String is
+   begin
+      return "{""type"":""server_reconnect"",""version"":1}";
+   end Create_Server_Reconnect_Message;
 end Web.Protocol;

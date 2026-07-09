@@ -17,4 +17,8 @@ project Tools is
       for Default_Switches ("Ada") use
         ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");
    end Compiler;
+
+   package Linker is
+      for Default_Switches ("Ada") use ("-lssl", "-lcrypto");
+   end Linker;
 end Tools;

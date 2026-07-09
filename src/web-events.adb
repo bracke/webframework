@@ -81,7 +81,9 @@ package body Web.Events is
         (Event_Type => Kind,
          Element    => To_Unbounded_String (Element_Id),
          Act        => To_Unbounded_String (Action),
-         Fields     => Field_Maps.Empty_Map);
+         Fields     => Field_Maps.Empty_Map,
+         Ack_Id     => Null_Unbounded_String,
+         Message_Id => Null_Unbounded_String);
    end Create;
 
    function Create
@@ -107,7 +109,9 @@ package body Web.Events is
         (Event_Type => Kind,
          Element    => Element_Id,
          Act        => Action,
-         Fields     => Fields);
+         Fields     => Fields,
+         Ack_Id     => Null_Unbounded_String,
+         Message_Id => Null_Unbounded_String);
    end Create;
 
    procedure Set_Field
@@ -247,4 +251,46 @@ package body Web.Events is
          Process ("");
       end if;
    end With_Field;
+
+   --  Check whether the event requires acknowledgment.
+   function Has_Ack_Id (Item : Event) return Boolean is
+   begin
+      return Length (Item.Ack_Id) > 0;
+   end Has_Ack_Id;
+
+   --  Return the acknowledgment id.
+   function Get_Ack_Id (Item : Event) return String is
+   begin
+      return To_String (Item.Ack_Id);
+   end Get_Ack_Id;
+
+   --  Return the message id.
+   function Get_Message_Id (Item : Event) return String is
+   begin
+      return To_String (Item.Message_Id);
+   end Get_Message_Id;
+
+   --  Check whether the event has a priority field.
+   function Has_Priority (Item : Event) return Boolean is
+   begin
+      return Has_Field (Item, "priority");
+   end Has_Priority;
+
+   --  Return the message priority.
+   function Get_Priority (Item : Event) return String is
+   begin
+      return Field (Item, "priority");
+   end Get_Priority;
+
+   --  Set the acknowledgment id for an event.
+   procedure Set_Ack_Id (Item : in out Event; Value : String) is
+   begin
+      Item.Ack_Id := To_Unbounded_String (Value);
+   end Set_Ack_Id;
+
+   --  Set the message id for an event.
+   procedure Set_Message_Id (Item : in out Event; Value : String) is
+   begin
+      Item.Message_Id := To_Unbounded_String (Value);
+   end Set_Message_Id;
 end Web.Events;

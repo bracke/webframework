@@ -434,6 +434,8 @@ package body Webframework_Cli is
       Static_Dir : constant String := Project_Tools.Files.Join (Root, "static");
       Canonical_Runtime : constant String :=
         Project_Tools.Files.Join (Project_Tools.Files.Join (Framework_Root, "static"), "webframework.js");
+      Comprehensive_Runtime : constant String :=
+        Project_Tools.Files.Join (Project_Tools.Files.Join (Framework_Root, "static"), "webframework.js");
       Runtime : constant String :=
         "(function () {" & LF
         & "  ""use strict"";" & LF
@@ -532,7 +534,12 @@ package body Webframework_Cli is
         & "  }" & LF
         & "}());" & LF;
    begin
-      if Project_Tools.Files.File_Exists (Canonical_Runtime) then
+      --  Always use the comprehensive runtime that includes connection hardening
+      if Project_Tools.Files.File_Exists (Comprehensive_Runtime) then
+         Write_If_Missing
+           (Project_Tools.Files.Join (Static_Dir, "webframework.js"),
+            Read_File (Comprehensive_Runtime));
+      elsif Project_Tools.Files.File_Exists (Canonical_Runtime) then
          Write_If_Missing
            (Project_Tools.Files.Join (Static_Dir, "webframework.js"),
             Read_File (Canonical_Runtime));
@@ -541,7 +548,67 @@ package body Webframework_Cli is
       end if;
       Write_If_Missing
         (Project_Tools.Files.Join (Static_Dir, "style.css"),
-         "body { font-family: sans-serif; margin: 2rem; }" & LF);
+         "body { font-family: sans-serif; margin: 2rem; }" & LF
+         & "" & LF
+         & "/* Connection status indicator */" & LF
+         & ".wf-connection-status {" & LF
+         & "  position: fixed;" & LF
+         & "  bottom: 1rem;" & LF
+         & "  right: 1rem;" & LF
+         & "  padding: 0.5rem 1rem;" & LF
+         & "  border-radius: 6px;" & LF
+         & "  font-size: 0.875rem;" & LF
+         & "  font-weight: 650;" & LF
+         & "  z-index: 1000;" & LF
+         & "  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);" & LF
+         & "  display: flex;" & LF
+         & "  align-items: center;" & LF
+         & "  gap: 0.75rem;" & LF
+         & "}" & LF
+         & "" & LF
+         & ".wf-connection-connected {" & LF
+         & "  background: #10b981;" & LF
+         & "  color: white;" & LF
+         & "}" & LF
+         & "" & LF
+         & ".wf-connection-connecting {" & LF
+         & "  background: #f59e0b;" & LF
+         & "  color: white;" & LF
+         & "  animation: wf-pulse 2s infinite;" & LF
+         & "}" & LF
+         & "" & LF
+         & ".wf-connection-disconnected {" & LF
+         & "  background: #ef4444;" & LF
+         & "  color: white;" & LF
+         & "  padding: 0.5rem;" & LF
+         & "}" & LF
+         & "" & LF
+         & ".wf-reconnect-btn {" & LF
+         & "  background: white;" & LF
+         & "  color: #ef4444;" & LF
+         & "  border: none;" & LF
+         & "  border-radius: 4px;" & LF
+         & "  padding: 0.25rem 0.75rem;" & LF
+         & "  font-size: 0.875rem;" & LF
+         & "  font-weight: 650;" & LF
+         & "  cursor: pointer;" & LF
+         & "  margin-left: 0.5rem;" & LF
+         & "  transition: all 0.2s ease;" & LF
+         & "}" & LF
+         & "" & LF
+         & ".wf-reconnect-btn:hover {" & LF
+         & "  background: #fef2f2;" & LF
+         & "  transform: translateY(-1px);" & LF
+         & "}" & LF
+         & "" & LF
+         & ".wf-reconnect-btn:active {" & LF
+         & "  transform: translateY(0);" & LF
+         & "}" & LF
+         & "" & LF
+         & "@keyframes wf-pulse {" & LF
+         & "  0%, 100% { opacity: 1; }" & LF
+         & "  50% { opacity: 0.7; }" & LF
+         & "}" & LF);
    end Write_Static_Runtime;
 
    procedure Write_Base_App (Root : String; Name : String) is
@@ -621,8 +688,8 @@ package body Webframework_Cli is
       Pages_Spec : constant String :=
         "with Web.Request;" & LF
         & "with Web.Response;" & LF
-        & LF
-        "--  Page rendering entry points for HTTP routes." & LF
+        & "" & LF
+        & "--  Page rendering entry points for HTTP routes." & LF
         & "package App.Pages is" & LF
         & "   --  Render the home page." & LF
         & "   --  @param Request HTTP request." & LF
@@ -894,8 +961,28 @@ package body Webframework_Cli is
       Write_If_Missing (Source_Path (Root, "app-pages.ads"), Pages_Spec);
       Write_If_Missing (Source_Path (Root, "app-pages.adb"), Pages_Body);
       Write_If_Missing (Source_Path (Root, "main.adb"), Main);
-      Write_If_Missing (Project_Tools.Files.Join (Project_Tools.Files.Join (Root, "templates"), "layout.html"), "");
-      Write_If_Missing (Project_Tools.Files.Join (Project_Tools.Files.Join (Root, "templates"), "home.html"), "");
+      Write_If_Missing (Project_Tools.Files.Join (Project_Tools.Files.Join (Root, "templates"), "layout.html"),
+        "<!doctype html>" & LF
+        & "<html lang=""en"">" & LF
+        & "<head>" & LF
+        & "  <meta charset=""utf-8"">" & LF
+        & "  <meta name=""viewport"" content=""width=device-width, initial-scale=1"">" & LF
+        & "  <title>{{title}}</title>" & LF
+        & "  <link rel=""stylesheet"" href=""/static/style.css"">" & LF
+        & "</head>" & LF
+        & "<body data-wf-ws=""/ws"">" & LF
+        & "  <main>" & LF
+        & "    <!-- wf:body -->" & LF
+        & "  </main>" & LF
+        & "  <!-- Connection status indicator -->" & LF
+        & "  <div id=""wf-connection-status"" " & LF
+        & "class=""wf-connection-status wf-connection-connecting"">connecting</div>" & LF
+        & "  <script src=""/static/webframework.js""></script>" & LF
+        & "</body>" & LF
+        & "</html>");
+      Write_If_Missing (Project_Tools.Files.Join (Project_Tools.Files.Join (Root, "templates"), "home.html"),
+        "<h1>Hello, {{name}}!</h1>" & LF
+        & "<p>Welcome to your webframework application.</p>" & LF);
    end Write_Base_App;
 
    procedure Command_New (Name : String) is
