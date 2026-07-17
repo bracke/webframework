@@ -33,4 +33,11 @@ project Webframework is
       for Default_Switches ("Ada") use
         ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");
    end Compiler;
+
+   --  Web.TLS binds libssl/libcrypto directly; declare the link so every
+   --  executable that links this library (tests, example app, CLI) resolves
+   --  the OpenSSL symbols.
+   package Linker is
+      for Linker_Options use ("-lssl", "-lcrypto");
+   end Linker;
 end Webframework;

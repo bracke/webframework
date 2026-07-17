@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux build and tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out webframework
+        uses: actions/checkout@v4
+        with:
+          path: webframework
+      - name: Check out cryptolib sibling
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/cryptolib
+          path: cryptolib
+      - name: Check out sshlib sibling
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/sshlib
+          path: sshlib
+      - name: Check out zlib sibling
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/zlib
+          path: zlib
+      - name: Check out cryptolib-dependent hostkit sibling
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/hostkit
+          path: hostkit
+      - name: Check out terminal_styles sibling
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/terminal_styles
+          path: terminal_styles
+      - name: Set up Alire
+        uses: alire-project/setup-alire@v5
+        with:
+          toolchain: gnat_native=15.2.1 gprbuild
+      - name: Install OpenSSL headers
+        # Web.TLS binds libssl/libcrypto, so executables that link webframework
+        # (the tests, example app, CLI) need the OpenSSL development libraries.
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+      - name: Build webframework
+        # Generates the gitignored Alire configs for the path-pinned siblings
+        # (cryptolib, sshlib, zlib, terminal_styles, hostkit).
+        working-directory: webframework
+        run: alr --non-interactive build
+      - name: Build and run the AUnit suite
+        working-directory: webframework/tests
+        run: |
+          alr --non-interactive build
+          ./bin/tests
