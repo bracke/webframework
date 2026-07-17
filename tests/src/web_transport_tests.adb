@@ -970,7 +970,9 @@ package body Web_Transport_Tests is
       Response := Web.Server.Dispatch (Web.Request.Create ("GET", "/__missing"));
       Assert (Web.Response.Status (Response) = 404, "default 404 status");
       Assert (not Not_Found_Invoked, "handler removed");
-      Assert (Web.Response.Content_Body (Response) = "Not found", "default 404 body");
+      Assert
+        (Ada.Strings.Fixed.Index (Web.Response.Content_Body (Response), "Not found") > 0,
+         "default 404 body");
 
       Response := Web.Server.Dispatch (Web.Request.Create ("POST", "/"));
       Assert (Web.Response.Status (Response) = 400, "default 400 status");

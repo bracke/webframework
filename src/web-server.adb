@@ -1604,6 +1604,10 @@ package body Web.Server is
          raise Web.Errors.Bad_Request_Error with "missing host header";
       end if;
 
+      if Web.Request.Method (Request) = "POST" and then not Has_Header_Content_Length then
+         raise Web.Errors.Bad_Request_Error with "post requires content-length";
+      end if;
+
       return Request;
    end Parse_Request;
 
@@ -1645,6 +1649,13 @@ package body Web.Server is
             return Web.Static.Serve (To_String (Static_Prefix_Text), To_String (Static_Dir_Text), Path);
          end if;
       end;
+
+      --  A POST that matches no registered route is a bad request: this
+      --  framework is GET/WebSocket-driven, so POST is only valid against an
+      --  explicitly registered route. An unmatched GET is a normal 404.
+      if Method = "POST" then
+         return Build_Error_Response (Request, 400, "");
+      end if;
 
       return Build_Error_Response (Request, 404, "");
    exception

@@ -35,6 +35,7 @@ package body Web_Runtime_Tests is
       Put (File, "  addEventListener(n, cb) { (this.listeners[n] ||= []).push(cb); }");
       Put (File, "  send(m) { sent.push(m); }");
       Put (File, "  emit(n, e) { (this.listeners[n] || []).forEach(cb => cb(e)); }");
+      Put (File, "  close() { this.readyState = 3; }");
       Put (File, "}");
       Put (File, "FakeWebSocket.OPEN = 1;");
       Put (File, "FakeWebSocket.CONNECTING = 0;");
@@ -76,7 +77,8 @@ package body Web_Runtime_Tests is
       Put (File, "document.body.setAttribute('data-wf-ws', '/ws');");
       Put (File, "function add(e) { document.elements[e.id] = e; return e; }");
       Put (File, "global.document = document;");
-      Put (File, "global.window = { location: { protocol: 'http:', host: 'example.test' } };");
+      Put (File, "global.window = { location: { protocol: 'http:', host: 'example.test' },");
+      Put (File, "  addEventListener() {}, removeEventListener() {} };");
       Put (File, "global.WebSocket = FakeWebSocket;");
       Put (File, "global.FormData = function(form) {");
       Put (File, "  this.forEach = cb => Object.keys(form.fields).forEach(k => cb(form.fields[k], k));");
@@ -156,6 +158,9 @@ package body Web_Runtime_Tests is
       Put (File, "assert(todoStatus.textContent === 'Added Ship release', 'example todo status patched');");
       Put (File, "assert(title.value === '', 'example todo input cleared');");
       Put (File, "console.log('PASS runtime behavior');");
+      --  The client starts a heartbeat interval on socket open; exit cleanly once
+      --  every assertion has passed so the pending timers cannot fail the run.
+      Put (File, "process.exit(0);");
       Ada.Text_IO.Close (File);
    exception
       when others =>
