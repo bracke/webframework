@@ -10,7 +10,9 @@ with AUnit.Test_Caller;
 with GNAT.Sockets;
 with Web.Config;
 with Web.Connection;
+with Web.Context;
 with Web.Errors;
+with Web.Guard;
 with Web.Request;
 with Web.Response;
 with Web.Server;
@@ -33,7 +35,8 @@ package body Web_Transport_Tests is
       Status  : Positive;
       Detail  : String) return Web.Response.Response_Type
    is
-      pragma Unreferenced (Request);
+      --  Detail is part of the handler signature these callbacks must match.
+      pragma Unreferenced (Request, Detail);
    begin
       Not_Found_Invoked := True;
       return Web.Response.Create (Status, "<h1>custom 404</h1>", "text/html; charset=utf-8");
@@ -44,7 +47,8 @@ package body Web_Transport_Tests is
       Status  : Positive;
       Detail  : String) return Web.Response.Response_Type
    is
-      pragma Unreferenced (Request);
+      --  Detail is part of the handler signature these callbacks must match.
+      pragma Unreferenced (Request, Detail);
    begin
       Bad_Request_Invoked := True;
       return Web.Response.Create (Status, "<h1>custom 400</h1>", "text/html; charset=utf-8");
@@ -67,6 +71,68 @@ package body Web_Transport_Tests is
    begin
       null;
    end Noop_WebSocket;
+
+   --  Guard helpers for Test_Guarded_Dispatch. Library-level so 'Access works.
+   function Guard_Set_Principal
+     (Request : Web.Request.Request_Type;
+      Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome
+   is
+      pragma Unreferenced (Request);
+   begin
+      Web.Context.Set_Principal (Context, "alice");
+      return Web.Guard.Proceed;
+   end Guard_Set_Principal;
+
+   function Guard_Deny
+     (Request : Web.Request.Request_Type;
+      Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome
+   is
+      pragma Unreferenced (Request, Context);
+   begin
+      return Web.Guard.Halt (Web.Response.Forbidden);
+   end Guard_Deny;
+
+   function Principal_Echo
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Request);
+   begin
+      return Web.Response.Text ("principal=" & Web.Context.Principal (Context));
+   end Principal_Echo;
+
+   procedure Test_Guarded_Dispatch (Item : in out Fixture) is
+      pragma Unreferenced (Item);
+   begin
+      Web.Server.Get
+        ("/wf_guard/open", Principal_Echo'Access, Guard_Set_Principal'Access);
+      Web.Server.Get
+        ("/wf_guard/denied", Principal_Echo'Access, Guard_Deny'Access);
+
+      --  A guard that proceeds enriches the context; the handler reads it.
+      declare
+         Req : constant Web.Request.Request_Type :=
+           Web.Request.Create ("GET", "/wf_guard/open");
+         Res : constant Web.Response.Response_Type := Web.Server.Dispatch (Req);
+      begin
+         Assert (Web.Response.Status (Res) = 200, "guarded route proceeds");
+         Assert
+           (Web.Response.Content_Body (Res) = "principal=alice",
+            "handler receives the guard-populated principal");
+      end;
+
+      --  A guard that halts short-circuits with its own response; the handler
+      --  never runs.
+      declare
+         Req : constant Web.Request.Request_Type :=
+           Web.Request.Create ("GET", "/wf_guard/denied");
+         Res : constant Web.Response.Response_Type := Web.Server.Dispatch (Req);
+      begin
+         Assert
+           (Web.Response.Status (Res) = 403,
+            "guard halts the request with Forbidden");
+      end;
+   end Test_Guarded_Dispatch;
 
    procedure Add_Tests (Suite : AUnit.Test_Suites.Access_Test_Suite) is
    begin
@@ -104,6 +170,8 @@ package body Web_Transport_Tests is
         (Suite, Caller.Create ("tls policy validation", Test_TLS_Policy_Validation'Access));
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("connection validation", Test_Connection_Validation'Access));
+      AUnit.Test_Suites.Add_Test
+        (Suite, Caller.Create ("guarded dispatch", Test_Guarded_Dispatch'Access));
    end Add_Tests;
 
    procedure Test_Static_Content_Types (Item : in out Fixture) is
@@ -122,12 +190,12 @@ package body Web_Transport_Tests is
    procedure Write_Binary_File (Path : String) is
       File   : Ada.Streams.Stream_IO.File_Type;
       Buffer : constant Ada.Streams.Stream_Element_Array :=
-        (1 => 16#00#,
+        [1 => 16#00#,
          2 => 16#50#,
          3 => 16#4E#,
          4 => 16#47#,
          5 => 16#80#,
-         6 => 16#FF#);
+         6 => 16#FF#];
    begin
       Ada.Streams.Stream_IO.Create (File, Ada.Streams.Stream_IO.Out_File, Path);
       Ada.Streams.Stream_IO.Write (File, Buffer);
@@ -136,7 +204,7 @@ package body Web_Transport_Tests is
       when others =>
          if Ada.Streams.Stream_IO.Is_Open (File) then
             Ada.Streams.Stream_IO.Close (File);
-      end if;
+         end if;
       raise;
    end Write_Binary_File;
 
@@ -144,7 +212,7 @@ package body Web_Transport_Tests is
       use type Ada.Streams.Stream_Element_Offset;
 
       File    : Ada.Streams.Stream_IO.File_Type;
-      Chunk   : constant Ada.Streams.Stream_Element_Array (1 .. 4096) := (others => 16#41#);
+      Chunk   : constant Ada.Streams.Stream_Element_Array (1 .. 4096) := [others => 16#41#];
       Written : Natural := 0;
    begin
       Ada.Streams.Stream_IO.Create (File, Ada.Streams.Stream_IO.Out_File, Path);
@@ -165,7 +233,7 @@ package body Web_Transport_Tests is
       use type Ada.Streams.Stream_Element_Offset;
 
       File       : Ada.Streams.Stream_IO.File_Type;
-      Chunk      : constant Ada.Streams.Stream_Element_Array (1 .. 4096) := (others => 16#78#);
+      Chunk      : constant Ada.Streams.Stream_Element_Array (1 .. 4096) := [others => 16#78#];
       Remaining  : Natural := 70_000;
       Write_Size : Natural;
    begin
@@ -681,7 +749,7 @@ package body Web_Transport_Tests is
    begin
       Raised := False;
       begin
-         Web.Server.Get ("relative", null);
+         Web.Server.Get ("relative", Web.Server.Route_Handler'(null));
       exception
          when Web.Errors.Security_Error =>
             Raised := True;
@@ -690,7 +758,7 @@ package body Web_Transport_Tests is
 
       Raised := False;
       begin
-         Web.Server.Get ("/bad/../route", null);
+         Web.Server.Get ("/bad/../route", Web.Server.Route_Handler'(null));
       exception
          when Web.Errors.Security_Error =>
             Raised := True;
@@ -842,7 +910,7 @@ package body Web_Transport_Tests is
 
       Raised := False;
       begin
-         Web.Config.Set_Allowed_Host (Config, (1 .. 300 => 'a'));
+         Web.Config.Set_Allowed_Host (Config, [1 .. 300 => 'a']);
       exception
          when Web.Errors.Security_Error =>
             Raised := True;
@@ -1171,7 +1239,7 @@ package body Web_Transport_Tests is
 
       Raised := False;
       begin
-         Web.WebSocket.Send_Pong (GNAT.Sockets.No_Socket, (1 .. 126 => 'x'));
+         Web.WebSocket.Send_Pong (GNAT.Sockets.No_Socket, [1 .. 126 => 'x']);
       exception
          when Web.Errors.Protocol_Error =>
             Raised := True;
@@ -1393,7 +1461,6 @@ package body Web_Transport_Tests is
       end;
       Assert (Raised, "tls connection no-socket rejected");
 
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket_Pair (Server, Client);
 
       Raised := False;

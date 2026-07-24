@@ -1,0 +1,22 @@
+
+
+   --  Render the projects page
+   function Projects (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+      use Standard.Templates.Values;
+      
+      Context : Value := Object;
+      Page    : Unbounded_String;
+      Projects_Data : App.Projects.Project_Vectors.Vector;
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+   begin
+      --  Check if user is authenticated
+      Is_Authenticated_Result := False;
+      App.Runtime.With_State (Session_Id, Check_Auth_Process'Access);
+
+      if not Is_Authenticated_Result then
+         return Redirect_To_Login (Request, Session_Id);
+      end if;
+
+      Projects_Data := App.Projects.Get_Projects;
+      Set (Context, "title", String_Item ("Projects - Ada Webframework Example"));
+      Page := To_Unbounded_String (App.Templates.Render ("layout.html", Context));

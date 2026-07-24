@@ -481,7 +481,7 @@ package body Web_Protocol_Tests is
 
       Raised := False;
       begin
-         Test_Dispatch.Register ((1 .. Web.Events.Max_Action_Length + 1 => 'a'), Increment'Access);
+         Test_Dispatch.Register ([1 .. Web.Events.Max_Action_Length + 1 => 'a'], Increment'Access);
       exception
          when Web.Errors.Security_Error =>
             Raised := True;

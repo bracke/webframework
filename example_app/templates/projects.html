@@ -1,0 +1,250 @@
+<div class="panel">
+  <h1>Projects</h1>
+  <p>Overview of all projects in the database.</p>
+  
+  <button id="add-project-btn" class="add-btn" onclick="showAddProjectForm()">Add Project</button>
+  
+  <div class="projects-table-container">
+    <table id="projects-table" class="projects-table">
+      <thead>
+        <tr>
+          <th data-sort="name" class="sortable">Name</th>
+          <th data-sort="status" class="sortable">Status</th>
+          <th data-sort="type" class="sortable">Type</th>
+          <th data-sort="functions" class="sortable">Functions</th>
+          <th data-sort="project_tools" class="sortable">Project Tools</th>
+          <th data-sort="gnat" class="sortable">GNAT</th>
+          <th data-sort="github" class="sortable">GitHub</th>
+          <th data-sort="alire" class="sortable">Alire</th>
+          <th class="actions-header">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- PROJECTS_TABLE_ROWS -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add Project Modal Form -->
+  <div id="add-project-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h2>Add New Project</h2>
+      <form id="add-project-form" onsubmit="addProject(event)">
+        <div class="form-group">
+          <label for="project-name">Name *:</label>
+          <input type="text" id="project-name" name="name" required>
+        </div>
+        <div class="form-group">
+          <label for="project-status">Status:</label>
+          <input type="text" id="project-status" name="status" value="Active">
+        </div>
+        <div class="form-group">
+          <label for="project-type">Type:</label>
+          <input type="text" id="project-type" name="project_type" value="Application">
+        </div>
+        <div class="form-group">
+          <label for="project-functions">Functions:</label>
+          <input type="text" id="project-functions" name="functions">
+        </div>
+        <div class="form-group checkbox-group">
+          <label><input type="checkbox" id="project-has_tools" name="has_project_tools" value="true" checked> Project Tools</label>
+          <label><input type="checkbox" id="project-has_gnat" name="has_gnat" value="true" checked> GNAT</label>
+          <label><input type="checkbox" id="project-has_github" name="has_github" value="true" checked> GitHub</label>
+          <label><input type="checkbox" id="project-has_alire" name="has_alire" value="true" checked> Alire</label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="submit-btn">Add Project</button>
+          <button type="button" class="cancel-btn" onclick="hideAddProjectForm()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// Projects page sorting functionality
+(function() {
+  const table = document.getElementById('projects-table');
+  const headers = table.querySelectorAll('th[data-sort]');
+  const tbody = table.querySelector('tbody');
+  
+  // Current sort state - initialize with first sortable column
+  let currentSort = { column: 'name', direction: 'desc' };
+  
+  // Initialize: add arrow to the initially sorted column
+  function updateSortIndicators() {
+    headers.forEach(h => {
+      h.textContent = h.textContent.replace(/[▲▼]/g, '').trim();
+    });
+    const initialHeader = table.querySelector('th[data-sort="' + currentSort.column + '"]');
+    if (initialHeader) {
+      initialHeader.textContent = initialHeader.textContent + (currentSort.direction === 'desc' ? ' ▼' : ' ▲');
+    }
+  }
+  
+  // Initial sort
+  sortTable(currentSort.column, currentSort.direction);
+  updateSortIndicators();
+  
+  // Add click handlers to sortable headers
+  headers.forEach(header => {
+    header.addEventListener('click', () => {
+      const column = header.getAttribute('data-sort');
+      
+      // If clicking the same column, reverse direction
+      if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        // New column, default to descending
+        currentSort = { column: column, direction: 'desc' };
+      }
+      
+      // Update header indicators and sort
+      updateSortIndicators();
+      header.textContent = header.textContent + (currentSort.direction === 'desc' ? ' ▼' : ' ▲');
+      
+      // Sort the table
+      sortTable(column, currentSort.direction);
+    });
+  });
+  
+  function sortTable(column, direction) {
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    const sortMultiplier = direction === 'asc' ? 1 : -1;
+    
+    rows.sort((a, b) => {
+      const aCell = a.querySelector(`td:nth-child(${getColumnIndex(column)})`);
+      const bCell = b.querySelector(`td:nth-child(${getColumnIndex(column)})`);
+      
+      const aValue = getSortableValue(aCell);
+      const bValue = getSortableValue(bCell);
+      
+      // Handle boolean columns differently
+      if (['project_tools', 'gnat', 'github', 'alire'].includes(column)) {
+        const aBool = aValue === 'Yes';
+        const bBool = bValue === 'Yes';
+        return (aBool === bBool) ? 0 : (aBool ? 1 : -1) * sortMultiplier;
+      }
+      
+      // String comparison for other columns
+      return aValue.localeCompare(bValue) * sortMultiplier;
+    });
+    
+    // Clear and re-append sorted rows
+    while (tbody.firstChild) {
+      tbody.removeChild(tbody.firstChild);
+    }
+    
+    rows.forEach(row => tbody.appendChild(row));
+  }
+  
+  function getColumnIndex(column) {
+    const columns = ['name', 'status', 'type', 'functions', 'project_tools', 'gnat', 'github', 'alire', 'actions'];
+    return columns.indexOf(column) + 1; // +1 because th is 1-based
+  }
+  
+  function getSortableValue(cell) {
+    if (!cell) return '';
+    const text = cell.textContent.trim();
+    
+    // Handle boolean cells
+    if (cell.classList.contains('bool-cell')) {
+      return text === '✓' ? 'Yes' : 'No';
+    }
+    
+    return text;
+  }
+})();
+
+// CRUD functions - defined globally so they can be called from HTML onclick handlers
+function showAddProjectForm() {
+  document.getElementById('add-project-modal').style.display = 'block';
+}
+
+function hideAddProjectForm() {
+  document.getElementById('add-project-modal').style.display = 'none';
+}
+
+function addProject(event) {
+  event.preventDefault();
+  
+  const form = document.getElementById('add-project-form');
+  const formData = new FormData(form);
+  
+  // Build URL-encoded data string
+  const params = new URLSearchParams();
+  params.append('name', formData.get('name') || '');
+  params.append('status', formData.get('status') || '');
+  params.append('project_type', formData.get('project_type') || '');
+  params.append('functions', formData.get('functions') || '');
+  // For checkboxes, if not present in formData, they are unchecked
+  params.append('has_project_tools', formData.has('has_project_tools') ? 'true' : 'false');
+  params.append('has_gnat', formData.has('has_gnat') ? 'true' : 'false');
+  params.append('has_github', formData.has('has_github') ? 'true' : 'false');
+  params.append('has_alire', formData.has('has_alire') ? 'true' : 'false');
+  
+  fetch('/api/projects/add', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+    credentials: 'include'
+  })
+  .then(response => {
+    if (response.ok) {
+      hideAddProjectForm();
+      form.reset();
+      window.location.reload();
+    } else {
+      return response.text().then(text => {
+        throw new Error(text || 'Failed to add project');
+      });
+    }
+  })
+  .catch(error => {
+    console.error('Error adding project:', error);
+    alert('Error adding project: ' + error.message);
+  });
+}
+
+function deleteProject(projectId) {
+  if (!confirm('Are you sure you want to delete this project?')) {
+    return;
+  }
+  
+  const params = new URLSearchParams();
+  params.append('id', projectId);
+  
+  fetch('/api/projects/delete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+    credentials: 'include'
+  })
+  .then(response => {
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      return response.text().then(text => {
+        throw new Error(text || 'Failed to delete project');
+      });
+    }
+  })
+  .catch(error => {
+    console.error('Error deleting project:', error);
+    alert('Error deleting project: ' + error.message);
+  });
+}
+
+// Close modal when clicking outside
+window.addEventListener('click', function(event) {
+  const modal = document.getElementById('add-project-modal');
+  if (event.target === modal) {
+    hideAddProjectForm();
+  }
+});
+</script>

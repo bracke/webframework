@@ -15,11 +15,11 @@ package Web.TLS is
       Verify_Required);
 
    type Server_Config is record
-      Certificate_File : String (1 .. 256) := (others => ' ');
-      Private_Key_File : String (1 .. 256) := (others => ' ');
-      CA_File          : String (1 .. 256) := (others => ' ');
-      Cipher_List      : String (1 .. 256) := (others => ' ');
-      Cipher_Suites    : String (1 .. 256) := (others => ' ');
+      Certificate_File : String (1 .. 256) := [others => ' '];
+      Private_Key_File : String (1 .. 256) := [others => ' '];
+      CA_File          : String (1 .. 256) := [others => ' '];
+      Cipher_List      : String (1 .. 256) := [others => ' '];
+      Cipher_Suites    : String (1 .. 256) := [others => ' '];
       Minimum_Version  : TLS_Version := TLS_1_2;
       Maximum_Version  : TLS_Version := TLS_Default;
       Verify_Client    : Client_Verification_Mode := Verify_None;

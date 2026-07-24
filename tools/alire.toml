@@ -1,22 +1,49 @@
 name = "webframework_tools"
-description = "Release and stress tools for webframework"
+description = "Release, stress, fuzz, soak and benchmark harnesses for webframework"
 version = "0.1.0-dev"
-licenses = "MIT"
 
-executables = ["release_smoke", "stress_harness", "fuzz_corpus", "soak_harness", "benchmark", "release_check"]
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT"
+website = "https://github.com/bracke/webframework"
+tags = ["webframework", "tools", "checks"]
 project-files = ["tools.gpr"]
+
+executables = [
+   "release_smoke",
+   "stress_harness",
+   "fuzz_corpus",
+   "soak_harness",
+   "benchmark",
+   "release_check",
+]
 
 [[depends-on]]
 gnat_native = "=15.2.1"
 
 [[depends-on]]
-project_tools = "*"
+webframework = "*"
+
+[[pins]]
+webframework = { path = ".." }
 
 [[depends-on]]
-webframework = "*"
+project_tools = "*"
 
 [[pins]]
 project_tools = { path = "../../project_tools" }
 
+# Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib,
+# zlib and hostkit through webframework, so it must pin them itself.
 [[pins]]
-webframework = { path = ".." }
+cryptolib = { path = "../../cryptolib" }
+ssh_lib = { path = "../../sshlib" }
+zlib = { path = "../../zlib" }
+hostkit = { path = "../../hostkit" }
+
+# Build dependencies in the development profile (-Og) too, not the default
+# release (-O3), so this root and the parent share object files rather than
+# forcing each other into full rebuilds.
+[build-profiles]
+"*" = "development"

@@ -1,6 +1,5 @@
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Exceptions;
-with Ada.Strings.Hash;
 with Web.Errors;
 with Web.Logging;
 with Web.Html;

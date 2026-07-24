@@ -28,7 +28,7 @@ package body Web_E2E_Tests is
    use type Zlib.Status_Code;
 
    CRLF : constant String := Character'Val (13) & Character'Val (10);
-   LF : constant String := (1 => Character'Val (10));
+   LF : constant String := [1 => Character'Val (10)];
    Test_Cert_Path : constant String := "/tmp/webframework-test-cert.pem";
    Test_Key_Path : constant String := "/tmp/webframework-test-key.pem";
    Static_Directory : constant String := "/tmp/webframework-e2e-static";
@@ -210,12 +210,12 @@ package body Web_E2E_Tests is
    procedure Write_Binary_File (Path : String) is
       File   : Ada.Streams.Stream_IO.File_Type;
       Buffer : constant Ada.Streams.Stream_Element_Array :=
-        (1 => 16#89#,
+        [1 => 16#89#,
          2 => 16#50#,
          3 => 16#4E#,
          4 => 16#47#,
          5 => 16#0D#,
-         6 => 16#0A#);
+         6 => 16#0A#];
    begin
       Ada.Streams.Stream_IO.Create (File, Ada.Streams.Stream_IO.Out_File, Path);
       Ada.Streams.Stream_IO.Write (File, Buffer);
@@ -232,7 +232,6 @@ package body Web_E2E_Tests is
       Socket  : GNAT.Sockets.Socket_Type;
       Address : GNAT.Sockets.Sock_Addr_Type;
    begin
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket (Socket);
       Address.Addr := GNAT.Sockets.Inet_Addr ("127.0.0.1");
       Address.Port := 0;
@@ -344,7 +343,7 @@ package body Web_E2E_Tests is
       Encoding : String := "";
       Path     : String := "/e2e") return String
    is
-      Socket : GNAT.Sockets.Socket_Type := Connect (Port);
+      Socket : constant GNAT.Sockets.Socket_Type := Connect (Port);
       Header : Unbounded_String :=
         To_Unbounded_String
           ("GET " & Path & " HTTP/1.1" & CRLF

@@ -7,7 +7,8 @@ body {
 
 main {
   margin: 0 auto;
-  max-width: 46rem;
+  width: 90vw;
+  max-width: 90vw;
   padding: 2rem 1rem 3rem;
 }
 
@@ -92,35 +93,48 @@ header {
 
 header nav {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  max-width: 46rem;
+  width: 90vw;
+  max-width: 90vw;
   margin: 0 auto;
 }
 
-.nav-home {
+header nav > a:not(:last-child),
+header nav > span:not(:last-child) {
+  margin-right: 1rem;
+}
+
+.nav-logout {
+  margin-left: auto;
+}
+
+.nav-home,
+.nav-projects,
+.nav-todo,
+.nav-logout {
   color: #155eef;
   text-decoration: none;
   font-weight: 650;
   font-size: 1.1rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
-.nav-home:hover {
+.nav-home:hover,
+.nav-projects:hover,
+.nav-todo:hover,
+.nav-logout:hover {
   text-decoration: underline;
 }
 
-.nav-logout {
-  background: #ef4444;
-  border: none;
-  border-radius: 6px;
-  color: white;
-  cursor: pointer;
-  font-weight: 650;
-  padding: 0.5rem 1rem;
-}
-
-.nav-logout:hover {
-  background: #dc2626;
+.nav-home.active,
+.nav-projects.active,
+.nav-todo.active {
+  font-weight: 700;
+  cursor: default;
 }
 
 .status {
@@ -155,22 +169,21 @@ header nav {
   }
 }
 
-/* Connection status indicator - button-sized, bottom-right */
+/* Connection status indicator - short, bottom-right */
 .wf-connection-status {
   position: fixed;
   bottom: 1rem;
   right: 1rem;
-  padding: 0.35rem 0.6rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
   z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  min-width: 5rem;
-  text-align: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  display: inline-block;
+  width: auto;
+  max-width: none;
+  white-space: nowrap;
 }
 
 .wf-connection-connected {
@@ -193,25 +206,223 @@ header nav {
   background: white;
   color: #ef4444;
   border: none;
-  border-radius: 4px;
-  padding: 0.15rem 0.4rem;
-  font-size: 0.7rem;
-  font-weight: 600;
+  border-radius: 3px;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.6rem;
+  font-weight: 500;
   cursor: pointer;
-  margin-left: 0.3rem;
+  margin-left: 0.2rem;
   transition: all 0.2s ease;
 }
 
 .wf-reconnect-btn:hover {
   background: #fef2f2;
-  transform: translateY(-1px);
 }
 
 .wf-reconnect-btn:active {
-  transform: translateY(0);
+  transform: none;
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
+}
+
+/* Projects table styles */
+.projects-table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.projects-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.projects-table th,
+.projects-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #d7dce2;
+}
+
+.projects-table th {
+  background: #f6f7f9;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.projects-table th:hover {
+  background: #e9eaed;
+}
+
+.projects-table td {
+  font-size: 0.875rem;
+}
+
+.projects-table tr:last-child td {
+  border-bottom: none;
+}
+
+.projects-table tr:hover {
+  background: #f6f7f9;
+}
+
+.bool-cell {
+  text-align: center;
+  font-weight: 500;
+}
+
+.bool-cell:empty::before {
+  content: "✗";
+  color: #667085;
+}
+
+.sortable {
+  cursor: pointer;
+}
+
+/* Modal styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h2 {
+  margin: 0 0 1.5rem;
+  font-size: 1.25rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 650;
+  margin-bottom: 0.4rem;
+}
+
+.form-group input[type="text"] {
+  width: 100%;
+  border: 1px solid #aeb6c2;
+  border-radius: 6px;
+  box-sizing: border-box;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+}
+
+.checkbox-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.checkbox-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: auto;
+  border: none;
+  cursor: pointer;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+.submit-btn {
+  background: #10b981;
+  border: 1px solid #10b981;
+}
+
+.submit-btn:hover {
+  background: #059669;
+}
+
+.cancel-btn {
+  background: #667085;
+  border: 1px solid #667085;
+}
+
+.cancel-btn:hover {
+  background: #475467;
+}
+
+/* Add Project button */
+.add-btn {
+  background: #155eef;
+  border: 1px solid #155eef;
+  color: white;
+  cursor: pointer;
+  font-weight: 650;
+  padding: 0.55rem 0.8rem;
+  margin-bottom: 1rem;
+  border-radius: 6px;
+}
+
+.add-btn:hover {
+  background: #0f49c8;
+}
+
+/* Delete button */
+.delete-btn {
+  background: #ef4444;
+  border: 1px solid #ef4444;
+  color: white;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 650;
+}
+
+.delete-btn:hover {
+  background: #dc2626;
+}
+
+/* Actions column */
+.actions-cell {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.actions-header {
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }

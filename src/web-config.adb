@@ -10,7 +10,7 @@ package body Web.Config is
          raise Web.Errors.Security_Error with "configuration value is too long";
       end if;
 
-      Target := (others => ' ');
+      Target := [others => ' '];
       if Value'Length > 0 then
          Target (Target'First .. Target'First + Value'Length - 1) := Value;
       end if;

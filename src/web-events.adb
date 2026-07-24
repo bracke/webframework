@@ -2,7 +2,6 @@ with Ada.Containers;
 with Ada.Characters.Handling;
 with Ada.Strings.Fixed;
 with Ada.Strings;
-with Ada.Strings.Unbounded;
 with Web.Errors;
 with Web.Html;
 

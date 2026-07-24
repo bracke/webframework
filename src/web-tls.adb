@@ -147,7 +147,7 @@ package body Web.TLS is
          raise Web.Errors.Security_Error with "TLS configuration value is too long";
       end if;
 
-      Target := (others => ' ');
+      Target := [others => ' '];
       if Value'Length > 0 then
          Target (Target'First .. Target'First + Value'Length - 1) := Value;
       end if;
@@ -373,8 +373,10 @@ package body Web.TLS is
    begin
       Initialize_Server (Replacement, Config);
       Finalize (Item);
+      --  Ownership of the handle moves to Item. Context is a plain limited
+      --  record, not Controlled, so Replacement is never finalized on the way
+      --  out and clearing its handle here would be dead: nothing reads it again.
       Item.Handle := Replacement.Handle;
-      Replacement.Handle := System.Null_Address;
    end Reload_Server;
 
    procedure Initialize_Client_No_Verify (Item : in out Context) is

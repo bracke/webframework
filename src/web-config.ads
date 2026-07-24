@@ -5,12 +5,12 @@ package Web.Config is
 
    type Config_Type is record
       Mode                  : Mode_Type := Development;
-      Host                  : String (1 .. 256) := "127.0.0.1" & (10 .. 256 => ' ');
+      Host                  : String (1 .. 256) := "127.0.0.1" & [10 .. 256 => ' '];
       Port                  : Natural := 8080;
-      WebSocket_Path        : String (1 .. 128) := "/ws" & (4 .. 128 => ' ');
-      Static_Url_Prefix     : String (1 .. 128) := "/static" & (8 .. 128 => ' ');
-      Static_Directory      : String (1 .. 256) := "static" & (7 .. 256 => ' ');
-      Allowed_Host          : String (1 .. 256) := "127.0.0.1" & (10 .. 256 => ' ');
+      WebSocket_Path        : String (1 .. 128) := "/ws" & [4 .. 128 => ' '];
+      Static_Url_Prefix     : String (1 .. 128) := "/static" & [8 .. 128 => ' '];
+      Static_Directory      : String (1 .. 256) := "static" & [7 .. 256 => ' '];
+      Allowed_Host          : String (1 .. 256) := "127.0.0.1" & [10 .. 256 => ' '];
       Use_X_Forwarded_For   : Boolean := False;
       Max_Request_Size      : Natural := 1_048_576;
       Max_WebSocket_Message : Natural := 65_536;
@@ -21,11 +21,11 @@ package Web.Config is
       Static_File_Buffer_Size : Natural := 65_536;
       Secure_Cookies        : Boolean := False;
       Session_Timeout       : Natural := 3_600;
-      TLS_Certificate_File  : String (1 .. 256) := (others => ' ');
-      TLS_Private_Key_File  : String (1 .. 256) := (others => ' ');
-      TLS_CA_File           : String (1 .. 256) := (others => ' ');
-      TLS_Cipher_List       : String (1 .. 256) := (others => ' ');
-      TLS_Cipher_Suites     : String (1 .. 256) := (others => ' ');
+      TLS_Certificate_File  : String (1 .. 256) := [others => ' '];
+      TLS_Private_Key_File  : String (1 .. 256) := [others => ' '];
+      TLS_CA_File           : String (1 .. 256) := [others => ' '];
+      TLS_Cipher_List       : String (1 .. 256) := [others => ' '];
+      TLS_Cipher_Suites     : String (1 .. 256) := [others => ' '];
       TLS_Minimum_Version   : Web.TLS.TLS_Version := Web.TLS.TLS_1_2;
       TLS_Maximum_Version   : Web.TLS.TLS_Version := Web.TLS.TLS_Default;
       TLS_Verify_Client     : Web.TLS.Client_Verification_Mode := Web.TLS.Verify_None;

@@ -258,7 +258,6 @@ procedure Benchmark is
       Socket  : GNAT.Sockets.Socket_Type;
       Address : GNAT.Sockets.Sock_Addr_Type;
    begin
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket (Socket);
       Address.Addr := GNAT.Sockets.Inet_Addr ("127.0.0.1");
       Address.Port := 0;
@@ -377,7 +376,7 @@ procedure Benchmark is
 
    procedure Bench_Compression_Cache is
       Response : Web.Response.Response_Type :=
-        Web.Response.Html ((1 .. 512 => 'x'));
+        Web.Response.Html ([1 .. 512 => 'x']);
    begin
       Web.Response.Set_Cache_Key (Response, "benchmark:html:512");
       Response := Web.Response.Compressed (Response, Web.Response.GZip);
@@ -388,7 +387,7 @@ procedure Benchmark is
 
    procedure Bench_Compression_Cache_Miss is
       Response : Web.Response.Response_Type :=
-        Web.Response.Html ((1 .. 512 => 'y'));
+        Web.Response.Html ([1 .. 512 => 'y']);
    begin
       Compression_Miss_Index := Compression_Miss_Index + 1;
       Web.Response.Set_Cache_Key
@@ -440,7 +439,7 @@ procedure Benchmark is
         Web.Server.Dispatch (Web.Request.Create ("GET", "/bench"));
       Serialized : constant String := Web.Response.Serialize (Dispatched);
       Compress_Source : Web.Response.Response_Type :=
-        Web.Response.Html ((1 .. 512 => 'x'));
+        Web.Response.Html ([1 .. 512 => 'x']);
       Compressed : Web.Response.Response_Type;
    begin
       Web.Response.Set_Cache_Key (Compress_Source, "benchmark:audit:compression");

@@ -142,7 +142,7 @@
           buttonHtml = '<button class="wf-reconnect-btn">Reconnect (' + queuedCount + ' queued)</button>';
         }
         indicator.innerHTML = 'disconnected ' + buttonHtml;
-        indicator.className = "wf-connection-" + connectionState;
+        indicator.className = "wf-connection-status wf-connection-" + connectionState;
         
         // Set up reconnect button click handler
         var btn = indicator.querySelector('.wf-reconnect-btn');
@@ -157,7 +157,7 @@
         }
       } else {
         indicator.textContent = connectionState;
-        indicator.className = "wf-connection-" + connectionState;
+        indicator.className = "wf-connection-status wf-connection-" + connectionState;
       }
     }
 
@@ -420,7 +420,7 @@
         lastPongTime = Date.now();
         
         try {
-          socket.send(JSON.stringify({ type: "ping", version: 1, timestamp: Date.now() }));
+          socket.send(JSON.stringify({ type: "ping", version: 1 }));
         } catch (error) {
           logConnectionEvent('ping-failed', { error: error.message });
           return;
@@ -467,9 +467,6 @@
     // Add priority
     var priority = options.priority || 'normal';
     message.priority = priority;
-    
-    // Add timestamp for debugging
-    message.timestamp = Date.now();
 
     // Rate limiting
     var now = Date.now();

@@ -102,28 +102,28 @@ package body Web.Static is
          Response     : out Web.Response.Response_Type)
       is
          Cursor : Cache_Maps.Cursor := Entries.Find (Path);
-   begin
-      Found := False;
-      if Cache_Maps.Has_Element (Cursor) then
-         declare
-            Item : Cache_Entry := Cache_Maps.Element (Cursor);
-         begin
-            if Item.Size = Size and then Item.Modified = Modified then
-               Touch_Next;
-               Item.Last_Used := Clock;
-               Item.Checked_At := Ada.Calendar.Clock;
-               Entries.Replace_Element (Cursor, Item);
-               Found := True;
-               Response := Item.Response;
-               return;
-            end if;
+      begin
+         Found := False;
+         if Cache_Maps.Has_Element (Cursor) then
+            declare
+               Item : Cache_Entry := Cache_Maps.Element (Cursor);
+            begin
+               if Item.Size = Size and then Item.Modified = Modified then
+                  Touch_Next;
+                  Item.Last_Used := Clock;
+                  Item.Checked_At := Ada.Calendar.Clock;
+                  Entries.Replace_Element (Cursor, Item);
+                  Found := True;
+                  Response := Item.Response;
+                  return;
+               end if;
 
-            Entries.Delete (Cursor);
-         end;
-      end if;
+               Entries.Delete (Cursor);
+            end;
+         end if;
 
          Response := Web.Response.Internal_Server_Error;
-   end Lookup;
+      end Lookup;
 
       procedure Lookup_Fresh
         (Path         : String;
@@ -131,7 +131,7 @@ package body Web.Static is
          Found        : out Boolean;
          Response     : out Web.Response.Response_Type)
       is
-         Cursor : Cache_Maps.Cursor := Entries.Find (Path);
+         Cursor : constant Cache_Maps.Cursor := Entries.Find (Path);
       begin
          Found := False;
          if Cache_Maps.Has_Element (Cursor) then
@@ -346,7 +346,7 @@ package body Web.Static is
          if Relative'Length = 0
             or else not Web.Security.Is_Safe_Path (Relative)
             or else not Web.Security.Is_Safe_Decoded_Path (Relative)
-          then
+         then
             return Web.Response.Bad_Request;
          end if;
 
@@ -406,7 +406,7 @@ package body Web.Static is
                   Web.Response.Set_Cache_Key
                     (Response,
                      Static_Cache_Key (File_Path, Natural (Raw_Size), Modified));
-                Web.Response.Freeze_Serialized (Response);
+                  Web.Response.Freeze_Serialized (Response);
                   return Response;
                end;
             end if;

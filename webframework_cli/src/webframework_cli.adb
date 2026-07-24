@@ -1039,8 +1039,8 @@ package body Webframework_Cli is
         & "           (""Page is temporarily unavailable."");" & LF
         & "   end " & Function_Name & ";" & LF
         & "end " & Package_Name & ";" & LF;
-      begin
-         Write_If_Missing (Spec_Path, Spec);
+   begin
+      Write_If_Missing (Spec_Path, Spec);
       Write_If_Missing (Body_Path, Unit_Body);
       Write_If_Missing
         (Project_Tools.Files.Join (Project_Tools.Files.Join (Root, "templates"), To_File_Stem (Page_Name) & ".html"),
@@ -1098,7 +1098,7 @@ package body Webframework_Cli is
         & "           (Web.Patch.Set_Text (""status"", ""Unable to process this action.""));" & LF
         & "   end " & Function_Name & ";" & LF
         & "end " & Package_Name & ";" & LF;
-      begin
+   begin
       Write_If_Missing (Spec_Path, Spec);
       Write_If_Missing (Body_Path, Unit_Body);
       Register_With (Root, "with " & Package_Name & ";");

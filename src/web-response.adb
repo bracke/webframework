@@ -1,11 +1,7 @@
 with Ada.Calendar;
 with Ada.Characters.Handling;
 with Ada.Containers;
-with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Strings.Fixed;
-with Ada.Strings.Hash;
-with Ada.Strings.Unbounded;
-with Ada.Text_IO;
 with Interfaces;
 with Web.Errors;
 with Zlib;
@@ -46,9 +42,6 @@ package body Web.Response is
          Value : out Unbounded_String);
       procedure Store
         (Key   : String;
-         Value : String);
-      procedure Store
-        (Key   : String;
          Value : Unbounded_String);
    private
       Entries : Compression_Cache_Maps.Map;
@@ -79,7 +72,7 @@ package body Web.Response is
          Found : out Boolean;
          Value : out Unbounded_String)
       is
-         Cursor : Compression_Cache_Maps.Cursor := Entries.Find (Key);
+         Cursor : constant Compression_Cache_Maps.Cursor := Entries.Find (Key);
       begin
          Found := Compression_Cache_Maps.Has_Element (Cursor);
          if Found then
@@ -113,13 +106,6 @@ package body Web.Response is
             (Value => Value));
       end Store;
 
-      procedure Store
-        (Key   : String;
-         Value : String)
-      is
-      begin
-         Store (Key, To_Unbounded_String (Value));
-      end Store;
    end Compression_Cache_Shard;
 
    type Compression_Cache_Shard_Array is
@@ -729,29 +715,6 @@ package body Web.Response is
       return Cached_Header (Response, Key);
    end Header_Value;
 
-   function Starts_With (Value : String; Prefix : String) return Boolean is
-   begin
-      return Value'Length >= Prefix'Length
-        and then Value (Value'First .. Value'First + Prefix'Length - 1) = Prefix;
-   end Starts_With;
-
-   function Starts_With_Case_Insensitive (Value : String; Prefix : String) return Boolean is
-   begin
-      if Value'Length < Prefix'Length then
-         return False;
-      end if;
-
-      for Offset in 0 .. Prefix'Length - 1 loop
-         if Ada.Characters.Handling.To_Lower (Value (Value'First + Offset))
-           /= Ada.Characters.Handling.To_Lower (Prefix (Prefix'First + Offset))
-         then
-            return False;
-         end if;
-      end loop;
-
-      return True;
-   end Starts_With_Case_Insensitive;
-
    function Starts_With_Case_Insensitive
      (Value  : Unbounded_String;
       Prefix : String) return Boolean
@@ -864,36 +827,36 @@ package body Web.Response is
    end Text;
 
    --  Error template HTML with placeholders for CODE, MESSAGE, and TIMESTAMP.
-   Error_Template_Content : constant String := 
-     "<!DOCTYPE html>" & 
-     "<html lang=""en"">" & 
-     "<head>" & 
-     "<meta charset=""UTF-8"">" & 
-     "<meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">" & 
-     "<title>Error {{CODE}} - {{MESSAGE}}</title>" & 
-     "<style>" & 
+   Error_Template_Content : constant String :=
+     "<!DOCTYPE html>" &
+     "<html lang=""en"">" &
+     "<head>" &
+     "<meta charset=""UTF-8"">" &
+     "<meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">" &
+     "<title>Error {{CODE}} - {{MESSAGE}}</title>" &
+     "<style>" &
      "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; " &
      "background-color: #f8f9fa; margin: 0; padding: 2rem; " &
-     "display: flex; justify-content: center; align-items: center; min-height: 100vh; }" & 
+     "display: flex; justify-content: center; align-items: center; min-height: 100vh; }" &
      ".error-container { background: white; border-radius: 8px; " &
-     "box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 2rem; max-width: 600px; width: 100%; }" & 
-     ".error-code { color: #dc3545; font-size: 4rem; font-weight: 700; line-height: 1; margin-bottom: 0.5rem; }" & 
-     ".error-title { color: #495057; font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }" & 
-     ".error-details { color: #6c757d; margin-bottom: 1.5rem; }" & 
-     ".error-time { color: #868e96; font-size: 0.875rem; }" & 
+     "box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 2rem; max-width: 600px; width: 100%; }" &
+     ".error-code { color: #dc3545; font-size: 4rem; font-weight: 700; line-height: 1; margin-bottom: 0.5rem; }" &
+     ".error-title { color: #495057; font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }" &
+     ".error-details { color: #6c757d; margin-bottom: 1.5rem; }" &
+     ".error-time { color: #868e96; font-size: 0.875rem; }" &
      ".error-border { height: 4px; background: linear-gradient(90deg, #dc3545, #fd7e14); " &
-     "border-radius: 2px; margin-bottom: 1rem; }" & 
-     "</style>" & 
-     "</head>" & 
-     "<body>" & 
-     "<div class=""error-container"">" & 
-     "<div class=""error-code"">{{CODE}}</div>" & 
-     "<div class=""error-border""></div>" & 
-     "<div class=""error-title"">{{MESSAGE}}</div>" & 
-     "<div class=""error-details"">An error occurred while processing your request.</div>" & 
-     "<div class=""error-time"">{{TIMESTAMP}}</div>" & 
-     "</div>" & 
-     "</body>" & 
+     "border-radius: 2px; margin-bottom: 1rem; }" &
+     "</style>" &
+     "</head>" &
+     "<body>" &
+     "<div class=""error-container"">" &
+     "<div class=""error-code"">{{CODE}}</div>" &
+     "<div class=""error-border""></div>" &
+     "<div class=""error-title"">{{MESSAGE}}</div>" &
+     "<div class=""error-details"">An error occurred while processing your request.</div>" &
+     "<div class=""error-time"">{{TIMESTAMP}}</div>" &
+     "</div>" &
+     "</body>" &
      "</html>";
 
    --  Format a natural number as two-digit text (e.g., 5 -> "05").
@@ -925,7 +888,7 @@ package body Web.Response is
       Hour_Value := Total_Seconds / 3_600;
       Minute_Value := (Total_Seconds mod 3_600) / 60;
       Second_Value := Total_Seconds mod 60;
-      
+
       return Trim (Integer'Image (Integer (Year)), Ada.Strings.Both)
         & "-"
         & Two_Digit_Text (Natural (Month))
@@ -945,7 +908,7 @@ package body Web.Response is
    --  @param Target Target substring to replace.
    --  @param Replacement Replacement string.
    --  @return String with all occurrences replaced.
-   function Replace_All_Internal 
+   function Replace_All_Internal
      (Source     : Unbounded_String;
       Target     : String;
       Replacement : String) return Unbounded_String is
@@ -956,14 +919,14 @@ package body Web.Response is
       if Target'Length = 0 then
          return Result;
       end if;
-      
+
       loop
          Pos := Index (Result, Target, Start);
          exit when Pos = 0;
          Replace_Slice (Result, Pos, Pos + Target'Length - 1, Replacement);
          Start := Pos + Replacement'Length;
       end loop;
-      
+
       return Result;
    end Replace_All_Internal;
 
@@ -971,7 +934,7 @@ package body Web.Response is
    --  @param Code HTTP status code.
    --  @param Message Error message.
    --  @return Rendered HTML error page.
-   function Generate_Error_Page 
+   function Generate_Error_Page
      (Code    : Positive;
       Message : String) return String is
       Timestamp : constant String := Format_Timestamp;
@@ -1009,6 +972,16 @@ package body Web.Response is
    begin
       return Create (401, Generate_Error_Page (401, Message), "text/html; charset=utf-8");
    end Unauthorized;
+
+   function Forbidden return Response_Type is
+   begin
+      return Create (403, Generate_Error_Page (403, "Forbidden"), "text/html; charset=utf-8");
+   end Forbidden;
+
+   function Forbidden (Message : String) return Response_Type is
+   begin
+      return Create (403, Generate_Error_Page (403, Message), "text/html; charset=utf-8");
+   end Forbidden;
 
    function Not_Acceptable return Response_Type is
    begin
@@ -1241,7 +1214,7 @@ package body Web.Response is
          return Response.File_Size_Value;
       end if;
 
-      return Natural (Length (Response.Body_Value));
+      return Length (Response.Body_Value);
    end Body_Length;
 
    function Is_File_Body (Response : Response_Type) return Boolean is

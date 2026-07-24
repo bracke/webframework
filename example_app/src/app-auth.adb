@@ -26,7 +26,7 @@ package body App.Auth is
    end Initialize;
 
    --  Authenticate a user by username and password.
-   procedure Authenticate 
+   procedure Authenticate
      (Username : String;
       Password : String;
       User_Id  : out Natural;
@@ -34,15 +34,15 @@ package body App.Auth is
    begin
       User_Id := 0;
       Result := User_Not_Found;
-      
+
       --  For now, use a simple in-memory check
       --  In a real implementation, this would query the database
-      if Username = "admin" and Password = "admin123" then
+      if Username = "admin" and then Password = "admin123" then
          User_Id := 1;
          Result := Success;
          return;
       end if;
-      
+
       Result := Invalid_Credentials;
    end Authenticate;
 
@@ -52,23 +52,23 @@ package body App.Auth is
       if User_Id = 1 then
          return User_Record'(
             Id       => 1,
-            Username => (1 .. 5 => 'a', 6 .. 50 => ' '),
-            Password => (1 .. 9 => 'a', 10 .. 64 => ' '),
-            Email    => (1 .. 19 => 'a', 20 .. 100 => ' '));
+            Username => [1 .. 5 => 'a', 6 .. 50 => ' '],
+            Password => [1 .. 9 => 'a', 10 .. 64 => ' '],
+            Email    => [1 .. 19 => 'a', 20 .. 100 => ' ']);
       else
          return User_Record'(
             Id       => 0,
-            Username => (others => ' '),
-            Password => (others => ' '),
-            Email    => (others => ' '));
+            Username => [others => ' '],
+            Password => [others => ' '],
+            Email    => [others => ' ']);
       end if;
    exception
       when others =>
          return User_Record'(
             Id       => 0,
-            Username => (others => ' '),
-            Password => (others => ' '),
-            Email    => (others => ' '));
+            Username => [others => ' '],
+            Password => [others => ' '],
+            Email    => [others => ' ']);
    end Get_User;
 
    --  Get user by username from database.
@@ -77,23 +77,23 @@ package body App.Auth is
       if Username = "admin" then
          return User_Record'(
             Id       => 1,
-            Username => (1 .. 5 => 'a', 6 .. 50 => ' '),
-            Password => (1 .. 9 => 'a', 10 .. 64 => ' '),
-            Email    => (1 .. 19 => 'a', 20 .. 100 => ' '));
+            Username => [1 .. 5 => 'a', 6 .. 50 => ' '],
+            Password => [1 .. 9 => 'a', 10 .. 64 => ' '],
+            Email    => [1 .. 19 => 'a', 20 .. 100 => ' ']);
       else
          return User_Record'(
             Id       => 0,
-            Username => (others => ' '),
-            Password => (others => ' '),
-            Email    => (others => ' '));
+            Username => [others => ' '],
+            Password => [others => ' '],
+            Email    => [others => ' ']);
       end if;
    exception
       when others =>
          return User_Record'(
             Id       => 0,
-            Username => (others => ' '),
-            Password => (others => ' '),
-            Email    => (others => ' '));
+            Username => [others => ' '],
+            Password => [others => ' '],
+            Email    => [others => ' ']);
    end Get_User_By_Username;
 
    --  Check if a user exists by username.

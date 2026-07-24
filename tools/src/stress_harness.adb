@@ -176,7 +176,6 @@ procedure Stress_Harness is
    type Client_Access is access Client;
    Clients : array (1 .. Client_Count) of Client_Access;
 begin
-   GNAT.Sockets.Initialize;
    for Index in Clients'Range loop
       Clients (Index) := new Client;
    end loop;

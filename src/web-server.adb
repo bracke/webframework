@@ -1,21 +1,21 @@
 with Ada.Containers.Indefinite_Hashed_Maps;
+with Ada.Containers.Vectors;
 with Ada.Characters.Handling;
 with Ada.Calendar;
 with Ada.Exceptions;
 with Ada.Streams;
+with GNAT.Sockets;
    with Ada.Streams.Stream_IO;
    with Ada.Strings.Fixed;
    with Ada.Strings.Hash;
    with Ada.Strings.Unbounded;
 with Ada.Unchecked_Deallocation;
 with System;
-with Web.Config;
-with Web.Connection;
+with Web.Context;
 with Web.Errors;
 with Web.Logging;
 with Web.Security;
 with Web.Static;
-with Web.TLS;
 with Web.WebSocket;
 
 package body Web.Server is
@@ -23,6 +23,9 @@ package body Web.Server is
    use Ada.Strings.Unbounded;
    use type GNAT.Sockets.Socket_Type;
    use type Web.Config.Mode_Type;
+   use type Web.Guard.Guard_Decision;
+   use type Web.Guard.Guard_Access;
+   use type Web.Guard.Contextual_Handler;
 
    function Hash_Positive (Value : Positive) return Ada.Containers.Hash_Type is
       use Ada.Strings;
@@ -43,6 +46,22 @@ package body Web.Server is
       Hash         => Ada.Strings.Hash,
       Equivalent_Keys => "=");
 
+   package Guard_Vectors is new Ada.Containers.Vectors
+     (Index_Type   => Positive,
+      Element_Type => Web.Guard.Guard_Access);
+
+   --  A context-aware route together with the guards that protect it.
+   type Guarded_Route is record
+      Handler : Web.Guard.Contextual_Handler;
+      Guards  : Guard_Vectors.Vector;
+   end record;
+
+   package Guarded_Route_Maps is new Ada.Containers.Indefinite_Hashed_Maps
+     (Key_Type        => String,
+      Element_Type    => Guarded_Route,
+      Hash            => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
+
    package Error_Handler_Maps is new Ada.Containers.Indefinite_Hashed_Maps
      (Key_Type     => Positive,
       Element_Type => Error_Handler,
@@ -59,10 +78,10 @@ package body Web.Server is
 
    Routes : Route_Maps.Map;
    Sockets : Socket_Maps.Map;
-   Static_Prefix : Unbounded_String;
-   Static_Dir : Unbounded_String;
    Static_Prefix_Text : Unbounded_String;
    Static_Dir_Text : Unbounded_String;
+   Global_Guards : Guard_Vectors.Vector;
+   Guarded_Routes : Guarded_Route_Maps.Map;
 
    protected Error_Pages is
       procedure Register (Status : Positive; Handler : Error_Handler);
@@ -645,100 +664,6 @@ package body Web.Server is
         and then Web.Security.Is_Safe_Decoded_Path (Value (Value'First .. Query_Position - 1));
    end Is_Request_Target;
 
-   function Header_Value (Data : String; Name : String) return String is
-      Header_End : constant Natural := Index (Data, CRLF & CRLF);
-      Header     : constant String :=
-        (if Header_End = 0 then Data else Data (Data'First .. Header_End - 1));
-      Prefix     : constant String := Ada.Characters.Handling.To_Lower (Name) & ":";
-      Cursor      : Natural := Header'First;
-      Line_End    : Natural;
-   begin
-      loop
-         Line_End := Index (Header (Cursor .. Header'Last), CRLF);
-         if Line_End = 0 then
-            Line_End := Header'Last + 1;
-         end if;
-
-         declare
-            Line       : constant String := Header (Cursor .. Line_End - 1);
-            Lower_Line : constant String := Ada.Characters.Handling.To_Lower (Line);
-         begin
-            if Index (Lower_Line, Prefix) = Line'First then
-               return Trim (Line (Line'First + Prefix'Length .. Line'Last), Ada.Strings.Both);
-            end if;
-         end;
-
-         exit when Line_End > Header'Last;
-         Cursor := Line_End + CRLF'Length;
-      end loop;
-
-      return "";
-   end Header_Value;
-
-   function Has_Header (Data : String; Name : String) return Boolean is
-      Header_End : constant Natural := Index (Data, CRLF & CRLF);
-      Header     : constant String :=
-        (if Header_End = 0 then Data else Data (Data'First .. Header_End - 1));
-      Prefix     : constant String := Ada.Characters.Handling.To_Lower (Name) & ":";
-      Cursor      : Natural := Header'First;
-      Line_End    : Natural;
-   begin
-      loop
-         Line_End := Index (Header (Cursor .. Header'Last), CRLF);
-         if Line_End = 0 then
-            Line_End := Header'Last + 1;
-         end if;
-
-         declare
-            Line       : constant String := Header (Cursor .. Line_End - 1);
-            Lower_Line : constant String := Ada.Characters.Handling.To_Lower (Line);
-         begin
-            if Index (Lower_Line, Prefix) = Line'First then
-               return True;
-            end if;
-         end;
-
-         exit when Line_End > Header'Last;
-         Cursor := Line_End + CRLF'Length;
-      end loop;
-
-      return False;
-   end Has_Header;
-
-   function Has_Header_Token (Data : String; Name : String; Token : String) return Boolean is
-      Value       : constant String := Ada.Characters.Handling.To_Lower (Header_Value (Data, Name));
-      Lower_Token : constant String := Ada.Characters.Handling.To_Lower (Token);
-      Start_Pos   : Natural := Value'First;
-      Comma_Pos   : Natural;
-   begin
-      if Value'Length = 0 then
-         return False;
-      end if;
-
-      loop
-         Comma_Pos := Index (Value (Start_Pos .. Value'Last), ",");
-         declare
-            Last_Pos : constant Natural :=
-              (if Comma_Pos = 0 then Value'Last else Comma_Pos - 1);
-            Item     : constant String := Trim (Value (Start_Pos .. Last_Pos), Ada.Strings.Both);
-            Param_Pos : constant Natural := Index (Item, ";");
-            Name_Text : constant String :=
-              (if Param_Pos = 0
-               then Item
-               else Trim (Item (Item'First .. Param_Pos - 1), Ada.Strings.Both));
-         begin
-            if Name_Text = Lower_Token then
-               return True;
-            end if;
-         end;
-
-         exit when Comma_Pos = 0;
-         Start_Pos := Comma_Pos + 1;
-      end loop;
-
-      return False;
-   end Has_Header_Token;
-
    function Header_Text_Has_Token (Value : String; Token : String) return Boolean is
       Lower_Value : constant String := Ada.Characters.Handling.To_Lower (Value);
       Lower_Token : constant String := Ada.Characters.Handling.To_Lower (Token);
@@ -1106,28 +1031,6 @@ package body Web.Server is
       return Result;
    end Encoding_Varying;
 
-   function Response_Compression (Request : Web.Request.Request_Type) return Compression_Choice is
-      GZip_Q    : Natural;
-      Deflate_Q : Natural;
-   begin
-      if not Server_Config.Enable_Compression then
-         return No_Compression;
-      end if;
-
-      GZip_Q := Response_Encoding_Q (Request, "gzip");
-      Deflate_Q := Response_Encoding_Q (Request, "deflate");
-
-      if GZip_Q = 0 and then Deflate_Q = 0 then
-         return No_Compression;
-      end if;
-
-      if GZip_Q >= Deflate_Q then
-         return GZip_Compression;
-      end if;
-
-      return Deflate_Compression;
-   end Response_Compression;
-
    function Response_Compression (Negotiation : Encoding_Negotiation) return Compression_Choice is
    begin
       if not Server_Config.Enable_Compression then
@@ -1279,6 +1182,63 @@ package body Web.Server is
       end if;
    end Post;
 
+   procedure Use_Guard (Guard : Web.Guard.Guard_Access) is
+   begin
+      if Guard = null then
+         raise Web.Errors.Security_Error with "guard is null";
+      end if;
+
+      Global_Guards.Append (Guard);
+   end Use_Guard;
+
+   --  Shared insertion for the two context-aware route registrations.
+   procedure Register_Guarded
+     (Key     : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access)
+   is
+      Value    : Guarded_Route;
+      Position : Guarded_Route_Maps.Cursor;
+      Inserted : Boolean;
+   begin
+      if Handler = null then
+         raise Web.Errors.Security_Error with "route handler is null";
+      end if;
+
+      Value.Handler := Handler;
+      if Guard /= null then
+         Value.Guards.Append (Guard);
+      end if;
+
+      Guarded_Route_Maps.Insert
+        (Container => Guarded_Routes,
+         Key       => Key,
+         New_Item  => Value,
+         Position  => Position,
+         Inserted  => Inserted);
+      if not Inserted then
+         raise Web.Errors.Security_Error with "duplicate route path";
+      end if;
+   end Register_Guarded;
+
+   procedure Get
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Require_Registration_Path (Path, "route");
+      Register_Guarded ("GET " & Path, Handler, Guard);
+   end Get;
+
+   procedure Post
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Require_Registration_Path (Path, "route");
+      Register_Guarded ("POST " & Path, Handler, Guard);
+   end Post;
+
    procedure WebSocket (Path : String; Handler : WebSocket_Handler) is
       Position : Socket_Maps.Cursor;
       Inserted : Boolean;
@@ -1315,8 +1275,6 @@ package body Web.Server is
       if Directory'Length = 0 or else not Web.Security.Is_Safe_Path (Directory) then
          raise Web.Errors.Security_Error with "invalid static directory";
       end if;
-      Static_Prefix := To_Unbounded_String (Url_Prefix);
-      Static_Dir := To_Unbounded_String (Directory);
       Static_Prefix_Text := To_Unbounded_String (Url_Prefix);
       Static_Dir_Text := To_Unbounded_String (Directory);
    end Static;
@@ -1442,7 +1400,7 @@ package body Web.Server is
    pragma Inline (Starts_Case_Insensitive);
 
    function Parse_Request (Data : String) return Web.Request.Request_Type is
-      Line_End : Natural := Index (Data, CRLF);
+      Line_End : constant Natural := Index (Data, CRLF);
       Space_1  : Natural;
       Space_2  : Natural;
       Query_Position : Natural;
@@ -1541,7 +1499,7 @@ package body Web.Server is
 
             Header_Kind_Value := Web.Request.Header_Kind_Of (Header_Name_Raw);
             if not Is_Header_Value (Header_Text) then
-                raise Web.Errors.Bad_Request_Error with "invalid header value";
+               raise Web.Errors.Bad_Request_Error with "invalid header value";
             end if;
 
             case Header_Kind_Value is
@@ -1631,11 +1589,57 @@ package body Web.Server is
       Method : constant String := Web.Request.Method (Request);
       Path : constant String := Web.Request.Path (Request);
       Route_Key : constant String := Method & " " & Path;
+      Ctx : Web.Context.Request_Context := Web.Context.New_Context;
+      Halted : Boolean := False;
+      Halt_Response : Web.Response.Response_Type;
+
+      --  Run a guard chain in order. On the first guard that halts, capture its
+      --  response and stop; the caller then returns that response instead of
+      --  invoking the handler. A guard that raises propagates to the outer
+      --  handler below, which fails the request closed rather than open.
+      procedure Run_Guards (Guards : Guard_Vectors.Vector) is
+      begin
+         for Guard of Guards loop
+            declare
+               Outcome : constant Web.Guard.Guard_Outcome := Guard (Request, Ctx);
+            begin
+               if Outcome.Decision = Web.Guard.Halt then
+                  Halt_Response := Outcome.Response;
+                  Halted := True;
+                  return;
+               end if;
+            end;
+         end loop;
+      end Run_Guards;
    begin
       --  Only allow GET and POST methods
-      if Method /= "GET" and Method /= "POST" then
+      if Method /= "GET" and then Method /= "POST" then
          return Build_Error_Response (Request, 405, "method not allowed");
       end if;
+
+      --  Global guards run before any route match.
+      Run_Guards (Global_Guards);
+      if Halted then
+         return Halt_Response;
+      end if;
+
+      --  Context-aware (optionally guarded) routes take precedence.
+      declare
+         Cursor : constant Guarded_Route_Maps.Cursor := Guarded_Routes.Find (Route_Key);
+      begin
+         if Guarded_Route_Maps.Has_Element (Cursor) then
+            declare
+               Route : constant Guarded_Route := Guarded_Route_Maps.Element (Cursor);
+            begin
+               Run_Guards (Route.Guards);
+               if Halted then
+                  return Halt_Response;
+               end if;
+
+               return Route.Handler (Request, Ctx);
+            end;
+         end if;
+      end;
 
       declare
          Cursor : constant Route_Maps.Cursor := Routes.Find (Route_Key);
@@ -1645,7 +1649,7 @@ package body Web.Server is
          end if;
 
          --  Static files are only served via GET
-         if Method = "GET" and Static_Prefix_Matches (Path) then
+         if Method = "GET" and then Static_Prefix_Matches (Path) then
             return Web.Static.Serve (To_String (Static_Prefix_Text), To_String (Static_Dir_Text), Path);
          end if;
       end;
@@ -1816,7 +1820,7 @@ package body Web.Server is
          begin
             return Ch = ' ' or else Ch = Character'Val (9);
          end Is_Ows;
-   begin
+      begin
          while Cursor_Pos <= At_End and then Is_Ows (Line (Cursor_Pos)) loop
             Cursor_Pos := Cursor_Pos + 1;
          end loop;
@@ -1885,26 +1889,6 @@ package body Web.Server is
          raise Web.Errors.Bad_Request_Error with "invalid content-length";
    end Header_Content_Length;
 
-   function Header_End_Position (Data : Unbounded_String) return Natural is
-      Size : constant Natural := Length (Data);
-   begin
-      if Size < 4 then
-         return 0;
-      end if;
-
-      for Index_Value in 1 .. Size - 3 loop
-         if Element (Data, Index_Value) = Character'Val (13)
-           and then Element (Data, Index_Value + 1) = Character'Val (10)
-           and then Element (Data, Index_Value + 2) = Character'Val (13)
-           and then Element (Data, Index_Value + 3) = Character'Val (10)
-         then
-            return Index_Value;
-         end if;
-      end loop;
-
-      return 0;
-   end Header_End_Position;
-
    procedure Require_Allowed_Request (Request : Web.Request.Request_Type) is
       Allowed : constant String := Server_Config.Allowed_Host;
    begin
@@ -1914,21 +1898,6 @@ package body Web.Server is
          raise Web.Errors.Security_Error with "request host/origin is not allowed";
       end if;
    end Require_Allowed_Request;
-
-   function Stream_Data_To_String
-     (Data : Ada.Streams.Stream_Element_Array;
-      Last : Ada.Streams.Stream_Element_Offset) return String
-   is
-      use type Ada.Streams.Stream_Element_Offset;
-
-      Result : String (1 .. Natural (Last - Data'First + 1));
-   begin
-      for Offset in Result'Range loop
-         Result (Offset) :=
-           Character'Val (Data (Data'First + Ada.Streams.Stream_Element_Offset (Offset - 1)));
-      end loop;
-      return Result;
-   end Stream_Data_To_String;
 
    function Read_Request (Conn : in out Web.Connection.Connection_Type) return String is
       use type Ada.Streams.Stream_Element_Offset;
@@ -2045,7 +2014,7 @@ package body Web.Server is
    procedure Handle_Connection
      (Socket  : GNAT.Sockets.Socket_Type;
       Use_TLS : Boolean) is
-      Close_When_Done : Boolean := True;
+      Close_When_Done : constant Boolean := True;
       Conn : Web.Connection.Connection_Type;
    begin
       if Use_TLS then
@@ -2207,7 +2176,6 @@ package body Web.Server is
    begin
       Require_Bind_Port (Port);
       Require_Bind_Host (Host);
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket (Listener);
       --  Allow port reuse to avoid "Address already in use" errors on quick restarts
       GNAT.Sockets.Set_Socket_Option (Listener, GNAT.Sockets.Socket_Level, (GNAT.Sockets.Reuse_Address, True));

@@ -1,4 +1,3 @@
-with Ada.Characters.Handling;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Web.Errors;
@@ -98,7 +97,7 @@ package body Web.Cookie is
       Value : String)
    is
       Previous : Natural := 0;
-      Count_Position : Cookie_Maps.Cursor := Jar.Counts.Find (Name);
+      Count_Position : constant Cookie_Maps.Cursor := Jar.Counts.Find (Name);
       Value_Position : Cookie_Maps.Cursor;
       Inserted       : Boolean;
    begin

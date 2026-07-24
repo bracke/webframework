@@ -96,7 +96,6 @@ procedure Soak_Harness is
       Socket  : GNAT.Sockets.Socket_Type;
       Address : GNAT.Sockets.Sock_Addr_Type;
    begin
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket (Socket);
       Address.Addr := GNAT.Sockets.Inet_Addr ("127.0.0.1");
       Address.Port := 0;

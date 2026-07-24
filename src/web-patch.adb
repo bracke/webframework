@@ -1,4 +1,3 @@
-with Ada.Strings.Unbounded;
 with Web.Errors;
 
 package body Web.Patch is

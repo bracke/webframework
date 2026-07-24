@@ -21,7 +21,7 @@ package App.Auth is
    --  @param Username User's username.
    --  @param Password User's password.
    --  @return Authentication result and user ID if successful.
-   procedure Authenticate 
+   procedure Authenticate
      (Username : String;
       Password : String;
       User_Id  : out Natural;

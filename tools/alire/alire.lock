@@ -59,6 +59,15 @@ hashes = [
 ]
 url = "https://github.com/alire-project/GNAT-FSF-builds/releases/download/gnat-15.2.0-1/gnat-x86_64-linux-15.2.0-1.tar.gz"
 [[solution.state]]
+crate = "hostkit"
+fulfilment = "linked"
+pinned = false
+transitivity = "direct"
+versions = "~0.1.0-dev"
+[solution.state.link]
+lockfiled = true
+path = "../../hostkit"
+[[solution.state]]
 crate = "project_tools"
 fulfilment = "linked"
 pinned = false
@@ -76,15 +85,6 @@ versions = "^1.0.0"
 [solution.state.link]
 lockfiled = true
 path = "../../sshlib"
-[[solution.state]]
-crate = "terminal_styles"
-fulfilment = "linked"
-pinned = false
-transitivity = "direct"
-versions = "~0.1.0-dev"
-[solution.state.link]
-lockfiled = true
-path = "../../terminal_styles"
 [[solution.state]]
 crate = "webframework"
 fulfilment = "linked"

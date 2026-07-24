@@ -14,6 +14,16 @@ package body Web.Application is
       return Live.Require_Session (Request);
    end Require_Session;
 
+   procedure Invalidate_Session (Id : String) is
+   begin
+      Live.Invalidate_Session (Id);
+   end Invalidate_Session;
+
+   function Regenerate_Session (Old_Id : String) return String is
+   begin
+      return Live.Regenerate_Session (Old_Id);
+   end Regenerate_Session;
+
    function Session_Cookie_Header (Id : String) return String is
    begin
       return Live.Session_Cookie_Header (Id);
@@ -98,6 +108,27 @@ package body Web.Application is
       Web.Server.Post (Path, Handler);
    end Post;
 
+   procedure Use_Guard (Guard : Web.Guard.Guard_Access) is
+   begin
+      Web.Server.Use_Guard (Guard);
+   end Use_Guard;
+
+   procedure Get
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Web.Server.Get (Path, Handler, Guard);
+   end Get;
+
+   procedure Post
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Web.Server.Post (Path, Handler, Guard);
+   end Post;
+
    procedure WebSocket (Path : String; Handler : WebSocket_Handler_Access) is
    begin
       Web.Server.WebSocket (Path, Handler);
@@ -107,6 +138,15 @@ package body Web.Application is
    begin
       Web.Server.Static (Url_Prefix, Directory);
    end Static;
+
+   procedure Static_Versioned (Url_Prefix : String; Directory : String) is
+   begin
+      --  For versioned static files, we use the standard static handler
+      --  since the versioning is handled by the Web.Assets package
+      --  when generating URLs and by the modified Web.Static.Serve
+      --  which now includes cache headers
+      Web.Server.Static (Url_Prefix, Directory);
+   end Static_Versioned;
 
    procedure Register_Error_Handler
      (Status  : Positive;

@@ -7,14 +7,14 @@ package body App.State is
    --  This function is called by Web.Live through the generic Initial_State hook.
    function Initial_State return App_State is
    begin
-      return (Counter => 0, User_Id => 0, Username => (others => ' '), Is_Authenticated => False);
+      return (Counter => 0, User_Id => 0, Username => [others => ' '], Is_Authenticated => False);
    end Initial_State;
 
    --  Set authentication information for a session.
    procedure Set_Authenticated (State : in out App_State; User_Id : Natural; Username : String) is
    begin
       State.User_Id := User_Id;
-      State.Username := (1 .. State.Username'Length => ' ');
+      State.Username := [1 .. State.Username'Length => ' '];
       if Username'Length <= State.Username'Length then
          State.Username (1 .. Username'Length) := Username;
       else
@@ -28,7 +28,7 @@ package body App.State is
    procedure Clear_Authentication (State : in out App_State) is
    begin
       State.User_Id := 0;
-      State.Username := (others => ' ');
+      State.Username := [others => ' '];
       State.Is_Authenticated := False;
    end Clear_Authentication;
 

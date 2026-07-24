@@ -1,6 +1,6 @@
-with GNAT.Sockets;
 with Web.Config;
 with Web.Connection;
+with Web.Guard;
 with Web.Request;
 with Web.Response;
 with Web.TLS;
@@ -34,6 +34,35 @@ package Web.Server is
    --  @param Handler Route handler.
    --  @return No return value.
    procedure Post (Path : String; Handler : Route_Handler);
+
+   --  Register a global guard that runs before every dispatched GET/POST
+   --  request, ahead of any route guard. Guards run in registration order and
+   --  the first to halt wins. Use for cross-cutting concerns such as resolving
+   --  the request principal once for the whole application.
+   --  @param Guard Guard to install; must not be null.
+   --  @return No return value.
+   procedure Use_Guard (Guard : Web.Guard.Guard_Access);
+
+   --  Register a context-aware GET route, optionally protected by a guard.
+   --  The handler receives the request context the guards populated.
+   --  @param Path Exact route path.
+   --  @param Handler Context-aware route handler.
+   --  @param Guard Optional per-route guard; null installs none.
+   --  @return No return value.
+   procedure Get
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+
+   --  Register a context-aware POST route, optionally protected by a guard.
+   --  @param Path Exact route path.
+   --  @param Handler Context-aware route handler.
+   --  @param Guard Optional per-route guard; null installs none.
+   --  @return No return value.
+   procedure Post
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
 
    --  Register a WebSocket route.
    --  @param Path Exact route path.

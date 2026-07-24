@@ -1,21 +1,43 @@
 name = "webframework_tests"
 description = "AUnit tests for the webframework crate"
 version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
 licenses = "MIT"
-website = ""
+website = "https://github.com/bracke/webframework"
 tags = ["webframework", "tests"]
 
 executables = ["tests"]
-project-files = ["webframework_tests.gpr"]
 
 [[depends-on]]
 gnat_native = "=15.2.1"
-
-[[depends-on]]
-aunit = "*"
 
 [[depends-on]]
 webframework = "*"
 
 [[pins]]
 webframework = { path = ".." }
+
+[[depends-on]]
+zlib = "*"
+
+[[pins]]
+zlib = { path = "../../zlib" }
+
+[[depends-on]]
+aunit = "^26.0.0"
+
+# Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib
+# and hostkit through webframework, so it must pin them itself.
+[[pins]]
+cryptolib = { path = "../../cryptolib" }
+ssh_lib = { path = "../../sshlib" }
+hostkit = { path = "../../hostkit" }
+
+# Build dependencies in the development profile (-Og) too, not the default
+# release (-O3), so this root and the parent share object files rather than
+# forcing each other into full rebuilds.
+[build-profiles]
+"*" = "development"

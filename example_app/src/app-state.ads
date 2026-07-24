@@ -6,7 +6,7 @@ package App.State is
    type App_State is record
       Counter : Natural := 0;
       User_Id : Natural := 0;  --  0 means not authenticated
-      Username : String (1 .. 50) := (others => ' ');
+      Username : String (1 .. 50) := [others => ' '];
       Is_Authenticated : Boolean := False;
    end record;
 

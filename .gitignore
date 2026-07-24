@@ -7,6 +7,8 @@
 /tests/config/
 /webframework_cli/alire/
 /webframework_cli/config/
+/tools/alire/
+/tools/config/
 
 # GPR/Alire build outputs
 /bin/

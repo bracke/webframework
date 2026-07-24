@@ -27,6 +27,20 @@ package Web.Live is
    --  @return Session id or an empty string.
    function Require_Session (Request : Web.Request.Request_Type) return String;
 
+   --  Invalidate a session immediately, dropping its server-side state and
+   --  closing any attached websocket. Use on logout. A null or unknown id is a
+   --  no-op.
+   --  @param Id Session id to invalidate.
+   --  @return No return value.
+   procedure Invalidate_Session (Id : String);
+
+   --  Rotate a session's id while preserving its state, returning the new id.
+   --  Use on privilege change (for example right after login) to defeat session
+   --  fixation: the old id stops working and any socket bound to it is dropped.
+   --  @param Old_Id Current session id.
+   --  @return New session id, or an empty string when Old_Id names no session.
+   function Regenerate_Session (Old_Id : String) return String;
+
    --  Build the session Set-Cookie header.
    --  @param Id Session id.
    --  @return Set-Cookie header value.

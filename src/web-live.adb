@@ -2,12 +2,9 @@ with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Containers.Vectors;
 with Ada.Exceptions;
 with Ada.Calendar;
-with Ada.Strings.Fixed;
 with Ada.Strings.Hash;
 with Ada.Strings.Unbounded;
 with Ada.Containers.Hashed_Sets;
-with Web.Config;
-with Web.Connection;
 with Web.Cookie;
 with Web.Errors;
 with Web.Logging;
@@ -48,7 +45,7 @@ package body Web.Live is
       Last_Pong_Time : Ada.Calendar.Time := Ada.Calendar.Clock;
       Message_Count  : Natural := 0;
       Error_Count    : Natural := 0;
-      Last_Error_Time: Ada.Calendar.Time := Ada.Calendar.Clock;
+      Last_Error_Time : Ada.Calendar.Time := Ada.Calendar.Clock;
       --  Rate limiting
       Rate_Limit_Count : Natural := 0;
       Rate_Limit_Start : Ada.Calendar.Time := Ada.Calendar.Clock;
@@ -95,8 +92,15 @@ package body Web.Live is
       procedure Create
         (Id      : String;
          Created : out Boolean);
-      function Exists (Id : String) return Boolean;
-      procedure Touch (Id : String);
+      procedure Remove
+        (Id      : String;
+         Existed : out Boolean;
+         State   : out App_State;
+         Socket  : out GNAT.Sockets.Socket_Type);
+      procedure Adopt
+        (Id      : String;
+         State   : App_State;
+         Created : out Boolean);
       procedure Touch_If_Exists
         (Id    : String;
          Found : out Boolean);
@@ -127,7 +131,7 @@ package body Web.Live is
       function Active_WebSocket_Count return Natural;
       function Is_Connected (Id : String) return Boolean;
       function Connection_Stats (Id : String) return String;
-      
+
       --  Connection hardening helper procedures
       procedure Update_Ping_Time (Id : String);
       procedure Update_Pong_Time (Id : String);
@@ -137,7 +141,6 @@ package body Web.Live is
       procedure End_Reconnection (Id : String);
       procedure Check_And_Update_Rate_Limit (Id : String; Rate_Limit : Natural);
       procedure Check_And_Add_Message_Id (Id : String; Message_Id : String; Is_Duplicate : out Boolean);
-      procedure Set_Connection_State (Id : String; State : Connection_State);
       procedure Cleanup
         (Removed : out Natural;
          Sockets : in out Socket_Vectors.Vector);
@@ -185,7 +188,7 @@ package body Web.Live is
                Last_Pong_Time => Ada.Calendar.Clock,
                Message_Count  => 0,
                Error_Count    => 0,
-               Last_Error_Time=> Ada.Calendar.Clock,
+               Last_Error_Time  => Ada.Calendar.Clock,
                Rate_Limit_Count => 0,
                Rate_Limit_Start => Ada.Calendar.Clock,
                Processed_Message_Id_Set => Message_Id_Sets.Empty_Set,
@@ -198,23 +201,70 @@ package body Web.Live is
          Created := Inserted;
       end Create;
 
-      function Exists (Id : String) return Boolean is
+      procedure Remove
+        (Id      : String;
+         Existed : out Boolean;
+         State   : out App_State;
+         Socket  : out GNAT.Sockets.Socket_Type)
+      is
+         Position : Session_Maps.Cursor := Sessions.Find (Id);
       begin
-         return Sessions.Contains (Id);
-      end Exists;
-
-      procedure Touch (Id : String) is
-         Copy : Session_Record;
-         Position : constant Session_Maps.Cursor := Sessions.Find (Id);
-      begin
-         if not Session_Maps.Has_Element (Position) then
+         Existed := Session_Maps.Has_Element (Position);
+         State := Initial_State;
+         Socket := GNAT.Sockets.No_Socket;
+         if not Existed then
             return;
          end if;
 
-         Copy := Session_Maps.Element (Position);
-         Copy.Last_Seen := Ada.Calendar.Clock;
-         Sessions.Replace_Element (Position, Copy);
-      end Touch;
+         declare
+            Copy : constant Session_Record := Session_Maps.Element (Position);
+         begin
+            State := Copy.State;
+            Socket := Copy.Active_Socket;
+         end;
+         Sessions.Delete (Position);
+      end Remove;
+
+      procedure Adopt
+        (Id      : String;
+         State   : App_State;
+         Created : out Boolean)
+      is
+         Position : Session_Maps.Cursor;
+         Inserted : Boolean;
+      begin
+         Created := False;
+
+         if not Web.Security.Is_Valid_Session_Id (Id) then
+            Web.Logging.Warn ("invalid session id rejected");
+            return;
+         end if;
+
+         Session_Maps.Insert
+           (Container => Sessions,
+            Key       => Id,
+            New_Item  =>
+              (Id            => To_Unbounded_String (Id),
+               State         => State,
+               Active_Socket => GNAT.Sockets.No_Socket,
+               Last_Seen     => Ada.Calendar.Clock,
+               Conn_State    => Disconnected,
+               Last_Ping_Time => Ada.Calendar.Clock,
+               Last_Pong_Time => Ada.Calendar.Clock,
+               Message_Count  => 0,
+               Error_Count    => 0,
+               Last_Error_Time  => Ada.Calendar.Clock,
+               Rate_Limit_Count => 0,
+               Rate_Limit_Start => Ada.Calendar.Clock,
+               Processed_Message_Id_Set => Message_Id_Sets.Empty_Set,
+               Last_Message_Id  => 0,
+               Is_Reconnecting => False,
+               Reconnect_Attempts => 0,
+               Last_Reconnect_Time => Ada.Calendar.Clock),
+            Position  => Position,
+            Inserted  => Inserted);
+         Created := Inserted;
+      end Adopt;
 
       procedure Touch_If_Exists
         (Id    : String;
@@ -411,7 +461,7 @@ package body Web.Live is
             return "";
          end if;
          Copy := Session_Maps.Element (Position);
-         return "msgs:" & Natural'Image (Copy.Message_Count) & 
+         return "msgs:" & Natural'Image (Copy.Message_Count) &
                 ", errors:" & Natural'Image (Copy.Error_Count) &
                 ", state:" & Connection_State'Image (Copy.Conn_State) &
                 ", reconnects:" & Natural'Image (Copy.Reconnect_Attempts);
@@ -496,27 +546,27 @@ package body Web.Live is
       begin
          if Session_Maps.Has_Element (Position) and then Rate_Limit > 0 then
             Copy := Session_Maps.Element (Position);
-            
+
             --  Check if rate limit window has expired (1 minute)
             if Current_Time - Copy.Rate_Limit_Start >= Duration (60) then
                Copy.Rate_Limit_Count := 0;
                Copy.Rate_Limit_Start := Current_Time;
             end if;
-            
+
             --  Increment and check rate limit
             Copy.Rate_Limit_Count := Copy.Rate_Limit_Count + 1;
             if Copy.Rate_Limit_Count > Rate_Limit then
-               Web.Logging.Warn ("rate limit exceeded for session " & Id & 
-                               " (" & Natural'Image (Copy.Rate_Limit_Count) & 
+               Web.Logging.Warn ("rate limit exceeded for session " & Id &
+                               " (" & Natural'Image (Copy.Rate_Limit_Count) &
                                " messages in last minute)");
                raise Web.Errors.Protocol_Error with "rate limit exceeded";
             end if;
-            
+
             Sessions.Replace_Element (Position, Copy);
          end if;
       end Check_And_Update_Rate_Limit;
 
-      procedure Check_And_Add_Message_Id 
+      procedure Check_And_Add_Message_Id
         (Id : String; Message_Id : String; Is_Duplicate : out Boolean) is
          Position : constant Session_Maps.Cursor := Sessions.Find (Id);
          Copy : Session_Record;
@@ -524,33 +574,23 @@ package body Web.Live is
          Message_Id_U : constant Unbounded_String := To_Unbounded_String (Message_Id);
       begin
          Is_Duplicate := False;
-         if Session_Maps.Has_Element (Position) and then Deduplication_Window > 0 
-           and then Message_Id'Length > 0 then
+         if Session_Maps.Has_Element (Position) and then Deduplication_Window > 0
+           and then Message_Id'Length > 0
+         then
             Copy := Session_Maps.Element (Position);
-            
+
             --  Check if this message ID has been processed
             if Copy.Processed_Message_Id_Set.Contains (Message_Id_U) then
                Web.Logging.Debug ("duplicate message detected: " & Message_Id);
-               Is_Duplicate := True; -- Duplicate detected
+               Is_Duplicate := True; --  Duplicate detected
                return;
             end if;
-            
+
             --  Add message ID to processed set
             Copy.Processed_Message_Id_Set.Include (Message_Id_U);
             Sessions.Replace_Element (Position, Copy);
          end if;
       end Check_And_Add_Message_Id;
-
-      procedure Set_Connection_State (Id : String; State : Connection_State) is
-         Position : constant Session_Maps.Cursor := Sessions.Find (Id);
-         Copy : Session_Record;
-      begin
-         if Session_Maps.Has_Element (Position) then
-            Copy := Session_Maps.Element (Position);
-            Copy.Conn_State := State;
-            Sessions.Replace_Element (Position, Copy);
-         end if;
-      end Set_Connection_State;
 
       procedure Cleanup
         (Removed : out Natural;
@@ -696,6 +736,51 @@ package body Web.Live is
       raise Web.Errors.Security_Error with "unable to allocate unique session id";
    end Find_Or_Create_Session;
 
+   procedure Invalidate_Session (Id : String) is
+      Existed : Boolean;
+      State   : App_State;
+      Socket  : GNAT.Sockets.Socket_Type;
+   begin
+      if Id'Length = 0 then
+         return;
+      end if;
+
+      Stores (Shard_Index (Id)).Remove (Id, Existed, State, Socket);
+      Close_Quietly (Socket);
+   end Invalidate_Session;
+
+   function Regenerate_Session (Old_Id : String) return String is
+      Existed : Boolean;
+      State   : App_State;
+      Socket  : GNAT.Sockets.Socket_Type;
+   begin
+      if Old_Id'Length = 0 then
+         return "";
+      end if;
+
+      --  Detach the old id first: a rotated session must never remain reachable
+      --  under its previous id, and any socket bound to it is dropped.
+      Stores (Shard_Index (Old_Id)).Remove (Old_Id, Existed, State, Socket);
+      Close_Quietly (Socket);
+      if not Existed then
+         return "";
+      end if;
+
+      for Attempt in 1 .. 16 loop
+         declare
+            New_Id  : constant String := Web.Security.New_Session_Id;
+            Created : Boolean;
+         begin
+            Stores (Shard_Index (New_Id)).Adopt (New_Id, State, Created);
+            if Created then
+               return New_Id;
+            end if;
+         end;
+      end loop;
+
+      raise Web.Errors.Security_Error with "unable to allocate unique session id";
+   end Regenerate_Session;
+
    function Require_Session (Request : Web.Request.Request_Type) return String is
       Id : constant String := Cookie_Id (Request);
    begin
@@ -833,13 +918,13 @@ package body Web.Live is
    end Active_WebSocket_Count;
 
    function Is_Connected (Id : String) return Boolean is
-      Index_Value : Positive := Shard_Index (Id);
+      Index_Value : constant Positive := Shard_Index (Id);
    begin
       return Stores (Index_Value).Is_Connected (Id);
    end Is_Connected;
 
    function Connection_Stats (Id : String) return String is
-      Index_Value : Positive := Shard_Index (Id);
+      Index_Value : constant Positive := Shard_Index (Id);
    begin
       return Stores (Index_Value).Connection_Stats (Id);
    end Connection_Stats;
@@ -955,7 +1040,7 @@ package body Web.Live is
                         Web.Logging.Debug ("sent ping to session " & Id);
                      exception
                         when Error : others =>
-                           Web.Logging.Warn ("failed to send ping to session " & Id & ": " & 
+                           Web.Logging.Warn ("failed to send ping to session " & Id & ": " &
                                            Ada.Exceptions.Exception_Message (Error));
                            Done := True;
                      end;
@@ -964,14 +1049,9 @@ package body Web.Live is
             end if;
 
             --  Cleanup old message IDs for deduplication
-            declare
-               Deduplication_Window : constant Natural := Stores (Store_Index).Deduplication_Window;
-            begin
-               if Deduplication_Window > 0 then
-                  --  This would require access to the session record, which we'll handle in Process_Frame
-                  null;
-               end if;
-            end;
+            --  Nothing to do here: when a deduplication window is set, the
+            --  cleanup requires access to the session record and is handled
+            --  in Process_Frame instead.
 
             declare
                procedure Process_Frame
@@ -991,7 +1071,7 @@ package body Web.Live is
                         if Web.Protocol.Is_Ping_Message (Payload) then
                            Web.Logging.Debug ("received ping from session " & Id);
                            Web.WebSocket.Send_Text (Conn, Web.Protocol.Create_Pong_Message);
-                           
+
                            --  Update session ping time
                            Stores (Store_Index).Update_Ping_Time (Id);
                            return;
@@ -1000,7 +1080,7 @@ package body Web.Live is
                         --  Check for pong messages
                         if Web.Protocol.Is_Pong_Message (Payload) then
                            Web.Logging.Debug ("received pong from session " & Id);
-                           
+
                            --  Update session pong time
                            Stores (Store_Index).Update_Pong_Time (Id);
                            return;
@@ -1022,7 +1102,7 @@ package body Web.Live is
                         --  Check for server reconnect requests
                         if Web.Protocol.Is_Server_Reconnect (Payload) then
                            Web.Logging.Info ("received server reconnect request from session " & Id);
-                           
+
                            --  Update session state for reconnection
                            Stores (Store_Index).Start_Reconnection (Id);
                            return;
@@ -1036,7 +1116,6 @@ package body Web.Live is
                            Event_Ack_Id : constant String := Web.Events.Get_Ack_Id (Event);
                            Is_Reconnecting : constant Boolean := Web.Protocol.Has_Reconnecting (Payload);
                            Rate_Limit : constant Natural := Stores (Store_Index).Rate_Limit;
-                           Is_Duplicate : Boolean := False;
                         begin
                            --  Check for duplicate message first
                            declare
@@ -1075,7 +1154,7 @@ package body Web.Live is
                                     Response : constant String := Web.Protocol.Encode_Patches (Patches);
                                  begin
                                     Web.WebSocket.Send_Text (Conn, Response);
-                                    
+
                                     --  If the original event had an ackId, we could send an ack response
                                     if Event_Ack_Id'Length > 0 then
                                        Web.WebSocket.Send_Text (Conn, Web.Protocol.Create_Ack_Message (Event_Ack_Id));
@@ -1087,7 +1166,7 @@ package body Web.Live is
                            end if;
 
                         exception
-                           when Error : others =>
+                           when others =>
                               --  Update error statistics
                               Stores (Store_Index).Update_Error_Stats (Id);
                               raise;
@@ -1106,7 +1185,7 @@ package body Web.Live is
                   when Web.WebSocket.Close_Frame =>
                      Web.WebSocket.Send_Close (Conn);
                      Done := True;
-               end case;
+                  end case;
                end Process_Frame;
 
                procedure Receive is new Web.WebSocket.Receive_And_Process (Process_Frame);

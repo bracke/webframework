@@ -1,12 +1,15 @@
 name = "example_app"
 description = "Reference app for the Ada-first webframework"
 version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
 licenses = "MIT"
-website = ""
+website = "https://github.com/bracke/webframework"
 tags = ["webframework", "example", "server-driven"]
 
 executables = ["example_app"]
-project-files = ["example_app.gpr"]
 
 [[depends-on]]
 gnat_native = "=15.2.1"
@@ -14,23 +17,37 @@ gnat_native = "=15.2.1"
 [[depends-on]]
 webframework = "*"
 
-[[depends-on]]
-templates = "*"
-
-[[depends-on]]
-database = "*"
+[[pins]]
+webframework = { path = ".." }
 
 [[depends-on]]
 terminal_styles = "*"
 
 [[pins]]
-webframework = { path = ".." }
+terminal_styles = { path = "../../terminal_styles" }
+
+[[depends-on]]
+templates = "*"
 
 [[pins]]
 templates = { path = "../../template" }
 
+[[depends-on]]
+database = "*"
+
 [[pins]]
 database = { path = "../../database" }
 
+# Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib,
+# zlib and hostkit through webframework and database, so it must pin them itself.
 [[pins]]
-terminal_styles = { path = "../../terminal_styles" }
+cryptolib = { path = "../../cryptolib" }
+ssh_lib = { path = "../../sshlib" }
+zlib = { path = "../../zlib" }
+hostkit = { path = "../../hostkit" }
+
+# Build dependencies in the development profile (-Og) too, not the default
+# release (-O3), so this root and the parent share object files rather than
+# forcing each other into full rebuilds.
+[build-profiles]
+"*" = "development"

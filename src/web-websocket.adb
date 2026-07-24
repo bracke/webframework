@@ -4,11 +4,9 @@ with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with CryptoLib.Hashes;
 with Interfaces;
-with Web.Connection;
 with Web.Errors;
 
 package body Web.WebSocket is
-   use Ada.Strings.Fixed;
    use Ada.Strings.Unbounded;
    use type Ada.Streams.Stream_Element_Offset;
    use type Interfaces.Unsigned_8;
@@ -436,31 +434,6 @@ package body Web.WebSocket is
       Process (Item.Frame_Type, Item.Payload_Text);
    end Receive_And_Process;
 
-   function Read_Exact
-     (Socket : GNAT.Sockets.Socket_Type;
-      Count  : Natural) return String
-   is
-      Buffer : Ada.Streams.Stream_Element_Array (1 .. Ada.Streams.Stream_Element_Offset (Count));
-      Last   : Ada.Streams.Stream_Element_Offset;
-      Cursor : Ada.Streams.Stream_Element_Offset := Buffer'First;
-      Result : String (1 .. Count);
-   begin
-      while Cursor <= Buffer'Last loop
-         GNAT.Sockets.Receive_Socket (Socket, Buffer (Cursor .. Buffer'Last), Last);
-         if Last < Cursor then
-            raise Web.Errors.Protocol_Error with "websocket socket closed";
-         end if;
-         Cursor := Last + 1;
-      end loop;
-
-      for Index_Value in Result'Range loop
-         Result (Index_Value) :=
-           Character'Val
-             (Buffer (Buffer'First + Ada.Streams.Stream_Element_Offset (Index_Value - Result'First)));
-      end loop;
-      return Result;
-   end Read_Exact;
-
    function Read_Exact_Bytes
      (Socket : GNAT.Sockets.Socket_Type;
       Count  : Natural) return Ada.Streams.Stream_Element_Array
@@ -479,31 +452,6 @@ package body Web.WebSocket is
 
       return Buffer;
    end Read_Exact_Bytes;
-
-   function Read_Exact
-     (Conn  : in out Web.Connection.Connection_Type;
-      Count : Natural) return String
-   is
-      Buffer : Ada.Streams.Stream_Element_Array (1 .. Ada.Streams.Stream_Element_Offset (Count));
-      Last   : Ada.Streams.Stream_Element_Offset;
-      Cursor : Ada.Streams.Stream_Element_Offset := Buffer'First;
-      Result : String (1 .. Count);
-   begin
-      while Cursor <= Buffer'Last loop
-         Web.Connection.Receive (Conn, Buffer (Cursor .. Buffer'Last), Last);
-         if Last < Cursor then
-            raise Web.Errors.Protocol_Error with "websocket socket closed";
-         end if;
-         Cursor := Last + 1;
-      end loop;
-
-      for Index_Value in Result'Range loop
-         Result (Index_Value) :=
-           Character'Val
-             (Buffer (Buffer'First + Ada.Streams.Stream_Element_Offset (Index_Value - Result'First)));
-      end loop;
-      return Result;
-   end Read_Exact;
 
    function Read_Exact_Bytes
      (Conn  : in out Web.Connection.Connection_Type;
@@ -548,120 +496,12 @@ package body Web.WebSocket is
       end if;
    end Validate_Frame_Before_Payload;
 
-   function Decode_Received_Frame
-     (Header           : Ada.Streams.Stream_Element_Array;
-      Payload_Length   : Natural;
-      Mask_And_Payload : Ada.Streams.Stream_Element_Array) return Frame
-   is
-      use type Ada.Streams.Stream_Element_Offset;
-
-      First_Byte : constant Natural := Natural (Header (Header'First));
-      Second_Byte : constant Natural := Natural (Header (Header'First + 1));
-      Masked     : constant Boolean := Second_Byte >= 16#80#;
-      Op         : constant Natural := First_Byte mod 16;
-      Payload_Start : constant Ada.Streams.Stream_Element_Offset := Mask_And_Payload'First + 4;
-   begin
-      if not Masked then
-         raise Web.Errors.Protocol_Error with "client frame is not masked";
-      end if;
-
-      if Mask_And_Payload'Length /= Payload_Length + 4 then
-         raise Web.Errors.Protocol_Error with "short websocket frame";
-      end if;
-
-      declare
-         Payload_Text : String (1 .. Payload_Length);
-         Text_Is_ASCII : Boolean := True;
-         Close_Reason_Is_ASCII : Boolean := True;
-         Mask_0 : constant Interfaces.Unsigned_8 :=
-           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First));
-         Mask_1 : constant Interfaces.Unsigned_8 :=
-           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First + 1));
-         Mask_2 : constant Interfaces.Unsigned_8 :=
-           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First + 2));
-         Mask_3 : constant Interfaces.Unsigned_8 :=
-           Interfaces.Unsigned_8 (Mask_And_Payload (Mask_And_Payload'First + 3));
-      begin
-         for Offset in 0 .. Payload_Length - 1 loop
-            declare
-               Data_Byte : constant Interfaces.Unsigned_8 :=
-                 Interfaces.Unsigned_8
-                   (Mask_And_Payload
-                      (Payload_Start + Ada.Streams.Stream_Element_Offset (Offset)));
-               Mask_Byte : constant Interfaces.Unsigned_8 :=
-                 (case Offset mod 4 is
-                     when 0 => Mask_0,
-                     when 1 => Mask_1,
-                     when 2 => Mask_2,
-                     when others => Mask_3);
-            begin
-               Payload_Text (Payload_Text'First + Offset) :=
-                 Character'Val (Natural (Data_Byte xor Mask_Byte));
-               if Natural (Data_Byte xor Mask_Byte) > 16#7F# then
-                  Text_Is_ASCII := False;
-                  if Offset >= 2 then
-                     Close_Reason_Is_ASCII := False;
-                  end if;
-               end if;
-            end;
-         end loop;
-
-         if Op = 8 and then Payload_Length >= 2 then
-            declare
-               Code : constant Natural :=
-                 Character'Pos (Payload_Text (Payload_Text'First)) * 256
-                 + Character'Pos (Payload_Text (Payload_Text'First + 1));
-            begin
-               if not Is_Valid_Close_Code (Code) then
-                  raise Web.Errors.Protocol_Error with "invalid websocket close code";
-               end if;
-
-               if Payload_Length > 2
-                 and then not Close_Reason_Is_ASCII
-                 and then not Is_Valid_UTF8 (Payload_Text (Payload_Text'First + 2 .. Payload_Text'Last))
-               then
-                  raise Web.Errors.Protocol_Error with "invalid websocket close reason";
-               end if;
-            end;
-         end if;
-
-         case Op is
-            when 1 =>
-               if not Text_Is_ASCII and then not Is_Valid_UTF8 (Payload_Text) then
-                  raise Web.Errors.Protocol_Error with "invalid websocket text utf8";
-               end if;
-               return
-                 (Payload_Length => Payload_Length,
-                  Frame_Type     => Text_Frame,
-                  Payload_Text   => Payload_Text);
-            when 8 =>
-               return
-                 (Payload_Length => Payload_Length,
-                  Frame_Type     => Close_Frame,
-                  Payload_Text   => Payload_Text);
-            when 9 =>
-               return
-                 (Payload_Length => Payload_Length,
-                  Frame_Type     => Ping_Frame,
-                  Payload_Text   => Payload_Text);
-            when 10 =>
-               return
-                 (Payload_Length => Payload_Length,
-                  Frame_Type     => Pong_Frame,
-                  Payload_Text   => Payload_Text);
-            when others =>
-               raise Web.Errors.Protocol_Error with "unsupported websocket opcode";
-         end case;
-      end;
-   end Decode_Received_Frame;
-
    function Decode_Received_Payload
      (Header         : Ada.Streams.Stream_Element_Array;
       Payload_Length : Natural;
       Mask           : Ada.Streams.Stream_Element_Array;
       Payload_Data   : Ada.Streams.Stream_Element_Array) return Frame
    is
-      use type Ada.Streams.Stream_Element_Offset;
 
       First_Byte : constant Natural := Natural (Header (Header'First));
       Second_Byte : constant Natural := Natural (Header (Header'First + 1));
@@ -761,7 +601,6 @@ package body Web.WebSocket is
      (Socket   : GNAT.Sockets.Socket_Type;
       Max_Size : Natural) return Frame
    is
-      use type Ada.Streams.Stream_Element_Offset;
 
       Header         : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Socket, 2);
       Length_Code    : constant Natural := Natural (Header (Header'First + 1)) mod 16#80#;
@@ -801,7 +640,6 @@ package body Web.WebSocket is
      (Conn     : in out Web.Connection.Connection_Type;
       Max_Size : Natural) return Frame
    is
-      use type Ada.Streams.Stream_Element_Offset;
 
       Header         : constant Ada.Streams.Stream_Element_Array := Read_Exact_Bytes (Conn, 2);
       Length_Code    : constant Natural := Natural (Header (Header'First + 1)) mod 16#80#;

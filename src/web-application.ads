@@ -2,7 +2,7 @@ with GNAT.Sockets;
 with Web.Connection;
 with Web.Config;
 with Web.Dispatcher;
-with Web.Events;
+with Web.Guard;
 with Web.Live;
 with Web.Request;
 with Web.Response;
@@ -45,6 +45,17 @@ package Web.Application is
    --  @param Request Parsed HTTP request.
    --  @return Session identifier or empty string when no cookie exists.
    function Require_Session (Request : Web.Request.Request_Type) return String;
+
+   --  Invalidate a session immediately (drops state, closes any socket). Logout.
+   --  @param Id Session identifier to invalidate.
+   --  @return No return value.
+   procedure Invalidate_Session (Id : String);
+
+   --  Rotate a session id, preserving its state, and return the new id. Use on
+   --  privilege change (after login) to defeat session fixation.
+   --  @param Old_Id Current session identifier.
+   --  @return New session identifier, or empty string when Old_Id is unknown.
+   function Regenerate_Session (Old_Id : String) return String;
 
    --  Build the session cookie header value.
    --  @param Id Session identifier.
@@ -168,6 +179,35 @@ package Web.Application is
    --  @return No return value.
    procedure Post (Path : String; Handler : Route_Handler_Access);
 
+   --  Install a global guard that runs before every request (see
+   --  Web.Server.Use_Guard). This is where an application resolves the request
+   --  principal once for all routes.
+   --  @param Guard Guard to install; must not be null.
+   --  @return No return value.
+   procedure Use_Guard (Guard : Web.Guard.Guard_Access);
+
+   --  Register a context-aware GET route, optionally guarded. The handler
+   --  receives the request context the guards populated (for example the
+   --  resolved principal), so authorization gating composes cleanly.
+   --  @param Path Exact route path.
+   --  @param Handler Context-aware route handler.
+   --  @param Guard Optional per-route guard; null installs none.
+   --  @return No return value.
+   procedure Get
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+
+   --  Register a context-aware POST route, optionally guarded.
+   --  @param Path Exact route path.
+   --  @param Handler Context-aware route handler.
+   --  @param Guard Optional per-route guard; null installs none.
+   --  @return No return value.
+   procedure Post
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+
    --  Register a websocket route through the façade for reduced import set.
    --  @param Path Exact websocket path.
    --  @param Handler WebSocket handler.
@@ -179,6 +219,12 @@ package Web.Application is
    --  @param Directory File system directory.
    --  @return No return value.
    procedure Static (Url_Prefix : String; Directory : String);
+
+   --  Register static assets with versioning support through the façade.
+   --  @param Url_Prefix URL path prefix.
+   --  @param Directory File system directory.
+   --  @return No return value.
+   procedure Static_Versioned (Url_Prefix : String; Directory : String);
 
    --  Register a custom HTTP error handler.
    --  @param Status HTTP status code in the range 100 .. 599.

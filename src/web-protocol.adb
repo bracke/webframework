@@ -1,11 +1,8 @@
-with Ada.Characters.Handling;
 with Ada.Containers;
-with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Web.Errors;
 
 package body Web.Protocol is
-   use Ada.Strings.Fixed;
    use Ada.Strings.Unbounded;
    use type Ada.Containers.Count_Type;
    use type Web.Patch.Patch_Kind;
@@ -350,7 +347,7 @@ package body Web.Protocol is
       end if;
    end Skip_To_Next_Field;
 
-   type Root_Key_Kind is 
+   type Root_Key_Kind is
      (Type_Key, Version_Key, Id_Key, Action_Key, Fields_Key,
       Ack_Id_Key, Message_Id_Key, Reconnecting_Key, Last_Message_Id_Key, Unknown_Key);
    type Client_Message_Kind is
@@ -803,21 +800,6 @@ package body Web.Protocol is
         or else Value = '.';
    end Is_Name_Character;
 
-   function Is_Valid_Id (Value : Unbounded_String) return Boolean is
-   begin
-      if Length (Value) = 0 then
-         return False;
-      end if;
-
-      for Index_Value in 1 .. Length (Value) loop
-         if not Is_Name_Character (Element (Value, Index_Value)) then
-            return False;
-         end if;
-      end loop;
-
-      return True;
-   end Is_Valid_Id;
-
    function Escaped_Length_And_Id_Validity
      (Value : Unbounded_String;
       Valid : out Boolean) return Natural
@@ -1089,7 +1071,6 @@ package body Web.Protocol is
    --  Check if a client message contains a reconnecting flag.
    function Has_Reconnecting (Message : String) return Boolean is
       Cursor : Natural := Message'First;
-      Found_Type : Boolean := False;
       Found_Reconnecting : Boolean := False;
       Reconnecting_Value : Boolean := False;
    begin
@@ -1111,10 +1092,10 @@ package body Web.Protocol is
                Skip_Spaces (Message, Cursor);
                if Cursor <= Message'Last and then Message (Cursor) = 't' then
                   Reconnecting_Value := True;
-                  Cursor := Cursor + 3; -- Skip "true"
+                  Cursor := Cursor + 3; --  Skip "true"
                elsif Cursor <= Message'Last and then Message (Cursor) = 'f' then
                   Reconnecting_Value := False;
-                  cursor := Cursor + 4; -- Skip "false"
+                  Cursor := Cursor + 4; --  Skip "false"
                end if;
                Found_Reconnecting := True;
                return Reconnecting_Value;

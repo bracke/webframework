@@ -1,7 +1,4 @@
-with Ada.Exceptions;
 with Web.Logging;
-
-with Ada.Calendar;
 
 package body Web.Errors is
    use type Web.Config.Mode_Type;

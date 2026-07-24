@@ -83,4 +83,8 @@ package Web_Transport_Tests is
    --  Test connection wrapper handle validation.
    --  @param Item AUnit fixture.
    procedure Test_Connection_Validation (Item : in out Fixture);
+
+   --  Test that a pre-handler guard can populate the context and short-circuit.
+   --  @param Item AUnit fixture.
+   procedure Test_Guarded_Dispatch (Item : in out Fixture);
 end Web_Transport_Tests;

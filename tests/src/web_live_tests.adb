@@ -190,7 +190,6 @@ package body Web_Live_Tests is
       Worker : Server_Task;
       Pong   : String (1 .. 3);
    begin
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket_Pair (Server, Client);
       Worker.Start (Server, Event_Loop_Session);
 
@@ -239,7 +238,6 @@ package body Web_Live_Tests is
       Worker_One : Server_Task;
       Worker_Two : Server_Task;
    begin
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket_Pair (Server_One, Client_One);
       Worker_One.Start (Server_One, Replacement_Session);
 
@@ -363,7 +361,6 @@ package body Web_Live_Tests is
       Assert (Test_Live.Session_Count = 1, "session counter increments");
       Assert (Test_Live.Active_WebSocket_Count = 0, "no websocket before attach");
 
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket_Pair (Server, Client);
       Worker.Start (Server, Session);
       delay 0.05;
@@ -407,7 +404,6 @@ package body Web_Live_Tests is
       Config.Max_WebSocket_Message := 8;
       Test_Live.Configure (Config);
 
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket_Pair (Server, Client);
       Worker.Start (Server, "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD");
 
@@ -453,7 +449,9 @@ package body Web_Live_Tests is
 
       New_Session := Test_Live.Find_Or_Create_Session (Cookie_Request);
       Assert (Web.Security.Is_Valid_Session_Id (New_Session), "replacement session id is valid");
-      Assert (New_Session /= "../../not-a-session", "replacement does not reuse invalid cookie");
+      --  No "New_Session /= ""../../not-a-session" assertion here: a valid session id is
+      --  fixed length, so that comparison is always True and tests nothing. The
+      --  Is_Valid_Session_Id check above is what proves the traversal cookie was rejected.
 
       begin
          Test_Live.Run_Connection (Conn, "../../not-a-session");
@@ -504,7 +502,6 @@ package body Web_Live_Tests is
       Worker : Server_Task;
       Removed : Natural;
    begin
-      GNAT.Sockets.Initialize;
       GNAT.Sockets.Create_Socket_Pair (Server, Client);
       Worker.Start (Server, Cleanup_Socket_Session);
 

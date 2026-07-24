@@ -6,8 +6,10 @@ with Ada.Strings.Unbounded;
 with Ada.Strings.Fixed;
 with Ada.Text_IO;
 with Terminal_Styles;
+with Web.Assets.Clients;
 with App.Auth;
 with App.Auth_Handlers;
+with App.Projects;
 with App.Counter;
 with App.Database;
 with App.Runtime;
@@ -321,66 +323,79 @@ procedure Example_App is
 
    Settings : Settings_Type;
    Startup_Failure : Boolean := False;
+begin
+   --  Startup sequence: parse settings, initialize logging and DB,
+   --  configure live sessions, register routes/handlers, run server.
+   Settings := Parse_Settings;
+   if Settings.Help_Only then
+      return;
+   end if;
+
+   Apply_Logging (Settings);
+   --  Initialize persistence before accepting connections.
+   App.Database.Initialize;
+   --  Initialize authentication system (creates users table and admin user).
+   App.Auth.Initialize;
+   --  Initialize asset versions for cache busting.
+   --  Check for example_app/static first, then fall back to static
+   if Ada.Directories.Exists ("example_app/static") then
+      Web.Assets.Clients.Initialize_Versions ("example_app/static");
+   else
+      Web.Assets.Clients.Initialize_Versions ("static");
+   end if;
+   --  Initialize projects table with sample data.
+   App.Projects.Initialize;
+   null;
+   --  Action-to-handler mapping for websocket events.
+   App.Runtime.Register ("counter.increment", App.Counter.Increment'Access);
+   App.Runtime.Register ("profile.save", App.Profile.Save'Access);
+   App.Runtime.Register ("todo.add", App.Todo.Add'Access);
+   --  Authentication handlers
+   App.Runtime.Register ("auth.login", App.Auth_Handlers.Handle_Login'Access);
+   App.Runtime.Register ("auth.logout", App.Auth_Handlers.Handle_Logout'Access);
+   App.Runtime.Register_Error_Handler (404, App.Pages.Error_Not_Found'Access);
+   App.Runtime.Register_Error_Handler (400, App.Pages.Error_Bad_Request'Access);
+   App.Runtime.Register_Error_Handler (500, App.Pages.Error_Server'Access);
+   --  HTTP + websocket + static route wiring.
+   App.Runtime.Get ("/", App.Pages.Home'Access);
+   App.Runtime.Get ("/login", App.Pages.Login'Access);
+   App.Runtime.Get ("/projects", App.Pages.Projects'Access);
+   App.Runtime.Get ("/todo", App.Pages.Todo'Access);
+   App.Runtime.Post ("/api/login", App.Pages.Api_Login'Access);
+   App.Runtime.Post ("/api/logout", App.Pages.Api_Logout'Access);
+   App.Runtime.Post ("/api/projects/add", App.Pages.Api_Add_Project'Access);
+   App.Runtime.Post ("/api/projects/delete", App.Pages.Api_Delete_Project'Access);
+   App.Runtime.Get ("/health", App.Pages.Health'Access);
+   App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
+   App.Runtime.Static ("/static", Static_Directory);
+   --  Blocking call that owns the main process lifetime.
+   Run_Server (Settings);
+exception
+   --  Handle startup errors with usage message
+when Error : Constraint_Error =>
+   Log_Error ("error: example_app: " & Ada.Exceptions.Exception_Message (Error));
+   Usage;
+   Ada.Command_Line.Set_Exit_Status (Exit_Usage);
+when Error : others =>
+   --  Last-chance exception handler: ensure server stops cleanly
+   --  for any exception that occurs during startup or server runtime.
+   declare
+      Server_Was_Running : constant Boolean := App.Runtime.Server_Running;
    begin
-      --  Startup sequence: parse settings, initialize logging and DB,
-      --  configure live sessions, register routes/handlers, run server.
-      Settings := Parse_Settings;
-      if Settings.Help_Only then
-         return;
+      --  Attempt graceful shutdown if server is running
+      if Server_Was_Running then
+         begin
+            Log_Info ("shutting down server gracefully after exception...");
+            App.Runtime.Stop;
+         exception
+            when Error2 : others =>
+               Log_Error ("error during shutdown: " & Ada.Exceptions.Exception_Message (Error2));
+         end;
+         delay 1.0; --  Give cleanup more time to complete (wake-up + close listener)
       end if;
 
-      Apply_Logging (Settings);
-      --  Initialize persistence before accepting connections.
-      App.Database.Initialize;
-      --  Initialize authentication system (creates users table and admin user).
-      App.Auth.Initialize;
-      null;
-      --  Action-to-handler mapping for websocket events.
-      App.Runtime.Register ("counter.increment", App.Counter.Increment'Access);
-      App.Runtime.Register ("profile.save", App.Profile.Save'Access);
-      App.Runtime.Register ("todo.add", App.Todo.Add'Access);
-      --  Authentication handlers
-      App.Runtime.Register ("auth.login", App.Auth_Handlers.Handle_Login'Access);
-      App.Runtime.Register ("auth.logout", App.Auth_Handlers.Handle_Logout'Access);
-      App.Runtime.Register_Error_Handler (404, App.Pages.Error_Not_Found'Access);
-      App.Runtime.Register_Error_Handler (400, App.Pages.Error_Bad_Request'Access);
-      App.Runtime.Register_Error_Handler (500, App.Pages.Error_Server'Access);
-      --  HTTP + websocket + static route wiring.
-      App.Runtime.Get ("/", App.Pages.Home'Access);
-      App.Runtime.Get ("/login", App.Pages.Login'Access);
-      App.Runtime.Post ("/api/login", App.Pages.Api_Login'Access);
-      App.Runtime.Post ("/api/logout", App.Pages.Api_Logout'Access);
-      App.Runtime.Get ("/health", App.Pages.Health'Access);
-      App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
-      App.Runtime.Static ("/static", Static_Directory);
-      --  Blocking call that owns the main process lifetime.
-      Run_Server (Settings);
-   exception
-      --  Handle startup errors with usage message
-   when Error : Constraint_Error =>
+      --  Log the original error
       Log_Error ("error: example_app: " & Ada.Exceptions.Exception_Message (Error));
-      Usage;
-      Ada.Command_Line.Set_Exit_Status (Exit_Usage);
-   when Error : others =>
-      --  Last-chance exception handler: ensure server stops cleanly
-      --  for any exception that occurs during startup or server runtime.
-      declare
-         Server_Was_Running : constant Boolean := App.Runtime.Server_Running;
-      begin
-         --  Attempt graceful shutdown if server is running
-         if Server_Was_Running then
-            begin
-               Log_Info ("shutting down server gracefully after exception...");
-               App.Runtime.Stop;
-            exception
-               when Error2 : others =>
-                  Log_Error ("error during shutdown: " & Ada.Exceptions.Exception_Message (Error2));
-            end;
-            delay 1.0; --  Give cleanup more time to complete (wake-up + close listener)
-         end if;
-         
-         --  Log the original error
-         Log_Error ("error: example_app: " & Ada.Exceptions.Exception_Message (Error));
-         Ada.Command_Line.Set_Exit_Status (Exit_Startup_Failure);
-      end;
-   end Example_App;
+      Ada.Command_Line.Set_Exit_Status (Exit_Startup_Failure);
+   end;
+end Example_App;

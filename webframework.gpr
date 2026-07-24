@@ -1,10 +1,9 @@
-with "../cryptolib/cryptolib.gpr";
-with "../sshlib/SSH_Lib.gpr";
-with "../zlib/zlib.gpr";
+with "config/webframework_config.gpr";
 
 project Webframework is
-   for Source_Dirs use ("src");
-   for Object_Dir use "obj";
+   for Source_Dirs use ("src", "config");
+   for Object_Dir use "obj/" & Webframework_Config.Build_Profile;
+   for Create_Missing_Dirs use "True";
    for Library_Dir use "lib";
    for Library_Name use "webframework";
    for Library_Kind use "static";
@@ -12,27 +11,35 @@ project Webframework is
      ("Web",
       "Web.Connection",
       "Web.Config",
+      "Web.Context",
       "Web.Cookie",
       "Web.Dispatcher",
       "Web.Errors",
       "Web.Events",
+      "Web.Guard",
       "Web.Html",
-     "Web.Live",
-     "Web.Logging",
-     "Web.Patch",
-     "Web.Protocol",
-     "Web.Request",
-     "Web.Response",
-     "Web.Security",
-     "Web.Application",
-     "Web.Server",
-     "Web.Static",
-     "Web.TLS",
-     "Web.WebSocket");
+      "Web.Live",
+      "Web.Logging",
+      "Web.Patch",
+      "Web.Protocol",
+      "Web.Request",
+      "Web.Response",
+      "Web.Security",
+      "Web.Application",
+      "Web.Server",
+      "Web.Static",
+      "Web.TLS",
+      "Web.WebSocket",
+      "Web.Assets",
+      "Web.Assets.Clients");
    package Compiler is
       for Default_Switches ("Ada") use
-        ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");
+        Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");
    end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-Es"); --  Symbolic traceback
+   end Binder;
 
    --  Web.TLS binds libssl/libcrypto directly; declare the link so every
    --  executable that links this library (tests, example app, CLI) resolves

@@ -1,5 +1,4 @@
 with Ada.Strings.Fixed;
-with Ada.Strings.Unbounded;
 
 package body Web.Html is
    use Ada.Strings.Unbounded;

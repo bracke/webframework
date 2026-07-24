@@ -1,9 +1,6 @@
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with App.Auth;
-with App.State;
-with Web.Events;
-with Web.Patch;
 
 package body App.Auth_Handlers is
    use Ada.Strings.Fixed;
@@ -22,7 +19,7 @@ package body App.Auth_Handlers is
    begin
       --  Authenticate user
       Authenticate (Username, Password, User_Id, Result);
-      
+
       if Result = Success then
          --  Set authentication in state
          App.State.Set_Authenticated (State, User_Id, Username);

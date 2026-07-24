@@ -66,4 +66,25 @@ package App.Pages is
    --  @return Redirect response.
    function Redirect_To_Login
      (Request : Web.Request.Request_Type; Session_Id : String) return Web.Response.Response_Type;
+
+   --  Render the projects page.
+   --  @param Request HTTP request.
+   --  @return HTTP response with projects table.
+   function Projects (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
+   --  Render the todo page.
+   --  @param Request HTTP request.
+   --  @return HTTP response with todo list.
+   function Todo (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
+   --  API endpoint to add a new project
+   --  @param Request HTTP request with project data in form format
+   --  @return HTTP response with status
+   function Api_Add_Project (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
+   --  API endpoint to delete a project
+   --  @param Request HTTP request with project id
+   --  @return HTTP response with status
+   function Api_Delete_Project (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
 end App.Pages;

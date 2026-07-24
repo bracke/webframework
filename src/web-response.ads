@@ -66,6 +66,15 @@ package Web.Response is
    --  @return Unauthorized response.
    function Unauthorized (Message : String) return Response_Type;
 
+   --  Create a 403 response.
+   --  @return Forbidden response.
+   function Forbidden return Response_Type;
+
+   --  Create a 403 response with a message.
+   --  @param Message Error message.
+   --  @return Forbidden response.
+   function Forbidden (Message : String) return Response_Type;
+
    --  Create a 406 response.
    --  @return Not acceptable response.
    function Not_Acceptable return Response_Type;

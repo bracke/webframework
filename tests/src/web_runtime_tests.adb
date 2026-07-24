@@ -180,7 +180,7 @@ package body Web_Runtime_Tests is
       Write_Harness (Harness);
       declare
          Args : GNAT.OS_Lib.Argument_List :=
-           (1 => new String'(Harness));
+           [1 => new String'(Harness)];
       begin
          GNAT.OS_Lib.Spawn (Node_Path.all, Args, Success);
          GNAT.OS_Lib.Free (Args (1));
