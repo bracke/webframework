@@ -9,7 +9,7 @@ licenses = "MIT"
 website = "https://github.com/bracke/webframework"
 tags = ["webframework", "example", "server-driven"]
 
-executables = ["example_app"]
+executables = ["example_app", "app_tests"]
 
 [[depends-on]]
 gnat_native = "=15.2.1"
