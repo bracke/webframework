@@ -1,5 +1,6 @@
 with Web.Request;
 with Web.Response;
+with Web.Context;
 
 --  Page rendering API for HTTP routes in the example application.
 package App.Pages is
@@ -67,10 +68,15 @@ package App.Pages is
    function Redirect_To_Login
      (Request : Web.Request.Request_Type; Session_Id : String) return Web.Response.Response_Type;
 
-   --  Render the projects page.
+   --  Render the projects page. Guard-protected: the route guards decide access
+   --  before this runs, so it renders unconditionally and reads the principal
+   --  from the request context.
    --  @param Request HTTP request.
+   --  @param Context Request context populated by the guards.
    --  @return HTTP response with projects table.
-   function Projects (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+   function Projects
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
 
    --  Render the todo page.
    --  @param Request HTTP request.

@@ -9,6 +9,8 @@ with Terminal_Styles;
 with Web.Assets.Clients;
 with App.Auth;
 with App.Auth_Handlers;
+with App.Authz;
+with App.Guards;
 with App.Projects;
 with App.Counter;
 with App.Database;
@@ -334,8 +336,10 @@ begin
    Apply_Logging (Settings);
    --  Initialize persistence before accepting connections.
    App.Database.Initialize;
-   --  Initialize authentication system (creates users table and admin user).
+   --  Initialize authentication (hashes the seeded password via identity).
    App.Auth.Initialize;
+   --  Build the authorization registry and policy set.
+   App.Authz.Initialize;
    --  Initialize asset versions for cache busting.
    --  Check for example_app/static first, then fall back to static
    if Ada.Directories.Exists ("example_app/static") then
@@ -356,10 +360,16 @@ begin
    App.Runtime.Register_Error_Handler (404, App.Pages.Error_Not_Found'Access);
    App.Runtime.Register_Error_Handler (400, App.Pages.Error_Bad_Request'Access);
    App.Runtime.Register_Error_Handler (500, App.Pages.Error_Server'Access);
+   --  Resolve the request principal once, before every route, so guards and
+   --  handlers can read it from the request context.
+   App.Runtime.Use_Guard (App.Guards.Resolve_Principal'Access);
    --  HTTP + websocket + static route wiring.
    App.Runtime.Get ("/", App.Pages.Home'Access);
    App.Runtime.Get ("/login", App.Pages.Login'Access);
-   App.Runtime.Get ("/projects", App.Pages.Projects'Access);
+   --  /projects is guard-protected: Resolve_Principal (global) then the
+   --  authorization guard decide access before App.Pages.Projects renders.
+   App.Runtime.Get
+     ("/projects", App.Pages.Projects'Access, App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/todo", App.Pages.Todo'Access);
    App.Runtime.Post ("/api/login", App.Pages.Api_Login'Access);
    App.Runtime.Post ("/api/logout", App.Pages.Api_Logout'Access);

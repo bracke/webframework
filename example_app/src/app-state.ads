@@ -1,32 +1,35 @@
---  Session-scoped state for the generated example application.
---  Keep this state minimal because it is held in memory for each websocket session.
+--  Session-scoped state for the example application.
+--  Keep this state minimal because it is held in memory for each session.
+with Ada.Strings.Unbounded;
+
 package App.State is
-   --  Counter and user id are intentionally tiny and per-session.
-   --  Any durable data is kept in the separate Database layer.
+   --  The principal is the authorization principal id established at login; an
+   --  empty principal means the session is anonymous. It is an opaque reference
+   --  the app carries -- the framework never sees it.
    type App_State is record
-      Counter : Natural := 0;
-      User_Id : Natural := 0;  --  0 means not authenticated
-      Username : String (1 .. 50) := [others => ' '];
-      Is_Authenticated : Boolean := False;
+      Counter   : Natural := 0;
+      Principal : Ada.Strings.Unbounded.Unbounded_String;
+      Username  : Ada.Strings.Unbounded.Unbounded_String;
    end record;
 
    --  Create initial per-session UI state.
    --  @return Initial app state.
    function Initial_State return App_State;
 
-   --  Set authentication information for a session.
+   --  Record a successful authentication.
    --  @param State Session state to update.
-   --  @param User_Id The user's ID.
-   --  @param Username The user's username.
+   --  @param Principal The authorization principal id.
+   --  @param Username The user's display name.
    --  @return No return value.
-   procedure Set_Authenticated (State : in out App_State; User_Id : Natural; Username : String);
+   procedure Set_Authenticated
+     (State : in out App_State; Principal : String; Username : String);
 
    --  Clear authentication information for a session.
    --  @param State Session state to update.
    --  @return No return value.
    procedure Clear_Authentication (State : in out App_State);
 
-   --  Check if a session is authenticated.
+   --  Check if a session is authenticated (carries a principal).
    --  @param State Session state.
    --  @return True if authenticated.
    function Is_Authenticated (State : App_State) return Boolean;
@@ -36,8 +39,8 @@ package App.State is
    --  @return Username or empty string if not authenticated.
    function Get_Username (State : App_State) return String;
 
-   --  Get the user ID from a session state.
+   --  Get the authorization principal id from a session state.
    --  @param State Session state.
-   --  @return User ID or 0 if not authenticated.
-   function Get_User_Id (State : App_State) return Natural;
+   --  @return Principal id or empty string if not authenticated.
+   function Get_Principal (State : App_State) return String;
 end App.State;

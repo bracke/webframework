@@ -70,8 +70,8 @@ package body App.Pages is
 
    --  Type to hold authentication data for state updates
    type Auth_Data is record
-      User_Id : Natural;
-      Username : String (1 .. 50) := [others => ' '];
+      Principal : Unbounded_String;
+      Username  : Unbounded_String;
    end record;
 
    --  Global variable to pass auth data to state processor
@@ -207,7 +207,9 @@ package body App.Pages is
    --  State process for setting authentication
    procedure Set_Auth_Process (State : in out App.State.App_State) is
    begin
-      App.State.Set_Authenticated (State, Current_Auth_Data.User_Id, Current_Auth_Data.Username);
+      App.State.Set_Authenticated
+        (State, To_String (Current_Auth_Data.Principal),
+         To_String (Current_Auth_Data.Username));
    end Set_Auth_Process;
 
    --  State process for clearing authentication
@@ -278,14 +280,10 @@ package body App.Pages is
 
    --  Handle login API endpoint.
    function Api_Login (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
-      use App.Auth;
       Body_Content : constant String := Web.Request.Request_Body (Request);
       Username : Unbounded_String;
       Password : Unbounded_String;
-      User_Id : Natural;
-      Result : Auth_Result;
       Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
-      Username_Str : String (1 .. 50) := (others => ' ');
    begin
       --  Parse username and password from form data
       Parse_Form_Data (Body_Content, Username, Password);
@@ -294,28 +292,33 @@ package body App.Pages is
          return Web.Response.Bad_Request ("Username and password are required");
       end if;
 
-      --  Authenticate user
-      Authenticate (To_String (Username), To_String (Password), User_Id, Result);
-
-      if Result = Success then
-         --  Set authentication in session state
-         --  Copy username to fixed-length string
-         declare
-            Source : constant String := To_String (Username);
-            Length : constant Natural := Source'Length;
-         begin
-            if Length <= Username_Str'Length then
-               Username_Str (1 .. Length) := Source;
-            end if;
-            Current_Auth_Data := Auth_Data'(User_Id => User_Id, Username => Username_Str);
-            App.Runtime.With_State (Session_Id, Set_Auth_Process'Access);
-            --  Return success with session cookie
-            return App.Runtime.Html_Response (Session_Id, "{""status"": ""success""}");
-         end;
-      else
-         --  Authentication failed
-         return Web.Response.Create (401, "Invalid username or password", "text/plain; charset=utf-8");
-      end if;
+      --  Authenticate through the identity-backed credential store, which
+      --  returns the caller's authorization principal id on success.
+      declare
+         Principal : constant String :=
+           App.Auth.Authenticate (To_String (Username), To_String (Password));
+      begin
+         if Principal /= "" then
+            --  Rotate the session id on this privilege change to defeat session
+            --  fixation, then record the principal in the rotated session.
+            declare
+               Rotated : constant String :=
+                 App.Runtime.Regenerate_Session (Session_Id);
+               Effective : constant String :=
+                 (if Rotated /= "" then Rotated else Session_Id);
+            begin
+               Current_Auth_Data :=
+                 Auth_Data'(Principal => To_Unbounded_String (Principal),
+                            Username  => Username);
+               App.Runtime.With_State (Effective, Set_Auth_Process'Access);
+               return App.Runtime.Html_Response
+                 (Effective, "{""status"": ""success""}");
+            end;
+         else
+            return Web.Response.Create
+              (401, "Invalid username or password", "text/plain; charset=utf-8");
+         end if;
+      end;
       exception
          when Error : others =>
             Web.Logging.Error
@@ -328,8 +331,10 @@ package body App.Pages is
       Session_Id : constant String := App.Runtime.Require_Session (Request);
    begin
       if Session_Id'Length > 0 then
-         --  Clear authentication from session state
+         --  Clear the auth fields, then invalidate the whole session so the id
+         --  can never be replayed after logout.
          App.Runtime.With_State (Session_Id, Clear_Auth_Process'Access);
+         App.Runtime.Invalidate_Session (Session_Id);
       end if;
 
       --  Return success response
@@ -355,23 +360,22 @@ package body App.Pages is
          & "<body><p>Please <a href=""/login"">login</a>.</p></body></html>");
    end Redirect_To_Login;
 
-   function Projects (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+   function Projects
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use Standard.Templates.Values;
-      Context : Value := Object;
+      --  Access is already decided by the route guards (Resolve_Principal then
+      --  Require_App_Access); an unauthenticated or unauthorized caller never
+      --  reaches this handler, so the manual session check is gone. The
+      --  authenticated principal is available via Web.Context.Principal.
+      pragma Unreferenced (Context);
+      View : Value := Object;
       Page : Unbounded_String;
       Projects_Data : App.Projects.Project_Vectors.Vector;
-      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
-      Is_Authenticated_Result := False;
-      App.Runtime.With_State (Session_Id, Check_Auth_Process'Access);
-
-      if not Is_Authenticated_Result then
-         return Redirect_To_Login (Request, Session_Id);
-      end if;
-
       Projects_Data := App.Projects.Get_Projects;
-      Set (Context, "title", String_Item ("Projects - Ada Webframework Example"));
-      Page := To_Unbounded_String (App.Templates.Render ("layout.html", Context));
+      Set (View, "title", String_Item ("Projects - Ada Webframework Example"));
+      Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
       declare

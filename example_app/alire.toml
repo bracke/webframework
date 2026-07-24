@@ -21,6 +21,24 @@ webframework = "*"
 webframework = { path = ".." }
 
 [[depends-on]]
+identity = "*"
+
+[[pins]]
+identity = { path = "../../identity" }
+
+[[depends-on]]
+authorization = "*"
+
+[[pins]]
+authorization = { path = "../../authorization" }
+
+[[depends-on]]
+webframework_authorization = "*"
+
+[[pins]]
+webframework_authorization = { path = "../../webframework_authorization" }
+
+[[depends-on]]
 terminal_styles = "*"
 
 [[pins]]
