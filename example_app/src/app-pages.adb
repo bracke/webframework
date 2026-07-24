@@ -74,6 +74,7 @@ package body App.Pages is
       Principal : Unbounded_String;
       Username  : Unbounded_String;
       Clearance : Natural := 0;
+      Token     : Unbounded_String;
    end record;
 
    --  Global variable to pass auth data to state processor
@@ -196,7 +197,8 @@ package body App.Pages is
    begin
       App.State.Set_Authenticated
         (State, To_String (Current_Auth_Data.Principal),
-         To_String (Current_Auth_Data.Username), Current_Auth_Data.Clearance);
+         To_String (Current_Auth_Data.Username), Current_Auth_Data.Clearance,
+         To_String (Current_Auth_Data.Token));
    end Set_Auth_Process;
 
    --  State process for clearing authentication
@@ -204,6 +206,13 @@ package body App.Pages is
    begin
       App.State.Clear_Authentication (State);
    end Clear_Auth_Process;
+
+   --  Extraction channel for reading the session token out of state at logout.
+   Logout_Token : Unbounded_String;
+   procedure Read_Token_Process (State : in out App.State.App_State) is
+   begin
+      Logout_Token := To_Unbounded_String (App.State.Get_Session_Token (State));
+   end Read_Token_Process;
 
    --  Parse form data from request content (application/x-www-form-urlencoded)
    procedure Parse_Form_Data
@@ -293,11 +302,15 @@ package body App.Pages is
                  App.Runtime.Regenerate_Session (Session_Id);
                Effective : constant String :=
                  (if Rotated /= "" then Rotated else Session_Id);
+               --  Open an identity session; its token is validated against the
+               --  identity repository on every subsequent request.
+               Token : constant String := App.Auth.Create_Session (Principal);
             begin
                Current_Auth_Data :=
                  Auth_Data'(Principal => To_Unbounded_String (Principal),
                             Username  => Username,
-                            Clearance => App.Auth.Clearance_Of (Principal));
+                            Clearance => App.Auth.Clearance_Of (Principal),
+                            Token     => To_Unbounded_String (Token));
                App.Runtime.With_State (Effective, Set_Auth_Process'Access);
                return App.Runtime.Html_Response
                  (Effective, "{""status"": ""success""}");
@@ -319,8 +332,13 @@ package body App.Pages is
       Session_Id : constant String := App.Runtime.Require_Session (Request);
    begin
       if Session_Id'Length > 0 then
-         --  Clear the auth fields, then invalidate the whole session so the id
-         --  can never be replayed after logout.
+         --  Revoke the identity session (so its token can never be replayed),
+         --  clear the auth fields, then invalidate the framework session.
+         Logout_Token := Null_Unbounded_String;
+         App.Runtime.With_State (Session_Id, Read_Token_Process'Access);
+         if Length (Logout_Token) > 0 then
+            App.Auth.Revoke_Session (To_String (Logout_Token));
+         end if;
          App.Runtime.With_State (Session_Id, Clear_Auth_Process'Access);
          App.Runtime.Invalidate_Session (Session_Id);
       end if;

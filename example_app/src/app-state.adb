@@ -7,25 +7,29 @@ package body App.State is
    function Initial_State return App_State is
    begin
       return (Counter => 0, Principal => Null_Unbounded_String,
-              Username => Null_Unbounded_String, Clearance => 0);
+              Username => Null_Unbounded_String, Clearance => 0,
+              Session_Token => Null_Unbounded_String);
    end Initial_State;
 
    procedure Set_Authenticated
      (State     : in out App_State;
       Principal : String;
       Username  : String;
-      Clearance : Natural) is
+      Clearance : Natural;
+      Token     : String) is
    begin
-      State.Principal := To_Unbounded_String (Principal);
-      State.Username  := To_Unbounded_String (Username);
-      State.Clearance := Clearance;
+      State.Principal     := To_Unbounded_String (Principal);
+      State.Username      := To_Unbounded_String (Username);
+      State.Clearance     := Clearance;
+      State.Session_Token := To_Unbounded_String (Token);
    end Set_Authenticated;
 
    procedure Clear_Authentication (State : in out App_State) is
    begin
-      State.Principal := Null_Unbounded_String;
-      State.Username  := Null_Unbounded_String;
-      State.Clearance := 0;
+      State.Principal     := Null_Unbounded_String;
+      State.Username      := Null_Unbounded_String;
+      State.Clearance     := 0;
+      State.Session_Token := Null_Unbounded_String;
    end Clear_Authentication;
 
    function Is_Authenticated (State : App_State) return Boolean is
@@ -47,5 +51,10 @@ package body App.State is
    begin
       return State.Clearance;
    end Get_Clearance;
+
+   function Get_Session_Token (State : App_State) return String is
+   begin
+      return To_String (State.Session_Token);
+   end Get_Session_Token;
 
 end App.State;

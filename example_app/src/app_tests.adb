@@ -70,6 +70,22 @@ begin
    Check (App.Auth.Authenticate ("ghost", "x") = "",
           "auth: an unknown user fails closed");
 
+   --  Identity sessions: create, validate on every request, revoke.
+   declare
+      Token : constant String := App.Auth.Create_Session ("d.principal.admin");
+   begin
+      Check (Token /= "", "session: created for a valid principal");
+      Check (App.Auth.Validate_Session (Token) = "d.principal.admin",
+             "session: a live token validates to its principal");
+      App.Auth.Revoke_Session (Token);
+      Check (App.Auth.Validate_Session (Token) = "",
+             "session: a revoked token no longer validates");
+      Check (App.Auth.Validate_Session ("garbage") = "",
+             "session: a malformed token is rejected");
+      Check (App.Auth.Create_Session ("d.principal.ghost") = "",
+             "session: no session for an unknown principal");
+   end;
+
    --  Role-based authorization.
    App.Authz.Initialize;
    Check (Allowed ("d.principal.admin", View_Req),

@@ -7,10 +7,13 @@ package App.State is
    --  empty principal means the session is anonymous. It is an opaque reference
    --  the app carries -- the framework never sees it.
    type App_State is record
-      Counter   : Natural := 0;
-      Principal : Ada.Strings.Unbounded.Unbounded_String;
-      Username  : Ada.Strings.Unbounded.Unbounded_String;
-      Clearance : Natural := 0;  --  the principal's role, resolved at login
+      Counter       : Natural := 0;
+      Principal     : Ada.Strings.Unbounded.Unbounded_String;
+      Username      : Ada.Strings.Unbounded.Unbounded_String;
+      Clearance     : Natural := 0;  --  the principal's role, resolved at login
+      Session_Token : Ada.Strings.Unbounded.Unbounded_String;
+      --  Opaque identity-session token, validated against the identity
+      --  repository on every request (revocation/expiry take effect at once).
    end record;
 
    --  Create initial per-session UI state.
@@ -22,12 +25,14 @@ package App.State is
    --  @param Principal The authorization principal id.
    --  @param Username The user's display name.
    --  @param Clearance The principal's clearance (role).
+   --  @param Token The identity-session token.
    --  @return No return value.
    procedure Set_Authenticated
      (State     : in out App_State;
       Principal : String;
       Username  : String;
-      Clearance : Natural);
+      Clearance : Natural;
+      Token     : String);
 
    --  Clear authentication information for a session.
    --  @param State Session state to update.
@@ -53,4 +58,9 @@ package App.State is
    --  @param State Session state.
    --  @return Clearance, or 0 if not authenticated.
    function Get_Clearance (State : App_State) return Natural;
+
+   --  Get the identity-session token from a session state.
+   --  @param State Session state.
+   --  @return Token, or empty string if not authenticated.
+   function Get_Session_Token (State : App_State) return String;
 end App.State;

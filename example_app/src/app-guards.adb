@@ -3,6 +3,7 @@ with Web.Response;
 with Webframework_Authorization;
 with App.Runtime;
 with App.State;
+with App.Auth;
 with App.Authz;
 
 package body App.Guards is
@@ -37,11 +38,13 @@ package body App.Guards is
    --  value-returning session query instead.
    Resolved_Principal : Unbounded_String;
    Resolved_Clearance : Natural := 0;
+   Resolved_Token     : Unbounded_String;
 
    procedure Read_Principal (State : in out App.State.App_State) is
    begin
       Resolved_Principal := To_Unbounded_String (App.State.Get_Principal (State));
       Resolved_Clearance := App.State.Get_Clearance (State);
+      Resolved_Token := To_Unbounded_String (App.State.Get_Session_Token (State));
    end Read_Principal;
 
    function Resolve_Principal
@@ -54,8 +57,16 @@ package body App.Guards is
          Web.Context.Set_Session (Context, Session_Id);
          Resolved_Principal := Null_Unbounded_String;
          Resolved_Clearance := 0;
+         Resolved_Token := Null_Unbounded_String;
          App.Runtime.With_State (Session_Id, Read_Principal'Access);
-         if Length (Resolved_Principal) > 0 then
+         --  The stored principal is trusted only while its identity session is
+         --  still live: validate the token against the identity repository on
+         --  every request, so a revoked or expired session is anonymous at once.
+         if Length (Resolved_Principal) > 0
+           and then Length (Resolved_Token) > 0
+           and then App.Auth.Validate_Session (To_String (Resolved_Token))
+                      = To_String (Resolved_Principal)
+         then
             Web.Context.Set_Principal (Context, To_String (Resolved_Principal));
             --  Carry the role as a derived fact; the authorization guard reads
             --  it from the context rather than mapping principals to roles.

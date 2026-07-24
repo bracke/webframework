@@ -14,9 +14,11 @@ package body App.Auth_Handlers is
       Principal : constant String := App.Auth.Authenticate (Username, Password);
    begin
       if Principal /= "" then
-         --  Authenticated: record the principal and its clearance in state.
+         --  Authenticated: open an identity session and record the principal,
+         --  clearance and session token in state.
          App.State.Set_Authenticated
-           (State, Principal, Username, App.Auth.Clearance_Of (Principal));
+           (State, Principal, Username, App.Auth.Clearance_Of (Principal),
+            App.Auth.Create_Session (Principal));
          return Patch_List'(Items => <>);
       else
          return Web.Patch.Single

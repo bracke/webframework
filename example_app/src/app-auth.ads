@@ -29,4 +29,25 @@ package App.Auth is
    --  @return Clearance value, or 0 for an unknown principal.
    function Clearance_Of (Principal : String) return Natural;
 
+   --  Create an identity session for the just-authenticated principal and
+   --  return an opaque token (public reference + bearer secret) to keep in the
+   --  framework session. The identity repository is the source of truth for the
+   --  session's validity (idle/absolute expiry, revocation).
+   --  @param Principal Authorization principal id.
+   --  @return Opaque session token, or an empty string on failure.
+   function Create_Session (Principal : String) return String;
+
+   --  Validate a session token against the identity repository. Returns the
+   --  authorization principal of the session when it is live, or an empty
+   --  string when the token is malformed, expired, or revoked. Called on every
+   --  request, so revocation and expiry take effect immediately.
+   --  @param Token Opaque session token.
+   --  @return Authorization principal id, or an empty string.
+   function Validate_Session (Token : String) return String;
+
+   --  Revoke a session token (logout); its id can never be replayed.
+   --  @param Token Opaque session token.
+   --  @return No return value.
+   procedure Revoke_Session (Token : String);
+
 end App.Auth;
