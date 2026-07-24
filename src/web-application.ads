@@ -214,6 +214,14 @@ package Web.Application is
    --  @return No return value.
    procedure WebSocket (Path : String; Handler : WebSocket_Handler_Access);
 
+   --  Guard a websocket route: global guards and this guard run before the
+   --  upgrade, and a halting guard rejects the handshake. Register the route
+   --  with WebSocket first, then guard it here.
+   --  @param Path Exact websocket path.
+   --  @param Guard Guard to install; must not be null.
+   --  @return No return value.
+   procedure Guard_WebSocket (Path : String; Guard : Web.Guard.Guard_Access);
+
    --  Register static assets through the façade for reduced import set.
    --  @param Url_Prefix URL path prefix.
    --  @param Directory File system directory.

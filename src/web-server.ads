@@ -70,6 +70,15 @@ package Web.Server is
    --  @return No return value.
    procedure WebSocket (Path : String; Handler : WebSocket_Handler);
 
+   --  Attach a guard to a WebSocket route. Global guards and these guards run
+   --  before the upgrade handshake; a halting guard rejects the upgrade with
+   --  its response instead of opening the channel. Register the route with
+   --  WebSocket first, then guard it here.
+   --  @param Path Exact WebSocket route path.
+   --  @param Guard Guard to install; must not be null.
+   --  @return No return value.
+   procedure Guard_WebSocket (Path : String; Guard : Web.Guard.Guard_Access);
+
    --  Register a custom error response handler.
    --  @param Status HTTP status code in the range 100 .. 599.
    --  @param Handler Error response handler.

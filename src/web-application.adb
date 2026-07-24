@@ -134,6 +134,11 @@ package body Web.Application is
       Web.Server.WebSocket (Path, Handler);
    end WebSocket;
 
+   procedure Guard_WebSocket (Path : String; Guard : Web.Guard.Guard_Access) is
+   begin
+      Web.Server.Guard_WebSocket (Path, Guard);
+   end Guard_WebSocket;
+
    procedure Static (Url_Prefix : String; Directory : String) is
    begin
       Web.Server.Static (Url_Prefix, Directory);

@@ -80,8 +80,16 @@ package body Web.Server is
    Sockets : Socket_Maps.Map;
    Static_Prefix_Text : Unbounded_String;
    Static_Dir_Text : Unbounded_String;
+   package Socket_Guard_Maps is new Ada.Containers.Indefinite_Hashed_Maps
+     (Key_Type        => String,
+      Element_Type    => Guard_Vectors.Vector,
+      Hash            => Ada.Strings.Hash,
+      Equivalent_Keys => "=",
+      "="             => Guard_Vectors."=");
+
    Global_Guards : Guard_Vectors.Vector;
    Guarded_Routes : Guarded_Route_Maps.Map;
+   Socket_Guards : Socket_Guard_Maps.Map;
 
    protected Error_Pages is
       procedure Register (Status : Positive; Handler : Error_Handler);
@@ -1259,6 +1267,31 @@ package body Web.Server is
       end if;
    end WebSocket;
 
+   procedure Guard_WebSocket (Path : String; Guard : Web.Guard.Guard_Access) is
+      Position : Socket_Guard_Maps.Cursor;
+   begin
+      if Guard = null then
+         raise Web.Errors.Security_Error with "guard is null";
+      end if;
+
+      Position := Socket_Guards.Find (Path);
+      if Socket_Guard_Maps.Has_Element (Position) then
+         declare
+            Guards : Guard_Vectors.Vector := Socket_Guard_Maps.Element (Position);
+         begin
+            Guards.Append (Guard);
+            Socket_Guards.Replace_Element (Position, Guards);
+         end;
+      else
+         declare
+            Guards : Guard_Vectors.Vector;
+         begin
+            Guards.Append (Guard);
+            Socket_Guards.Insert (Path, Guards);
+         end;
+      end if;
+   end Guard_WebSocket;
+
    procedure Register_Error_Handler (Status : Positive; Handler : Error_Handler) is
    begin
       Error_Pages.Register (Status, Handler);
@@ -1585,6 +1618,44 @@ package body Web.Server is
       return True;
    end Static_Prefix_Matches;
 
+   --  Run the global guards followed by Route's guards against Request. On the
+   --  first guard that halts, Halted is set and Response carries its response;
+   --  otherwise Halted is False. Shared by HTTP dispatch and the WebSocket
+   --  upgrade path so both are gated the same way. A guard that raises
+   --  propagates to the caller, which fails the request closed.
+   procedure Apply_Guards
+     (Request  : Web.Request.Request_Type;
+      Context  : in out Web.Context.Request_Context;
+      Route    : Guard_Vectors.Vector;
+      Halted   : out Boolean;
+      Response : out Web.Response.Response_Type)
+   is
+      procedure Run (Guards : Guard_Vectors.Vector) is
+      begin
+         if Halted then
+            return;
+         end if;
+
+         for Guard of Guards loop
+            declare
+               Outcome : constant Web.Guard.Guard_Outcome :=
+                 Guard (Request, Context);
+            begin
+               if Outcome.Decision = Web.Guard.Halt then
+                  Response := Outcome.Response;
+                  Halted := True;
+                  return;
+               end if;
+            end;
+         end loop;
+      end Run;
+   begin
+      Halted := False;
+      Response := Web.Response.Not_Found;  --  placeholder; only read when Halted
+      Run (Global_Guards);
+      Run (Route);
+   end Apply_Guards;
+
    function Dispatch (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
       Method : constant String := Web.Request.Method (Request);
       Path : constant String := Web.Request.Path (Request);
@@ -1592,35 +1663,10 @@ package body Web.Server is
       Ctx : Web.Context.Request_Context := Web.Context.New_Context;
       Halted : Boolean := False;
       Halt_Response : Web.Response.Response_Type;
-
-      --  Run a guard chain in order. On the first guard that halts, capture its
-      --  response and stop; the caller then returns that response instead of
-      --  invoking the handler. A guard that raises propagates to the outer
-      --  handler below, which fails the request closed rather than open.
-      procedure Run_Guards (Guards : Guard_Vectors.Vector) is
-      begin
-         for Guard of Guards loop
-            declare
-               Outcome : constant Web.Guard.Guard_Outcome := Guard (Request, Ctx);
-            begin
-               if Outcome.Decision = Web.Guard.Halt then
-                  Halt_Response := Outcome.Response;
-                  Halted := True;
-                  return;
-               end if;
-            end;
-         end loop;
-      end Run_Guards;
    begin
       --  Only allow GET and POST methods
       if Method /= "GET" and then Method /= "POST" then
          return Build_Error_Response (Request, 405, "method not allowed");
-      end if;
-
-      --  Global guards run before any route match.
-      Run_Guards (Global_Guards);
-      if Halted then
-         return Halt_Response;
       end if;
 
       --  Context-aware (optionally guarded) routes take precedence.
@@ -1631,7 +1677,8 @@ package body Web.Server is
             declare
                Route : constant Guarded_Route := Guarded_Route_Maps.Element (Cursor);
             begin
-               Run_Guards (Route.Guards);
+               --  Global guards then the route's own guards.
+               Apply_Guards (Request, Ctx, Route.Guards, Halted, Halt_Response);
                if Halted then
                   return Halt_Response;
                end if;
@@ -1640,6 +1687,12 @@ package body Web.Server is
             end;
          end if;
       end;
+
+      --  Plain routes still run the global guards.
+      Apply_Guards (Request, Ctx, Guard_Vectors.Empty_Vector, Halted, Halt_Response);
+      if Halted then
+         return Halt_Response;
+      end if;
 
       declare
          Cursor : constant Route_Maps.Cursor := Routes.Find (Route_Key);
@@ -2092,9 +2145,31 @@ package body Web.Server is
                Cursor : constant Socket_Maps.Cursor := Sockets.Find (To_String (Path));
             begin
                if Socket_Maps.Has_Element (Cursor) then
-                  Request_Status := 101;
-                  Web.Connection.Send_All (Conn, WebSocket_Handshake (Request));
-                  Socket_Maps.Element (Cursor) (Conn, Request);
+                  --  Gate the upgrade through the same guards as HTTP routes: a
+                  --  halting guard rejects the handshake with its response
+                  --  instead of upgrading, so the live channel is not opened
+                  --  for a caller the guards refuse.
+                  declare
+                     Ctx : Web.Context.Request_Context := Web.Context.New_Context;
+                     Halted : Boolean;
+                     Halt_Response : Web.Response.Response_Type;
+                     WS_Guards : Guard_Vectors.Vector;
+                     Guard_Cursor : constant Socket_Guard_Maps.Cursor :=
+                       Socket_Guards.Find (To_String (Path));
+                  begin
+                     if Socket_Guard_Maps.Has_Element (Guard_Cursor) then
+                        WS_Guards := Socket_Guard_Maps.Element (Guard_Cursor);
+                     end if;
+                     Apply_Guards (Request, Ctx, WS_Guards, Halted, Halt_Response);
+                     if Halted then
+                        Request_Status := Web.Response.Status (Halt_Response);
+                        Send_Response (Conn, Request, Halt_Response);
+                     else
+                        Request_Status := 101;
+                        Web.Connection.Send_All (Conn, WebSocket_Handshake (Request));
+                        Socket_Maps.Element (Cursor) (Conn, Request);
+                     end if;
+                  end;
                else
                   declare
                      Response : constant Web.Response.Response_Type :=
