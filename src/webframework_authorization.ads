@@ -30,14 +30,17 @@ package Webframework_Authorization is
    --  reads the principal the upstream resolved into the context: when the
    --  context is anonymous it halts with Anonymous without consulting the
    --  policy, otherwise it asks Decide for a decision and maps it fail-closed
-   --  with Denied. Instantiate once per protected resource and register the
-   --  instance's 'Access as a Web.Guard.Guard_Access.
+   --  with Denied. Decide also receives the context, so it can read derived
+   --  facts an upstream guard attached (a role, tenant, or assurance) rather
+   --  than re-deriving them from the principal. Instantiate once per protected
+   --  resource and register the instance's 'Access as a Web.Guard.Guard_Access.
    generic
       Denied    : Web.Response.Response_Type;
       Anonymous : Web.Response.Response_Type;
       with function Decide
         (Principal : String;
-         Request   : Web.Request.Request_Type) return Ev.Decision;
+         Request   : Web.Request.Request_Type;
+         Context   : Web.Context.Request_Context) return Ev.Decision;
    function Guarded
      (Request : Web.Request.Request_Type;
       Context : in out Web.Context.Request_Context)

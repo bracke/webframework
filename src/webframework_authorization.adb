@@ -33,7 +33,7 @@ package body Webframework_Authorization is
       end if;
 
       return Outcome_Of
-        (Decide (Web.Context.Principal (Context), Request), Denied);
+        (Decide (Web.Context.Principal (Context), Request, Context), Denied);
    end Guarded;
 
 end Webframework_Authorization;
