@@ -386,24 +386,15 @@ package body App.Pages is
          return Web.Response.Forbidden;
       end if;
 
-      --  Enforce the authorization data scope on the rows themselves: acting as
-      --  the backend adapter, drop rows outside the scope the plan carries. A
-      --  production adapter pushes this into the SQL query instead of post-fetch.
-      declare
-         All_Projects : constant App.Projects.Project_Vectors.Vector :=
-           App.Projects.Get_Projects;
-      begin
-         Total_Rows := Natural (All_Projects.Length);
-         if Plan.Restrict_To_Alire then
-            for Item of All_Projects loop
-               if Item.Has_Alire then
-                  Projects_Data.Append (Item);
-               end if;
-            end loop;
-         else
-            Projects_Data := All_Projects;
-         end if;
-      end;
+      --  Enforce the authorization data scope in the query itself (the backend
+      --  adapter role): the displayed rows come straight from a scoped query, so
+      --  out-of-scope rows are never fetched. The unscoped total is read only to
+      --  report how many rows the scope excludes.
+      Projects_Data := App.Projects.Get_Projects (Alire_Only => Plan.Restrict_To_Alire);
+      Total_Rows :=
+        (if Plan.Restrict_To_Alire
+         then Natural (App.Projects.Get_Projects.Length)
+         else Natural (Projects_Data.Length));
 
       Set (View, "title", String_Item ("Projects - Ada Webframework Example"));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));

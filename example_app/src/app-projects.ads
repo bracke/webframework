@@ -34,8 +34,13 @@ package App.Projects is
       Has_GitHub      : Boolean;
       Has_Alire       : Boolean);
 
-   --  Get all projects from the database
-   function Get_Projects return Project_Vectors.Vector;
+   --  Get projects from the database. When Alire_Only, the authorization data
+   --  scope is pushed into the query: only Alire-tracked projects are returned,
+   --  so out-of-scope rows are never fetched (rather than filtered afterwards).
+   --  @param Alire_Only Restrict the query to Alire-tracked projects.
+   --  @return The matching project records.
+   function Get_Projects
+     (Alire_Only : Boolean := False) return Project_Vectors.Vector;
 
    --  Delete a project from the database
    procedure Delete_Project (Id : Natural);

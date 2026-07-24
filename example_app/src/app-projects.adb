@@ -479,19 +479,31 @@ package body App.Projects is
    end To_Project_Record;
 
    --  Get all projects from the database
-   function Get_Projects return Project_Vectors.Vector is
+   function Get_Projects
+     (Alire_Only : Boolean := False) return Project_Vectors.Vector
+   is
       Result_Items : Project_Vectors.Vector;
 
       procedure Read_Projects (DB : in out Standard.Database.Handle) is
          Tx      : Standard.Database.Transactions.Transaction;
          Result  : Standard.Database.Status.Result;
          Cursor  : Project_Tables.Cursor;
+
+         --  Push the authorization data scope into the query: when scoped, the
+         --  database returns only Alire-tracked projects (has_alire stored as
+         --  1), so out-of-scope rows never leave the database.
+         Filter : constant Standard.Database.Predicates.Predicate :=
+           (if Alire_Only then
+              Standard.Database.Predicates.Column_Equals
+                (Standard.Database.Schema.Find_Column_Position
+                   (Schema, "has_alire"),
+                 Standard.Database.Values.From_Integer (1))
+            else Standard.Database.Predicates.True_Predicate);
       begin
          Ensure_Registered (DB);
          Standard.Database.Transactions.Begin_Read (DB, Tx);
 
-         Result := Project_Tables.Scan
-           (Tx, DB, Schema, Standard.Database.Predicates.True_Predicate, Cursor);
+         Result := Project_Tables.Scan (Tx, DB, Schema, Filter, Cursor);
          Raise_On_Error (Result, "projects scan failed");
 
          while Project_Tables.Has_Element (Cursor) loop
@@ -501,8 +513,7 @@ package body App.Projects is
                Result_Items.Append (To_Project_Record (Item));
             end;
 
-            Result := Project_Tables.Next
-              (Tx, DB, Schema, Standard.Database.Predicates.True_Predicate, Cursor);
+            Result := Project_Tables.Next (Tx, DB, Schema, Filter, Cursor);
             exit when not Standard.Database.Status.Is_Ok (Result);
          end loop;
 
