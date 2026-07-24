@@ -10,6 +10,7 @@ package App.State is
       Counter   : Natural := 0;
       Principal : Ada.Strings.Unbounded.Unbounded_String;
       Username  : Ada.Strings.Unbounded.Unbounded_String;
+      Clearance : Natural := 0;  --  the principal's role, resolved at login
    end record;
 
    --  Create initial per-session UI state.
@@ -20,9 +21,13 @@ package App.State is
    --  @param State Session state to update.
    --  @param Principal The authorization principal id.
    --  @param Username The user's display name.
+   --  @param Clearance The principal's clearance (role).
    --  @return No return value.
    procedure Set_Authenticated
-     (State : in out App_State; Principal : String; Username : String);
+     (State     : in out App_State;
+      Principal : String;
+      Username  : String;
+      Clearance : Natural);
 
    --  Clear authentication information for a session.
    --  @param State Session state to update.
@@ -43,4 +48,9 @@ package App.State is
    --  @param State Session state.
    --  @return Principal id or empty string if not authenticated.
    function Get_Principal (State : App_State) return String;
+
+   --  Get the principal's clearance (role) from a session state.
+   --  @param State Session state.
+   --  @return Clearance, or 0 if not authenticated.
+   function Get_Clearance (State : App_State) return Natural;
 end App.State;

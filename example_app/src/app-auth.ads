@@ -21,4 +21,12 @@ package App.Auth is
    --  @return Authorization principal id, or an empty string.
    function Authenticate (Username : String; Password : String) return String;
 
+   --  The clearance (role) a principal carries, as recorded in the user store.
+   --  Resolved once at login and then carried in the session/request context,
+   --  so the authorization policy reads it as a request fact rather than
+   --  mapping principals to roles itself.
+   --  @param Principal Authorization principal id.
+   --  @return Clearance value, or 0 for an unknown principal.
+   function Clearance_Of (Principal : String) return Natural;
+
 end App.Auth;

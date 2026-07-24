@@ -2,6 +2,7 @@ with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Command_Line;
 
 with Web.Request;
+with Web.Context;
 with Authorization.Evaluator;
 with Authorization.Results;
 
@@ -33,10 +34,28 @@ procedure App_Tests is
    function Manage_Req return Web.Request.Request_Type is
      (Web.Request.Create ("POST", "/api/projects/delete"));
 
+   --  Build the request context the guards would produce: principal plus the
+   --  clearance the user store records, carried as a derived fact.
+   function Context_For (Principal : String) return Web.Context.Request_Context is
+      Ctx : Web.Context.Request_Context := Web.Context.New_Context;
+   begin
+      if Principal /= "" then
+         Web.Context.Set_Principal (Ctx, Principal);
+         Web.Context.Set_Attribute
+           (Ctx, "clearance", Natural'Image (App.Auth.Clearance_Of (Principal)));
+      end if;
+      return Ctx;
+   end Context_For;
+
    function Allowed
      (Principal : String; Request : Web.Request.Request_Type) return Boolean is
-     (Ev.Enforcement_Of (App.Authz.Decide (Principal, Request)) in
+     (Ev.Enforcement_Of
+        (App.Authz.Decide (Principal, Request, Context_For (Principal))) in
         Rez.Authorized | Rez.Authorized_With_Requirements);
+
+   function Plan_For (Principal : String) return App.Authz.Listing_Plan is
+     (App.Authz.Plan_Projects_Listing
+        (Principal, App.Auth.Clearance_Of (Principal)));
 begin
    --  The identity-repository credential store: two users, fail-closed. Seeding
    --  creates real principals, accounts, bindings and password credentials;
@@ -67,13 +86,13 @@ begin
           "authz: an unknown principal cannot manage");
 
    --  The tables plan, resolved per role.
-   Check (App.Authz.Plan_Projects_Listing ("d.principal.admin").Ready,
+   Check (Plan_For ("d.principal.admin").Ready,
           "plan: admin gets a ready plan");
-   Check (not App.Authz.Plan_Projects_Listing ("d.principal.admin").Mask_Functions,
+   Check (not Plan_For ("d.principal.admin").Mask_Functions,
           "plan: admin sees the functions column");
-   Check (App.Authz.Plan_Projects_Listing ("d.principal.viewer").Mask_Functions,
+   Check (Plan_For ("d.principal.viewer").Mask_Functions,
           "plan: viewer gets the functions column masked");
-   Check (App.Authz.Plan_Projects_Listing ("d.principal.viewer").Scope_Applied,
+   Check (Plan_For ("d.principal.viewer").Scope_Applied,
           "plan: the authorization scope survives into the plan");
 
    New_Line;

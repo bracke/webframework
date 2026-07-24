@@ -44,18 +44,15 @@ package body App.Authz is
    Viewer_Clearance : constant Long_Long_Integer := 10;
    Admin_Clearance  : constant Long_Long_Integer := 100;
 
-   --  The clearance an authorization principal carries. A real app resolves the
-   --  role from identity; here the principal id encodes it.
-   function Clearance_Of (Principal : String) return Long_Long_Integer is
+   --  Parse the clearance an upstream guard attached to the request context.
+   --  Fail-closed to 0 (below every threshold) on a missing or malformed value.
+   function Parse_Clearance (Text : String) return Long_Long_Integer is
    begin
-      if Principal = "d.principal.admin" then
-         return Admin_Clearance;
-      elsif Principal = "d.principal.viewer" then
-         return Viewer_Clearance;
-      else
+      return Long_Long_Integer'Value (Text);
+   exception
+      when others =>
          return 0;
-      end if;
-   end Clearance_Of;
+   end Parse_Clearance;
 
    --  Id helpers: raise on an invalid literal (a build-time constant, not input).
    generic
@@ -156,7 +153,9 @@ package body App.Authz is
    --  The heavy request builder is released once the (self-contained) decision
    --  is produced.
    function Evaluate_For
-     (Principal : String; Policy : Set_Ref) return Ev.Decision
+     (Principal : String;
+      Policy    : Set_Ref;
+      Clearance : Long_Long_Integer) return Ev.Decision
    is
       Actor_Status : Identifier_Status;
       Actor_Id     : constant K.Principal_Id :=
@@ -183,7 +182,7 @@ package body App.Authz is
          Req.Set_Tenant (RB.all, Tn.Make (Tenant, Tenant));
          Req.Add_Fact
            (RB.all, Req.Principal_Facts,
-            F.Make (Clearance_Attr, V.Of_Integer (Clearance_Of (Principal)),
+            F.Make (Clearance_Attr, V.Of_Integer (Clearance),
                     F.Identity_Issued, 1),
             Fo);
          Req.Finalize (RB.all, RQ.all, Stat);
@@ -197,28 +196,37 @@ package body App.Authz is
 
    function Decide
      (Principal : String;
-      Request   : Web.Request.Request_Type) return Ev.Decision
+      Request   : Web.Request.Request_Type;
+      Context   : Web.Context.Request_Context) return Ev.Decision
    is
       --  Managing projects (the /api/projects/* endpoints) needs administrator
       --  clearance; everything else is a view.
       Manage : constant Boolean :=
         Ada.Strings.Fixed.Index (Web.Request.Path (Request), "/api/projects/") > 0;
+      --  The clearance an upstream guard attached to the context (from the
+      --  session), read as a request fact rather than mapped from the principal.
+      Clearance : constant Long_Long_Integer :=
+        Parse_Clearance (Web.Context.Attribute (Context, "clearance"));
    begin
       return Evaluate_For
-        (Principal, (if Manage then Manage_Policy else View_Policy));
+        (Principal, (if Manage then Manage_Policy else View_Policy), Clearance);
    end Decide;
 
-   function Plan_Projects_Listing (Principal : String) return Listing_Plan is
+   function Plan_Projects_Listing
+     (Principal : String; Clearance : Natural) return Listing_Plan
+   is
       use type Tables.Plan_Status;
       use type Tables.Column_Authorization;
 
+      Clear    : constant Long_Long_Integer := Long_Long_Integer (Clearance);
       Result   : Listing_Plan;
-      Decision : constant Ev.Decision := Evaluate_For (Principal, View_Policy);
+      Decision : constant Ev.Decision :=
+        Evaluate_For (Principal, View_Policy, Clear);
 
-      --  Column presentation is resolved per principal: only an administrator
-      --  may see the sensitive "functions" column; a viewer gets it masked.
+      --  Column presentation is resolved per role: only an administrator may
+      --  see the sensitive "functions" column; a viewer gets it masked.
       Functions_Auth : constant Tables.Column_Authorization :=
-        (if Clearance_Of (Principal) >= Admin_Clearance
+        (if Clear >= Admin_Clearance
          then Tables.Column_Visible else Tables.Column_Masked);
    begin
       if Snapshot = null or else View_Policy = null then
@@ -254,7 +262,7 @@ package body App.Authz is
          Req.Set_Tenant (RB.all, Tn.Make (Tenant, Tenant));
          Req.Add_Fact
            (RB.all, Req.Principal_Facts,
-            F.Make (Clearance_Attr, V.Of_Integer (Clearance_Of (Principal)),
+            F.Make (Clearance_Attr, V.Of_Integer (Clear),
                     F.Identity_Issued, 1),
             Fo);
          Req.Finalize (RB.all, RQ.all, Stat);

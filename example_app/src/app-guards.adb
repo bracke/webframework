@@ -36,10 +36,12 @@ package body App.Guards is
    --  a concurrent multi-user deployment would resolve the principal through a
    --  value-returning session query instead.
    Resolved_Principal : Unbounded_String;
+   Resolved_Clearance : Natural := 0;
 
    procedure Read_Principal (State : in out App.State.App_State) is
    begin
       Resolved_Principal := To_Unbounded_String (App.State.Get_Principal (State));
+      Resolved_Clearance := App.State.Get_Clearance (State);
    end Read_Principal;
 
    function Resolve_Principal
@@ -51,9 +53,14 @@ package body App.Guards is
       if Session_Id'Length > 0 then
          Web.Context.Set_Session (Context, Session_Id);
          Resolved_Principal := Null_Unbounded_String;
+         Resolved_Clearance := 0;
          App.Runtime.With_State (Session_Id, Read_Principal'Access);
          if Length (Resolved_Principal) > 0 then
             Web.Context.Set_Principal (Context, To_String (Resolved_Principal));
+            --  Carry the role as a derived fact; the authorization guard reads
+            --  it from the context rather than mapping principals to roles.
+            Web.Context.Set_Attribute
+              (Context, "clearance", Natural'Image (Resolved_Clearance));
          end if;
       end if;
 

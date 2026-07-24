@@ -73,6 +73,7 @@ package body App.Pages is
    type Auth_Data is record
       Principal : Unbounded_String;
       Username  : Unbounded_String;
+      Clearance : Natural := 0;
    end record;
 
    --  Global variable to pass auth data to state processor
@@ -195,7 +196,7 @@ package body App.Pages is
    begin
       App.State.Set_Authenticated
         (State, To_String (Current_Auth_Data.Principal),
-         To_String (Current_Auth_Data.Username));
+         To_String (Current_Auth_Data.Username), Current_Auth_Data.Clearance);
    end Set_Auth_Process;
 
    --  State process for clearing authentication
@@ -295,7 +296,8 @@ package body App.Pages is
             begin
                Current_Auth_Data :=
                  Auth_Data'(Principal => To_Unbounded_String (Principal),
-                            Username  => Username);
+                            Username  => Username,
+                            Clearance => App.Auth.Clearance_Of (Principal));
                App.Runtime.With_State (Effective, Set_Auth_Process'Access);
                return App.Runtime.Html_Response
                  (Effective, "{""status"": ""success""}");
@@ -332,6 +334,16 @@ package body App.Pages is
             return Web.Response.Internal_Server_Error;
    end Api_Logout;
 
+   --  Safely read the clearance an upstream guard attached to the context.
+   function Context_Clearance
+     (Context : Web.Context.Request_Context) return Natural is
+   begin
+      return Natural'Value (Web.Context.Attribute (Context, "clearance"));
+   exception
+      when others =>
+         return 0;
+   end Context_Clearance;
+
    function Projects
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type is
@@ -340,11 +352,12 @@ package body App.Pages is
       --  Require_App_Access); an unauthenticated or unauthorized caller never
       --  reaches this handler, so the manual session check is gone.
       --
-      --  The listing itself is planned through tables from the same principal:
-      --  the plan governs which columns show and carries the authorization
-      --  scope, rather than the handler dumping every row and column.
+      --  The listing itself is planned through tables from the same principal
+      --  and clearance: the plan governs which columns show and carries the
+      --  authorization scope, rather than the handler dumping every row/column.
       Plan : constant App.Authz.Listing_Plan :=
-        App.Authz.Plan_Projects_Listing (Web.Context.Principal (Context));
+        App.Authz.Plan_Projects_Listing
+          (Web.Context.Principal (Context), Context_Clearance (Context));
       View : Value := Object;
       Page : Unbounded_String;
       Projects_Data : App.Projects.Project_Vectors.Vector;

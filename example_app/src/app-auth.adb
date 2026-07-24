@@ -109,6 +109,7 @@ package body App.Auth is
       Username  : Unbounded_String;
       Password  : Unbounded_String;
       Principal : Unbounded_String;
+      Clearance : Natural;           --  the user's role/clearance
       Pid       : Unbounded_String;  --  identity principal id
       Aid       : Unbounded_String;  --  identity account id
       Bid       : Unbounded_String;  --  identity binding id
@@ -116,12 +117,12 @@ package body App.Auth is
    end record;
 
    Seeds : constant array (1 .. 2) of Seed_User :=
-     [1 => (U ("admin"),  U ("admin123"),  U ("d.principal.admin"),
+     [1 => (U ("admin"),  U ("admin123"),  U ("d.principal.admin"), 100,
             U ("11111111-1111-1111-1111-111111111111"),
             U ("14444444-4444-4444-4444-444444444444"),
             U ("12222222-2222-2222-2222-222222222222"),
             U ("13333333-3333-3333-3333-333333333333")),
-      2 => (U ("viewer"), U ("viewer123"), U ("d.principal.viewer"),
+      2 => (U ("viewer"), U ("viewer123"), U ("d.principal.viewer"), 10,
             U ("21111111-1111-1111-1111-111111111111"),
             U ("24444444-4444-4444-4444-444444444444"),
             U ("22222222-2222-2222-2222-222222222222"),
@@ -231,6 +232,16 @@ package body App.Auth is
       end Authenticate;
 
    end Vault;
+
+   function Clearance_Of (Principal : String) return Natural is
+   begin
+      for S of Seeds loop
+         if To_String (S.Principal) = Principal then
+            return S.Clearance;
+         end if;
+      end loop;
+      return 0;
+   end Clearance_Of;
 
    procedure Initialize is
    begin
