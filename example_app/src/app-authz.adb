@@ -1,5 +1,5 @@
 with Ada.Unchecked_Deallocation;
-with Ada.Containers;
+with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 
 with Authorization.Identifiers;          use Authorization.Identifiers;
@@ -39,6 +39,24 @@ package body App.Authz is
 
    use type Identifier_Status;
 
+   --  Clearance thresholds. A viewer may read; only an administrator may manage
+   --  (add/delete) projects or see the sensitive "functions" column.
+   Viewer_Clearance : constant Long_Long_Integer := 10;
+   Admin_Clearance  : constant Long_Long_Integer := 100;
+
+   --  The clearance an authorization principal carries. A real app resolves the
+   --  role from identity; here the principal id encodes it.
+   function Clearance_Of (Principal : String) return Long_Long_Integer is
+   begin
+      if Principal = "d.principal.admin" then
+         return Admin_Clearance;
+      elsif Principal = "d.principal.viewer" then
+         return Viewer_Clearance;
+      else
+         return 0;
+      end if;
+   end Clearance_Of;
+
    --  Id helpers: raise on an invalid literal (a build-time constant, not input).
    generic
       type Id is private;
@@ -63,12 +81,12 @@ package body App.Authz is
    function Pol is new Make_Id (K.Policy_Id, K.Policy_Ids.Create);
    function Pst is new Make_Id (K.Policy_Set_Id, K.Policy_Set_Ids.Create);
 
-   View_Action : constant K.Action_Id := Act ("d.action.view");
-   App_Type    : constant K.Resource_Type_Id := Rt ("d.type.app");
-   Tenant      : constant K.Tenant_Id := Ten ("d.tenant.main");
-   Dept        : constant K.Attribute_Id := Att ("d.attribute.department");
-   Alire_Attr  : constant K.Attribute_Id := Att ("d.attribute.alire");
-   Reason      : constant K.Reason_Id := Rsn ("d.reason.allow");
+   View_Action    : constant K.Action_Id := Act ("d.action.view");
+   App_Type       : constant K.Resource_Type_Id := Rt ("d.type.app");
+   Tenant         : constant K.Tenant_Id := Ten ("d.tenant.main");
+   Clearance_Attr : constant K.Attribute_Id := Att ("d.attribute.clearance");
+   Alire_Attr     : constant K.Attribute_Id := Att ("d.attribute.alire");
+   Reason         : constant K.Reason_Id := Rsn ("d.reason.allow");
 
    --  These structures are multi-megabyte; allocate rather than stacking.
    type Reg_Ref is access Reg.Snapshot;
@@ -85,8 +103,36 @@ package body App.Authz is
    procedure Free is new Ada.Unchecked_Deallocation (Req.Authorization_Request, Req_Ref);
    procedure Free is new Ada.Unchecked_Deallocation (Sc.Scope_Builder, Scope_Builder_Ref);
 
-   Snapshot   : Reg_Ref := null;
-   Policy_Set : Set_Ref := null;
+   Snapshot     : Reg_Ref := null;
+   View_Policy   : Set_Ref := null;  --  allows clearance >= Viewer_Clearance
+   Manage_Policy : Set_Ref := null;  --  allows clearance >= Admin_Clearance
+
+   --  Compile a policy whose single rule allows the action when the principal's
+   --  clearance is at least Threshold.
+   function Build_Policy (Threshold : Long_Long_Integer) return Set_Ref is
+      CB : constant Cond_Builder_Ref := new C.Builder;
+      CT : constant Cond_Tree_Ref := new C.Tree;
+      PB : constant Pol_Builder_Ref := new Po.Builder;
+      CS : constant Set_Ref := new Po.Compiled_Set;
+      Cond : C.Node_Ref;
+      Oo   : Po.Open_Outcome;
+      Ao   : Po.Add_Outcome;
+      Stat : Po.Compile_Status;
+   begin
+      Cond := C.Ordered_Greater_Or_Equal
+        (CB.all, Clearance_Attr, V.Of_Integer (Threshold));
+      C.Freeze (CB.all, CT.all);
+      declare
+         R : constant Ru.Rule :=
+           Ru.Make (Rul ("d.rule.allow"), Ru.Allow_Effect, Cond, Reason);
+      begin
+         Po.Start (PB.all, Pst ("d.policyset.app"), 3, CT.all, Po.Deny_Overrides);
+         Po.Open_Policy (PB.all, Pol ("d.policy.app"), Tg.Any_Target, Outcome => Oo);
+         Po.Add_Rule (PB.all, R, Ao);
+         Po.Compile (PB.all, CS.all, Stat);
+      end;
+      return CS;
+   end Build_Policy;
 
    procedure Initialize is
    begin
@@ -96,52 +142,30 @@ package body App.Authz is
       begin
          Snapshot := new Reg.Snapshot;
          Reg.Register_Attribute
-           (RB.all, D.Define_Attribute (Dept, V.Integer_Kind), RO);
+           (RB.all,
+            D.Define_Attribute (Clearance_Attr, V.Integer_Kind, Ordered => True),
+            RO);
          Reg.Seal (RB.all, Snapshot.all);
       end;
 
-      declare
-         CB : constant Cond_Builder_Ref := new C.Builder;
-         CT : constant Cond_Tree_Ref := new C.Tree;
-         PB : constant Pol_Builder_Ref := new Po.Builder;
-         Root : C.Node_Ref;
-         Oo   : Po.Open_Outcome;
-         Ao   : Po.Add_Outcome;
-         Stat : Po.Compile_Status;
-      begin
-         Policy_Set := new Po.Compiled_Set;
-         Root := C.Always (CB.all);
-         C.Freeze (CB.all, CT.all);
-         declare
-            R : constant Ru.Rule :=
-              Ru.Make (Rul ("d.rule.allow"), Ru.Allow_Effect, Root, Reason);
-         begin
-            Po.Start (PB.all, Pst ("d.policyset.app"), 3, CT.all, Po.Deny_Overrides);
-            Po.Open_Policy (PB.all, Pol ("d.policy.app"), Tg.Any_Target, Outcome => Oo);
-            Po.Add_Rule (PB.all, R, Ao);
-            Po.Compile (PB.all, Policy_Set.all, Stat);
-         end;
-      end;
+      View_Policy   := Build_Policy (Viewer_Clearance);
+      Manage_Policy := Build_Policy (Admin_Clearance);
    end Initialize;
 
-   function Decide
-     (Principal : String;
-      Request   : Web.Request.Request_Type) return Ev.Decision
+   --  Evaluate the chosen policy for Principal, supplying its clearance fact.
+   --  The heavy request builder is released once the (self-contained) decision
+   --  is produced.
+   function Evaluate_For
+     (Principal : String; Policy : Set_Ref) return Ev.Decision
    is
-      pragma Unreferenced (Request);
-
       Actor_Status : Identifier_Status;
       Actor_Id     : constant K.Principal_Id :=
         K.Principal_Ids.Create (Principal, Actor_Status);
-
-      --  A default decision is Not_Applicable, whose enforcement is a
-      --  rejection: the fail-closed answer for an unusable principal or an
-      --  uninitialized policy.
-      Denied : Ev.Decision;
+      Denied : Ev.Decision;  --  Not_Applicable -> Rejected; fail-closed.
    begin
       if Actor_Status /= Valid_Identifier
         or else Snapshot = null
-        or else Policy_Set = null
+        or else Policy = null
       then
          return Denied;
       end if;
@@ -159,71 +183,92 @@ package body App.Authz is
          Req.Set_Tenant (RB.all, Tn.Make (Tenant, Tenant));
          Req.Add_Fact
            (RB.all, Req.Principal_Facts,
-            F.Make (Dept, V.Of_Integer (1), F.Identity_Issued, 1), Fo);
+            F.Make (Clearance_Attr, V.Of_Integer (Clearance_Of (Principal)),
+                    F.Identity_Issued, 1),
+            Fo);
          Req.Finalize (RB.all, RQ.all, Stat);
 
-         Result := Ev.Evaluate (Policy_Set.all, RQ.all, Snapshot.all);
-
-         --  The decision is a self-contained value; release the heavy builders.
+         Result := Ev.Evaluate (Policy.all, RQ.all, Snapshot.all);
          Free (RB);
          Free (RQ);
          return Result;
       end;
+   end Evaluate_For;
+
+   function Decide
+     (Principal : String;
+      Request   : Web.Request.Request_Type) return Ev.Decision
+   is
+      --  Managing projects (the /api/projects/* endpoints) needs administrator
+      --  clearance; everything else is a view.
+      Manage : constant Boolean :=
+        Ada.Strings.Fixed.Index (Web.Request.Path (Request), "/api/projects/") > 0;
+   begin
+      return Evaluate_For
+        (Principal, (if Manage then Manage_Policy else View_Policy));
    end Decide;
 
    function Plan_Projects_Listing (Principal : String) return Listing_Plan is
       use type Tables.Plan_Status;
       use type Tables.Column_Authorization;
 
-      Result       : Listing_Plan;
-      Actor_Status : Identifier_Status;
-      Actor_Id     : constant K.Principal_Id :=
-        K.Principal_Ids.Create (Principal, Actor_Status);
+      Result   : Listing_Plan;
+      Decision : constant Ev.Decision := Evaluate_For (Principal, View_Policy);
+
+      --  Column presentation is resolved per principal: only an administrator
+      --  may see the sensitive "functions" column; a viewer gets it masked.
+      Functions_Auth : constant Tables.Column_Authorization :=
+        (if Clearance_Of (Principal) >= Admin_Clearance
+         then Tables.Column_Visible else Tables.Column_Masked);
    begin
-      if Actor_Status /= Valid_Identifier
-        or else Snapshot = null
-        or else Policy_Set = null
-      then
+      if Snapshot = null or else View_Policy = null then
          return Result;  --  Ready => False; fail-closed.
       end if;
 
       declare
-         RB   : Req_Builder_Ref := new Req.Request_Builder;
-         RQ   : Req_Ref := new Req.Authorization_Request;
          SB   : Scope_Builder_Ref := new Sc.Scope_Builder;
-         Fo   : Req.Add_Fact_Outcome;
-         Stat : Req.Validation_Status;
-         Decision : Ev.Decision;
          Node : Sc.Node_Ref;
          Cols : Tables.Column_List;
          Ops  : Tables.Operation_Authorization_List;
+
+         RB   : Req_Builder_Ref := new Req.Request_Builder;
+         RQ   : Req_Ref := new Req.Authorization_Request;
+         Fo   : Req.Add_Fact_Outcome;
+         Stat : Req.Validation_Status;
+         Actor_Status : Identifier_Status;
+         Actor_Id     : constant K.Principal_Id :=
+           K.Principal_Ids.Create (Principal, Actor_Status);
       begin
-         --  Evaluate the decision for this principal.
+         if Actor_Status /= Valid_Identifier then
+            Free (SB);
+            Free (RB);
+            Free (RQ);
+            return Result;
+         end if;
+
+         --  Rebuild the request the decision was evaluated for, so To_Result can
+         --  thread the principal/tenant handles into the tables result.
          Req.Start
            (RB.all, Pn.Make (Actor_Id, Pn.User_Principal),
             View_Action, App_Type, Evaluation_Time => 1);
          Req.Set_Tenant (RB.all, Tn.Make (Tenant, Tenant));
          Req.Add_Fact
            (RB.all, Req.Principal_Facts,
-            F.Make (Dept, V.Of_Integer (1), F.Identity_Issued, 1), Fo);
+            F.Make (Clearance_Attr, V.Of_Integer (Clearance_Of (Principal)),
+                    F.Identity_Issued, 1),
+            Fo);
          Req.Finalize (RB.all, RQ.all, Stat);
-         Decision := Ev.Evaluate (Policy_Set.all, RQ.all, Snapshot.all);
 
          --  Trusted data scope: only Alire-tracked projects. It rides into the
-         --  plan (proving the scope survives, Contains_Authorization_Scope) and
-         --  the caller enforces the matching row restriction. A real backend
-         --  translates the plan's scope constraints into the SQL query instead.
+         --  plan (proving the scope survives) and the caller enforces the
+         --  matching row restriction.
          Node := Sc.Attribute_Equals (SB.all, Alire_Attr, V.Of_Integer (1));
 
-         --  Resolved column presentation. "functions" is masked to show the
-         --  tables plan -- not the handler -- governing what a cell may show; a
-         --  real policy resolves these per principal.
          Cols.Append (Tables.Column ("id", Tables.Column_Visible, "col-id"));
          Cols.Append (Tables.Column ("name", Tables.Column_Visible, "col-name"));
          Cols.Append (Tables.Column ("status", Tables.Column_Visible, "col-status"));
          Cols.Append (Tables.Column ("type", Tables.Column_Visible, "col-type"));
-         Cols.Append
-           (Tables.Column ("functions", Tables.Column_Masked, "col-functions"));
+         Cols.Append (Tables.Column ("functions", Functions_Auth, "col-functions"));
 
          for Op in Tables.Operation_Kind loop
             Ops.Append
@@ -263,9 +308,9 @@ package body App.Authz is
             end loop;
          end;
 
+         Free (SB);
          Free (RB);
          Free (RQ);
-         Free (SB);
       end;
 
       return Result;
