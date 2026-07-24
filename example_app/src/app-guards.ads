@@ -19,8 +19,14 @@ package App.Guards is
 
    --  Authorize the request against the app policy. Anonymous callers are sent
    --  to /login; authenticated-but-forbidden callers get 403; allowed callers
-   --  proceed to the handler.
+   --  proceed to the handler. For full-page routes and WebSocket upgrades.
    function Require_App_Access
+     (Request : Web.Request.Request_Type;
+      Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome;
+
+   --  Same policy, but for API endpoints (fetch/XHR): anonymous callers get 401
+   --  and forbidden callers 403, rather than an HTML login redirect.
+   function Require_App_Access_Api
      (Request : Web.Request.Request_Type;
       Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome;
 

@@ -48,6 +48,7 @@ package App.Templates is
      (Projects           : App.Projects.Project_Vectors.Vector;
       Scope_Applied      : Boolean;
       Mask_Functions     : Boolean;
-      Authorized_Columns : Natural) return String;
+      Authorized_Columns : Natural;
+      Total_Rows         : Natural) return String;
 
 end App.Templates;

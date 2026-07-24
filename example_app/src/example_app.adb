@@ -363,20 +363,29 @@ begin
    --  Resolve the request principal once, before every route, so guards and
    --  handlers can read it from the request context.
    App.Runtime.Use_Guard (App.Guards.Resolve_Principal'Access);
-   --  HTTP + websocket + static route wiring.
-   App.Runtime.Get ("/", App.Pages.Home'Access);
+   --  HTTP + websocket + static route wiring. Public routes (/login, /health,
+   --  /api/login, /static) carry no guard; every other route is guard-protected
+   --  by Require_App_Access (pages) or Require_App_Access_Api (API endpoints),
+   --  with the global Resolve_Principal running first.
+   App.Runtime.Get ("/", App.Pages.Home'Access, App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/login", App.Pages.Login'Access);
-   --  /projects is guard-protected: Resolve_Principal (global) then the
-   --  authorization guard decide access before App.Pages.Projects renders.
    App.Runtime.Get
      ("/projects", App.Pages.Projects'Access, App.Guards.Require_App_Access'Access);
-   App.Runtime.Get ("/todo", App.Pages.Todo'Access);
+   App.Runtime.Get
+     ("/todo", App.Pages.Todo'Access, App.Guards.Require_App_Access'Access);
    App.Runtime.Post ("/api/login", App.Pages.Api_Login'Access);
    App.Runtime.Post ("/api/logout", App.Pages.Api_Logout'Access);
-   App.Runtime.Post ("/api/projects/add", App.Pages.Api_Add_Project'Access);
-   App.Runtime.Post ("/api/projects/delete", App.Pages.Api_Delete_Project'Access);
+   App.Runtime.Post
+     ("/api/projects/add", App.Pages.Api_Add_Project'Access,
+      App.Guards.Require_App_Access_Api'Access);
+   App.Runtime.Post
+     ("/api/projects/delete", App.Pages.Api_Delete_Project'Access,
+      App.Guards.Require_App_Access_Api'Access);
    App.Runtime.Get ("/health", App.Pages.Health'Access);
    App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
+   --  The live channel requires authentication: guard the upgrade so an
+   --  anonymous caller cannot open it (the static page still loads).
+   App.Runtime.Guard_WebSocket ("/ws", App.Guards.Require_App_Access'Access);
    App.Runtime.Static ("/static", Static_Directory);
    --  Blocking call that owns the main process lifetime.
    Run_Server (Settings);

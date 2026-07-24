@@ -162,8 +162,10 @@ package body App.Templates is
      (Projects           : App.Projects.Project_Vectors.Vector;
       Scope_Applied      : Boolean;
       Mask_Functions     : Boolean;
-      Authorized_Columns : Natural) return String
+      Authorized_Columns : Natural;
+      Total_Rows         : Natural) return String
    is
+      Shown_Rows : constant Natural := Natural (Projects.Length);
       use Standard.Templates.Values;
       use App.Projects;
 
@@ -202,7 +204,9 @@ package body App.Templates is
       Banner : constant String :=
         "<p class=" & DQ & "wf-plan" & DQ & ">Listing planned by tables &middot; "
         & "authorization scope applied: " & (if Scope_Applied then "yes" else "no")
-        & " &middot; " & Nat_Image (Authorized_Columns) & " authorized columns</p>";
+        & " &middot; " & Nat_Image (Authorized_Columns) & " authorized columns"
+        & " &middot; showing " & Nat_Image (Shown_Rows) & " of "
+        & Nat_Image (Total_Rows) & " projects in scope</p>";
    begin
       --  If no projects, return empty table with message
       if Projects.Is_Empty then

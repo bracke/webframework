@@ -79,34 +79,19 @@ package body App.Pages is
    --  Note: This is a temporary workaround. In a real application, use a better design.
    Current_Auth_Data : Auth_Data;
 
-   --  Global variable to store authentication check result
-   Is_Authenticated_Result : Boolean := False;
-
-   --  State process for checking authentication
-   procedure Check_Auth_Process (State : in out App.State.App_State) is
-   begin
-      Is_Authenticated_Result := App.State.Is_Authenticated (State);
-   end Check_Auth_Process;
-
-   function Home (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+   function Home
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use Standard.Templates.Values;
-      Context : Value := Object;
-      Page    : Unbounded_String;
-      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+      pragma Unreferenced (Context);
+      View : Value := Object;
+      Page : Unbounded_String;
    begin
-      --  Check if user is authenticated
-      --  Always check authentication since we created/ensured a session above
-      Is_Authenticated_Result := False;
-      App.Runtime.With_State (Session_Id, Check_Auth_Process'Access);
-
-      if not Is_Authenticated_Result then
-         --  User not authenticated, redirect to login
-         return Redirect_To_Login (Request, Session_Id);
-      end if;
-
+      --  Access is decided by the route guard before this runs; the manual
+      --  session check is gone.
       --  Build the full HTML page through templates and inject the composed body fragment.
-      Set (Context, "title", String_Item ("Ada Webframework Example"));
-      Page := To_Unbounded_String (App.Templates.Render ("layout.html", Context));
+      Set (View, "title", String_Item ("Ada Webframework Example"));
+      Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
       declare
@@ -347,20 +332,6 @@ package body App.Pages is
             return Web.Response.Internal_Server_Error;
    end Api_Logout;
 
-   --  Redirect to login page.
-   function Redirect_To_Login
-     (Request : Web.Request.Request_Type; Session_Id : String) return Web.Response.Response_Type is
-      pragma Unreferenced (Request);
-   begin
-      --  Return a redirect response to /login with session cookie
-      return App.Runtime.Html_Response
-        (Session_Id,
-         "<!doctype html>"
-         & "<html><head><meta http-equiv=""refresh"" content=""0;url=/login"">"
-         & "<title>Redirecting...</title></head>"
-         & "<body><p>Please <a href=""/login"">login</a>.</p></body></html>");
-   end Redirect_To_Login;
-
    function Projects
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type is
@@ -377,13 +348,32 @@ package body App.Pages is
       View : Value := Object;
       Page : Unbounded_String;
       Projects_Data : App.Projects.Project_Vectors.Vector;
+      Total_Rows : Natural := 0;
    begin
       --  Fail closed: if tables could not produce a ready plan, do not list.
       if not Plan.Ready then
          return Web.Response.Forbidden;
       end if;
 
-      Projects_Data := App.Projects.Get_Projects;
+      --  Enforce the authorization data scope on the rows themselves: acting as
+      --  the backend adapter, drop rows outside the scope the plan carries. A
+      --  production adapter pushes this into the SQL query instead of post-fetch.
+      declare
+         All_Projects : constant App.Projects.Project_Vectors.Vector :=
+           App.Projects.Get_Projects;
+      begin
+         Total_Rows := Natural (All_Projects.Length);
+         if Plan.Restrict_To_Alire then
+            for Item of All_Projects loop
+               if Item.Has_Alire then
+                  Projects_Data.Append (Item);
+               end if;
+            end loop;
+         else
+            Projects_Data := All_Projects;
+         end if;
+      end;
+
       Set (View, "title", String_Item ("Projects - Ada Webframework Example"));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
@@ -409,7 +399,8 @@ package body App.Pages is
               (Projects_Data,
                Scope_Applied      => Plan.Scope_Applied,
                Mask_Functions     => Plan.Mask_Functions,
-               Authorized_Columns => Plan.Authorized_Columns)));
+               Authorized_Columns => Plan.Authorized_Columns,
+               Total_Rows         => Total_Rows)));
 
       --  Replace asset URLs with versioned URLs for cache busting
       Page := To_Unbounded_String
@@ -429,24 +420,19 @@ package body App.Pages is
    end Projects;
 
    --  Render the todo page
-   function Todo (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+   function Todo
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use Standard.Templates.Values;
-      Context : Value := Object;
-      Page    : Unbounded_String;
+      pragma Unreferenced (Context);
+      View : Value := Object;
+      Page : Unbounded_String;
       Todo_Content : Unbounded_String;
-      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
-      --  Check if user is authenticated
-      Is_Authenticated_Result := False;
-      App.Runtime.With_State (Session_Id, Check_Auth_Process'Access);
-
-      if not Is_Authenticated_Result then
-         return Redirect_To_Login (Request, Session_Id);
-      end if;
-
+      --  Access is decided by the route guard before this runs.
       --  Build the full HTML page through templates
-      Set (Context, "title", String_Item ("Todos - Ada Webframework Example"));
-      Page := To_Unbounded_String (App.Templates.Render ("layout.html", Context));
+      Set (View, "title", String_Item ("Todos - Ada Webframework Example"));
+      Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
       declare
@@ -493,24 +479,14 @@ package body App.Pages is
    end Todo;
 
    --  API endpoint to add a new project
-   function Api_Add_Project (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+   function Api_Add_Project
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use App.Projects;
+      pragma Unreferenced (Context);
       Body_Content : constant String := Web.Request.Request_Body (Request);
-      Session_Id : constant String := App.Runtime.Require_Session (Request);
    begin
-      --  Check authentication
-      if Session_Id'Length = 0 then
-         return Web.Response.Unauthorized ("Authentication required");
-      end if;
-
-      --  Only authenticated users can add projects
-      Is_Authenticated_Result := False;
-      App.Runtime.With_State (Session_Id, Check_Auth_Process'Access);
-
-      if not Is_Authenticated_Result then
-         return Web.Response.Unauthorized ("Authentication required");
-      end if;
-
+      --  Authorization is enforced by the route guard before this runs.
       --  Parse form data from request body
       --  Expected format: name=...&status=...&project_type=...&functions=...&
       --                  has_project_tools=true/false&has_gnat=true/false&...
@@ -567,7 +543,8 @@ package body App.Pages is
             Has_GitHub      => Has_GitHub,
             Has_Alire       => Has_Alire);
 
-         return App.Runtime.Html_Response (Session_Id, "{""status"": ""success""}");
+         return Web.Response.Create
+           (200, "{""status"": ""success""}", "application/json; charset=utf-8");
       end;
       exception
          when Error : others =>
@@ -577,24 +554,14 @@ package body App.Pages is
    end Api_Add_Project;
 
    --  API endpoint to delete a project
-   function Api_Delete_Project (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
+   function Api_Delete_Project
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use App.Projects;
-      Session_Id : constant String := App.Runtime.Require_Session (Request);
+      pragma Unreferenced (Context);
       Body_Content : constant String := Web.Request.Request_Body (Request);
    begin
-      --  Check authentication
-      if Session_Id'Length = 0 then
-         return Web.Response.Unauthorized ("Authentication required");
-      end if;
-
-      --  Only authenticated users can delete projects
-      Is_Authenticated_Result := False;
-      App.Runtime.With_State (Session_Id, Check_Auth_Process'Access);
-
-      if not Is_Authenticated_Result then
-         return Web.Response.Unauthorized ("Authentication required");
-      end if;
-
+      --  Authorization is enforced by the route guard before this runs.
       --  Parse project ID from request body (format: id=123)
       declare
          Id_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "id=") + 3;
@@ -621,7 +588,8 @@ package body App.Pages is
          --  Delete project from database
          Delete_Project (Project_Id);
 
-         return App.Runtime.Html_Response (Session_Id, "{""status"": ""success""}");
+         return Web.Response.Create
+           (200, "{""status"": ""success""}", "application/json; charset=utf-8");
       end;
       exception
          when Constraint_Error =>

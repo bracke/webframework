@@ -67,6 +67,7 @@ package body App.Authz is
    App_Type    : constant K.Resource_Type_Id := Rt ("d.type.app");
    Tenant      : constant K.Tenant_Id := Ten ("d.tenant.main");
    Dept        : constant K.Attribute_Id := Att ("d.attribute.department");
+   Alire_Attr  : constant K.Attribute_Id := Att ("d.attribute.alire");
    Reason      : constant K.Reason_Id := Rsn ("d.reason.allow");
 
    --  These structures are multi-megabyte; allocate rather than stacking.
@@ -208,10 +209,11 @@ package body App.Authz is
          Req.Finalize (RB.all, RQ.all, Stat);
          Decision := Ev.Evaluate (Policy_Set.all, RQ.all, Snapshot.all);
 
-         --  Trusted data scope: rows in this tenant. A real backend adapter
-         --  applies these constraints to the SQL query; here they ride into the
-         --  plan and prove the scope survives (Contains_Authorization_Scope).
-         Node := Sc.Tenant_Equals (SB.all, Tenant);
+         --  Trusted data scope: only Alire-tracked projects. It rides into the
+         --  plan (proving the scope survives, Contains_Authorization_Scope) and
+         --  the caller enforces the matching row restriction. A real backend
+         --  translates the plan's scope constraints into the SQL query instead.
+         Node := Sc.Attribute_Equals (SB.all, Alire_Attr, V.Of_Integer (1));
 
          --  Resolved column presentation. "functions" is masked to show the
          --  tables plan -- not the handler -- governing what a cell may show; a
@@ -249,6 +251,7 @@ package body App.Authz is
          begin
             Result.Ready := Tables.Query_Status (Plan) = Tables.Plan_Ready;
             Result.Scope_Applied := Tables.Contains_Authorization_Scope (Plan);
+            Result.Restrict_To_Alire := Result.Scope_Applied;
             Result.Authorized_Columns :=
               Natural (Tables.Query_Columns (Plan).Length);
             for Col of Tables.Query_Columns (Plan) loop

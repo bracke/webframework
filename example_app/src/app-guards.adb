@@ -24,6 +24,13 @@ package body App.Guards is
       Anonymous => Login_Redirect,
       Decide    => App.Authz.Decide);
 
+   --  The same policy for API endpoints: a JSON/XHR caller gets 401/403, not a
+   --  page redirect.
+   function App_Guard_Api is new Webframework_Authorization.Guarded
+     (Denied    => Web.Response.Forbidden,
+      Anonymous => Web.Response.Unauthorized,
+      Decide    => App.Authz.Decide);
+
    --  Extraction channel for Resolve_Principal. With_State cannot return a
    --  value, so the callback writes here. Fine for this single-user example;
    --  a concurrent multi-user deployment would resolve the principal through a
@@ -57,5 +64,10 @@ package body App.Guards is
      (Request : Web.Request.Request_Type;
       Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome
       renames App_Guard;
+
+   function Require_App_Access_Api
+     (Request : Web.Request.Request_Type;
+      Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome
+      renames App_Guard_Api;
 
 end App.Guards;

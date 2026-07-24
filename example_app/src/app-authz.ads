@@ -33,6 +33,11 @@ package App.Authz is
       Scope_Applied      : Boolean := False;
       Mask_Functions     : Boolean := False;
       Authorized_Columns : Natural := 0;
+      --  The row restriction the authorization data scope imposes. In this
+      --  example the scope authorizes only Alire-tracked projects; the caller
+      --  (acting as the backend adapter) applies it, and a production adapter
+      --  would instead push the plan's scope constraints into the SQL query.
+      Restrict_To_Alire  : Boolean := False;
    end record;
 
    --  Plan the projects listing for Principal through tables. Fail-closed: an
