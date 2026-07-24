@@ -251,6 +251,7 @@ The example app exposes `GET /health` and logs
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Authorization & the guard seam](docs/AUTHORIZATION.md)
 - [Documentation Index](docs/README.md)
 - [Public API](docs/API.md)
 - [API Stability](docs/API_STABILITY.md)

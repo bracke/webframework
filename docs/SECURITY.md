@@ -173,6 +173,20 @@ steps.
 - Direct `With_State` and `Run_Connection` calls reject malformed session ids;
   `With_State` also rejects null callbacks.
 - One active WebSocket is kept per session; a new one replaces the old one.
+- `Regenerate_Session` rotates a session id on a privilege change (defeating
+  session fixation) and `Invalidate_Session` drops a session on logout so its
+  id cannot be replayed.
+
+## Authorization boundary
+
+- The core authenticates nothing and authorizes nothing. A **guard seam**
+  (`Web.Guard`, `Web.Context`, `Web.Server.Use_Guard`/guarded routes/
+  `Guard_WebSocket`) lets an application gate HTTP routes and the WebSocket
+  upgrade fail-closed, without the core depending on identity or authorization.
+  A halting guard short-circuits with its own response; a guard that raises
+  fails the request closed. See [Authorization & the guard seam](AUTHORIZATION.md).
+- The principal on the request context is an opaque reference the core never
+  interprets; identity and authorization assign it meaning upstream.
 
 ## Boundaries
 

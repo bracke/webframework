@@ -10,6 +10,9 @@
 ## Runtime
 
 - [Architecture](ARCHITECTURE.md) — architecture and request/event flow.
+- [Authorization & the guard seam](AUTHORIZATION.md) — how identity and
+  authorization gate routes and the WebSocket upgrade without the framework
+  core depending on either.
 - [API](API.md) — package-level API and boundaries.
 - [Deployment](DEPLOYMENT.md) — systemd/supervisord examples, restart behavior,
   and startup checks.
