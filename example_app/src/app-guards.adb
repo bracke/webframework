@@ -2,7 +2,6 @@ with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Web.Response;
 with Webframework_Authorization;
 with App.Runtime;
-with App.State;
 with App.Auth;
 with App.Authz;
 
@@ -87,5 +86,16 @@ package body App.Guards is
      (Request : Web.Request.Request_Type;
       Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome
       renames App_Guard_Api;
+
+   Admin_Clearance : constant Natural := 100;
+
+   function Require_Admin_Action
+     (State : App.State.App_State;
+      Event : Web.Events.Event) return Boolean
+   is
+      pragma Unreferenced (Event);
+   begin
+      return App.State.Get_Clearance (State) >= Admin_Clearance;
+   end Require_Admin_Action;
 
 end App.Guards;

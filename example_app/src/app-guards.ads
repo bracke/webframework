@@ -1,6 +1,8 @@
 with Web.Request;
 with Web.Context;
 with Web.Guard;
+with Web.Events;
+with App.State;
 
 --  Route guards wiring the stack together for the example app.
 --
@@ -29,5 +31,12 @@ package App.Guards is
    function Require_App_Access_Api
      (Request : Web.Request.Request_Type;
       Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome;
+
+   --  A per-action guard for the live (WebSocket) channel: admits only
+   --  administrators. Used to gate a privileged live action; a viewer's
+   --  attempt produces no patch.
+   function Require_Admin_Action
+     (State : App.State.App_State;
+      Event : Web.Events.Event) return Boolean;
 
 end App.Guards;

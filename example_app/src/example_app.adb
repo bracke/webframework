@@ -352,7 +352,12 @@ begin
    null;
    --  Action-to-handler mapping for websocket events.
    App.Runtime.Register ("counter.increment", App.Counter.Increment'Access);
-   App.Runtime.Register ("profile.save", App.Profile.Save'Access);
+   --  Per-action authorization on the live channel: saving the profile over the
+   --  WebSocket is gated to administrators (illustrative); a viewer's attempt
+   --  is rejected by the dispatcher before the handler runs.
+   App.Runtime.Register
+     ("profile.save", App.Profile.Save'Access,
+      App.Guards.Require_Admin_Action'Access);
    App.Runtime.Register ("todo.add", App.Todo.Add'Access);
    --  Authentication handlers
    App.Runtime.Register ("auth.login", App.Auth_Handlers.Handle_Login'Access);
