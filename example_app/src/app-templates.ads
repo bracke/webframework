@@ -41,7 +41,13 @@ package App.Templates is
    --  Render projects table from projects data.
    --  @param Projects Vector of project records.
    --  @return Rendered HTML for projects table.
+   --  Presentation is governed by a tables query plan: a masked column shows
+   --  "[masked]" and a banner reports the authorized column count and that the
+   --  authorization scope survived into the plan.
    function Render_Projects_Table
-     (Projects : App.Projects.Project_Vectors.Vector) return String;
+     (Projects           : App.Projects.Project_Vectors.Vector;
+      Scope_Applied      : Boolean;
+      Mask_Functions     : Boolean;
+      Authorized_Columns : Natural) return String;
 
 end App.Templates;

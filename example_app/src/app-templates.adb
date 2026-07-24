@@ -159,7 +159,10 @@ package body App.Templates is
 
    --  Render projects table from projects data
    function Render_Projects_Table
-     (Projects : App.Projects.Project_Vectors.Vector) return String
+     (Projects           : App.Projects.Project_Vectors.Vector;
+      Scope_Applied      : Boolean;
+      Mask_Functions     : Boolean;
+      Authorized_Columns : Natural) return String
    is
       use Standard.Templates.Values;
       use App.Projects;
@@ -194,12 +197,18 @@ package body App.Templates is
       end Nat_Image;
 
       DQ : constant Character := Character'Val (34); --  Double quote
+
+      --  A visible marker that the listing is governed by a tables plan.
+      Banner : constant String :=
+        "<p class=" & DQ & "wf-plan" & DQ & ">Listing planned by tables &middot; "
+        & "authorization scope applied: " & (if Scope_Applied then "yes" else "no")
+        & " &middot; " & Nat_Image (Authorized_Columns) & " authorized columns</p>";
    begin
       --  If no projects, return empty table with message
       if Projects.Is_Empty then
          Set (Context, "projects_loop",
               String_Item ("<tr><td colspan=" & DQ & "9" & DQ & ">No projects found.</td></tr>"));
-         return Standard.Templates.Render (Standard.Templates.Parse (Template), Context);
+         return Banner & Standard.Templates.Render (Standard.Templates.Parse (Template), Context);
       end if;
 
       --  Build table rows for each project
@@ -209,7 +218,9 @@ package body App.Templates is
          Ada.Strings.Unbounded.Append (Projects_Html, "<td>" & Trim_Spaces (Project.Name) & "</td>");
          Ada.Strings.Unbounded.Append (Projects_Html, "<td>" & Trim_Spaces (Project.Status) & "</td>");
          Ada.Strings.Unbounded.Append (Projects_Html, "<td>" & Trim_Spaces (Project.Project_Type) & "</td>");
-         Ada.Strings.Unbounded.Append (Projects_Html, "<td>" & Trim_Spaces (Project.Functions) & "</td>");
+         Ada.Strings.Unbounded.Append (Projects_Html, "<td>" &
+                 (if Mask_Functions then "[masked]"
+                  else Trim_Spaces (Project.Functions)) & "</td>");
          Ada.Strings.Unbounded.Append (Projects_Html, "<td class=" & DQ & "bool-cell" & DQ & ">" &
                  Bool_To_String (Project.Has_Project_Tools) & "</td>");
          Ada.Strings.Unbounded.Append (Projects_Html, "<td class=" & DQ & "bool-cell" & DQ & ">" &
@@ -226,8 +237,9 @@ package body App.Templates is
          Ada.Strings.Unbounded.Append (Projects_Html, "</tr>");
       end loop;
 
-      --  Replace the marker with the actual projects HTML
-      return Replace_Marker (Template, "<!-- PROJECTS_TABLE_ROWS -->", To_String (Projects_Html));
+      --  Replace the marker with the actual projects HTML, under the plan banner
+      return Banner
+        & Replace_Marker (Template, "<!-- PROJECTS_TABLE_ROWS -->", To_String (Projects_Html));
 
       --  Alternative approach: use the template system properly
       --  This would require a more complex template structure

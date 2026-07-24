@@ -2,6 +2,7 @@ with Ada.Strings.Unbounded;
 with Ada.Exceptions;
 with Ada.Strings.Fixed;
 with App.Auth;
+with App.Authz;
 with App.Projects;
 with Web.Assets.Clients;
 with App.Runtime;
@@ -366,13 +367,22 @@ package body App.Pages is
       use Standard.Templates.Values;
       --  Access is already decided by the route guards (Resolve_Principal then
       --  Require_App_Access); an unauthenticated or unauthorized caller never
-      --  reaches this handler, so the manual session check is gone. The
-      --  authenticated principal is available via Web.Context.Principal.
-      pragma Unreferenced (Context);
+      --  reaches this handler, so the manual session check is gone.
+      --
+      --  The listing itself is planned through tables from the same principal:
+      --  the plan governs which columns show and carries the authorization
+      --  scope, rather than the handler dumping every row and column.
+      Plan : constant App.Authz.Listing_Plan :=
+        App.Authz.Plan_Projects_Listing (Web.Context.Principal (Context));
       View : Value := Object;
       Page : Unbounded_String;
       Projects_Data : App.Projects.Project_Vectors.Vector;
    begin
+      --  Fail closed: if tables could not produce a ready plan, do not list.
+      if not Plan.Ready then
+         return Web.Response.Forbidden;
+      end if;
+
       Projects_Data := App.Projects.Get_Projects;
       Set (View, "title", String_Item ("Projects - Ada Webframework Example"));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
@@ -390,12 +400,16 @@ package body App.Pages is
                Nav_Bar & "<main>"));
       end;
 
-      --  Replace body content with projects table
+      --  Replace body content with the projects table, rendered under the plan.
       Page := To_Unbounded_String
         (App.Templates.Replace_Marker
            (To_String (Page),
             "<!-- wf:body -->",
-            App.Templates.Render_Projects_Table (Projects_Data)));
+            App.Templates.Render_Projects_Table
+              (Projects_Data,
+               Scope_Applied      => Plan.Scope_Applied,
+               Mask_Functions     => Plan.Mask_Functions,
+               Authorized_Columns => Plan.Authorized_Columns)));
 
       --  Replace asset URLs with versioned URLs for cache busting
       Page := To_Unbounded_String

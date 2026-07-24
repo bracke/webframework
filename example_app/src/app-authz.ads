@@ -24,4 +24,21 @@ package App.Authz is
      (Principal : String;
       Request   : Web.Request.Request_Type) return Ev.Decision;
 
+   --  A tables-planned summary of the projects listing. Built by asking the
+   --  authorization engine, translating its data scope, and running
+   --  Tables.Build_Query_Plan through the tables_authorization bridge. The
+   --  presentation the page renders is governed by this plan, not chosen ad hoc.
+   type Listing_Plan is record
+      Ready              : Boolean := False;
+      Scope_Applied      : Boolean := False;
+      Mask_Functions     : Boolean := False;
+      Authorized_Columns : Natural := 0;
+   end record;
+
+   --  Plan the projects listing for Principal through tables. Fail-closed: an
+   --  unusable principal or a non-ready plan yields Ready => False.
+   --  @param Principal Authorization principal id (opaque string).
+   --  @return The tables-derived listing plan.
+   function Plan_Projects_Listing (Principal : String) return Listing_Plan;
+
 end App.Authz;

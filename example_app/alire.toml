@@ -33,10 +33,22 @@ authorization = "*"
 authorization = { path = "../../authorization" }
 
 [[depends-on]]
+tables = "*"
+
+[[pins]]
+tables = { path = "../../tables" }
+
+[[depends-on]]
 webframework_authorization = "*"
 
 [[pins]]
 webframework_authorization = { path = "../../webframework_authorization" }
+
+[[depends-on]]
+tables_authorization = "*"
+
+[[pins]]
+tables_authorization = { path = "../../tables_authorization" }
 
 [[depends-on]]
 terminal_styles = "*"
