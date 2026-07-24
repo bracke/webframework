@@ -5,7 +5,6 @@ with Web.Request;
 with Authorization.Evaluator;
 with Authorization.Results;
 
-with App.Identity;
 with App.Auth;
 with App.Authz;
 
@@ -39,17 +38,9 @@ procedure App_Tests is
      (Ev.Enforcement_Of (App.Authz.Decide (Principal, Request)) in
         Rez.Authorized | Rez.Authorized_With_Requirements);
 begin
-   --  Identity password hashing (PBKDF2 verifier).
-   declare
-      Envelope : constant String := App.Identity.Hash_Password ("s3cret");
-   begin
-      Check (App.Identity.Verify_Password ("s3cret", Envelope),
-             "identity: the correct password verifies");
-      Check (not App.Identity.Verify_Password ("wrong", Envelope),
-             "identity: a wrong password is rejected");
-   end;
-
-   --  The credential store: two users, fail-closed.
+   --  The identity-repository credential store: two users, fail-closed. Seeding
+   --  creates real principals, accounts, bindings and password credentials;
+   --  Authenticate runs through the repository's password verification.
    App.Auth.Initialize;
    Check (App.Auth.Authenticate ("admin", "admin123") = "d.principal.admin",
           "auth: admin authenticates to its principal");

@@ -1,13 +1,15 @@
---  Credential store for the example app.
+--  Credential store for the example app, backed by the identity library's
+--  in-memory repository.
 --
---  Passwords are verified through the identity library (App.Identity); no
---  plaintext password is stored or compared. A successful authentication yields
---  a stable authorization principal id that the rest of the app carries as an
---  opaque reference and hands to the authorization engine.
+--  Users are real identity principals (with accounts, username bindings and
+--  enrolled password credentials); authentication runs through the repository's
+--  password verification, so no plaintext password is stored or compared. A
+--  successful authentication yields a stable authorization principal id that
+--  the rest of the app carries as an opaque reference.
 package App.Auth is
 
-   --  Prepare the credential store. Hashes the seeded demo password once so no
-   --  plaintext ever lives in the process beyond this call.
+   --  Seed the identity repository (principals, accounts, bindings, passwords).
+   --  Call once before serving.
    --  @return No return value.
    procedure Initialize;
 
