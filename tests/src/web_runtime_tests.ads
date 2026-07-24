@@ -11,4 +11,9 @@ package Web_Runtime_Tests is
    --  Test the tiny browser runtime with a DOM harness.
    --  @param Item AUnit fixture.
    procedure Test_Runtime_Behavior (Item : in out Fixture);
+
+   --  Test that a guarded dispatcher action runs only when its guard admits the
+   --  caller and produces no patch otherwise.
+   --  @param Item AUnit fixture.
+   procedure Test_Action_Guard (Item : in out Fixture);
 end Web_Runtime_Tests;

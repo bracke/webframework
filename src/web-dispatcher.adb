@@ -11,7 +11,14 @@ package body Web.Dispatcher is
       Hash         => Ada.Strings.Hash,
       Equivalent_Keys => "=");
 
+   package Guard_Maps is new Ada.Containers.Indefinite_Hashed_Maps
+     (Key_Type     => String,
+      Element_Type => Action_Guard,
+      Hash         => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
+
    Handlers : Handler_Maps.Map;
+   Guards   : Guard_Maps.Map;
 
    procedure Register (Action : String; Handler : Handler_Access) is
       Position : Handler_Maps.Cursor;
@@ -40,6 +47,21 @@ package body Web.Dispatcher is
       end if;
    end Register;
 
+   procedure Register
+     (Action  : String;
+      Handler : Handler_Access;
+      Guard   : Action_Guard) is
+   begin
+      if Guard = null then
+         raise Web.Errors.Security_Error with "dispatcher guard is null";
+      end if;
+
+      --  Registers and validates the handler (and rejects a duplicate action)
+      --  before the guard is recorded.
+      Register (Action, Handler);
+      Guards.Insert (Action, Guard);
+   end Register;
+
    function Dispatch
      (State : in out App_State;
       Event : Web.Events.Event) return Web.Patch.Patch_List
@@ -56,6 +78,19 @@ package body Web.Dispatcher is
          Web.Logging.Warn ("unknown action: " & Action);
          return (Items => Web.Patch.Patch_Vectors.Empty_Vector);
       end if;
+
+      --  Per-action authorization: a guarded action runs only when its guard
+      --  admits the caller; a rejected action produces no patches.
+      declare
+         Guard_Cursor : constant Guard_Maps.Cursor := Guards.Find (Action);
+      begin
+         if Guard_Maps.Has_Element (Guard_Cursor)
+           and then not Guard_Maps.Element (Guard_Cursor) (State, Event)
+         then
+            Web.Logging.Warn ("action not authorized: " & Action);
+            return (Items => Web.Patch.Patch_Vectors.Empty_Vector);
+         end if;
+      end;
 
       return Handler_Maps.Element (Cursor) (State, Event);
    exception

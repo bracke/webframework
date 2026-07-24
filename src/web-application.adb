@@ -4,6 +4,14 @@ package body Web.Application is
       Dispatcher.Register (Action, Handler);
    end Register;
 
+   procedure Register
+     (Action  : String;
+      Handler : Dispatcher.Handler_Access;
+      Guard   : Dispatcher.Action_Guard) is
+   begin
+      Dispatcher.Register (Action, Handler, Guard);
+   end Register;
+
    function Find_Or_Create_Session (Request : Web.Request.Request_Type) return String is
    begin
       return Live.Find_Or_Create_Session (Request);

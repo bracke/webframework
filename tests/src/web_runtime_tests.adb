@@ -2,17 +2,62 @@ with Ada.Text_IO;
 with AUnit.Assertions;
 with AUnit.Test_Caller;
 with GNAT.OS_Lib;
+with Web.Dispatcher;
+with Web.Events;
+with Web.Patch;
 
 package body Web_Runtime_Tests is
    package Caller is new AUnit.Test_Caller (Fixture);
    use AUnit.Assertions;
    use type GNAT.OS_Lib.String_Access;
 
+   --  A dispatcher over a trivial "authorized?" state, to test action guards.
+   package Guarded_Dispatcher is new Web.Dispatcher (App_State => Boolean);
+
+   function Ran
+     (State : in out Boolean; Event : Web.Events.Event) return Web.Patch.Patch_List
+   is
+      pragma Unreferenced (State, Event);
+   begin
+      return Web.Patch.Single (Web.Patch.Set_Text ("marker", "ran"));
+   end Ran;
+
+   function Admit (State : Boolean; Event : Web.Events.Event) return Boolean is
+      pragma Unreferenced (Event);
+   begin
+      return State;
+   end Admit;
+
+   Guard_Registered : Boolean := False;
+
    procedure Add_Tests (Suite : AUnit.Test_Suites.Access_Test_Suite) is
    begin
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("browser runtime behavior", Test_Runtime_Behavior'Access));
+      AUnit.Test_Suites.Add_Test
+        (Suite, Caller.Create ("dispatcher action guard", Test_Action_Guard'Access));
    end Add_Tests;
+
+   procedure Test_Action_Guard (Item : in out Fixture) is
+      pragma Unreferenced (Item);
+      Event : constant Web.Events.Event :=
+        Web.Events.Create
+          (Web.Events.Click_Event, Element_Id => "btn", Action => "guarded.act");
+      Authorized   : Boolean := True;
+      Unauthorized : Boolean := False;
+   begin
+      if not Guard_Registered then
+         Guarded_Dispatcher.Register ("guarded.act", Ran'Access, Admit'Access);
+         Guard_Registered := True;
+      end if;
+
+      Assert
+        (not Guarded_Dispatcher.Dispatch (Authorized, Event).Items.Is_Empty,
+         "an authorized action runs and produces a patch");
+      Assert
+        (Guarded_Dispatcher.Dispatch (Unauthorized, Event).Items.Is_Empty,
+         "an unauthorized action is rejected and produces no patch");
+   end Test_Action_Guard;
 
    procedure Put (File : in out Ada.Text_IO.File_Type; Line : String) is
    begin

@@ -36,6 +36,18 @@ package Web.Application is
    --  @return No return value.
    procedure Register (Action : String; Handler : Dispatcher.Handler_Access);
 
+   --  Register an action handler protected by a per-action authorization guard.
+   --  The guard runs before the handler on every dispatch; a rejected action
+   --  produces no patches. Use to gate live actions by the session's role.
+   --  @param Action Action string that client events must send.
+   --  @param Handler Handler function that mutates session state.
+   --  @param Guard Authorization guard; must not be null.
+   --  @return No return value.
+   procedure Register
+     (Action  : String;
+      Handler : Dispatcher.Handler_Access;
+      Guard   : Dispatcher.Action_Guard);
+
    --  Find or create a session for a request.
    --  @param Request Parsed HTTP request.
    --  @return Session identifier.
