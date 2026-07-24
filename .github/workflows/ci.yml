@@ -147,3 +147,9 @@ jobs:
         run: |
           alr --non-interactive build
           ./bin/app_tests
+          ./bin/app_http_tests
+      - name: Run the framework CLI checker on the example app
+        working-directory: webframework/webframework_cli
+        run: |
+          alr --non-interactive build
+          ./bin/webframework check ../example_app
