@@ -218,4 +218,18 @@ failures are logged in redacted structured form (BIND-010).
   Error_Token, never an exception. AUnit suite 85 → 93, including the escape and
   number matrices and a fuzz harness (adversarial + pseudo-random bytes at every
   chunk size: always terminates at End_Document or Error_Token).
-- Phases 7–17: pending, in spec order.
+- **Phase 7 — Typed JSON binding: landed.** `Web.Binding.Codecs.JSON.Binding`
+  drives the phase-6 tokenizer into typed values with no DOM: streaming
+  primitives walk objects (`Next_Member` positions at each value), arrays
+  (`Next_Element`), skip unknown values (`Skip_Value`), and extract scalars
+  (generic `Read_Scalar` → a decoder result; objects/arrays are
+  json.unexpected_kind). A `Member_Tracker` gives duplicate detection and
+  required-field checking. `Record_Binders.Assign` folds each field result into
+  the builder (a "setter" may set or append, so the same call binds scalars and
+  collection elements). The application supplies deterministic member dispatch (a
+  case on the key — compiler-generated, not hash-iteration order); errors carry
+  exact JSON paths (`body.tags[1]`, `body.user.age`) and aggregate within a
+  structurally valid object. AUnit suite 93 → 96 (full object with array +
+  nested; duplicate / unknown / null / type-mismatch / missing; path + order
+  aggregation).
+- Phases 8–17: pending, in spec order.

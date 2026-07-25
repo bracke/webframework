@@ -129,6 +129,17 @@ package Web.Binding.Record_Binders is
       Source : Source_Kind;
       Policy : Web.Binding.Policies.Unknown_Field_Policy);
 
+   --  Fold an already-decoded field result into the builder. For codec-driven
+   --  binding (JSON, phase 7) where a field's value comes from a token stream
+   --  rather than source occurrences: on success assign through Setter, on
+   --  failure merge the errors. Deterministic error order still follows the
+   --  order of Assign calls.
+   generic
+      type Field_Type is private;
+      with package Field_Results is new Web.Binding.Results (Field_Type);
+      with procedure Setter (Rec : in out Target; Value : Field_Type);
+   procedure Assign (B : in out Builder; Result : Field_Results.Result);
+
    --  Record an arbitrary error (e.g. a source-precedence conflict).
    --  @param B The builder.
    --  @param Error The error to record.

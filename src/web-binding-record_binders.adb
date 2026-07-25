@@ -209,6 +209,18 @@ package body Web.Binding.Record_Binders is
       end case;
    end Note_Unknown;
 
+   procedure Assign (B : in out Builder; Result : Field_Results.Result) is
+   begin
+      if B.Sealed then
+         return;
+      end if;
+      if Field_Results.Succeeded (Result) then
+         Setter (B.Working, Field_Results.Value_Of (Result));
+      else
+         Merge (B, Field_Results.Errors_Of (Result));
+      end if;
+   end Assign;
+
    procedure Add_Error
      (B : in out Builder; Error : Web.Binding.Errors.Decoding_Error) is
    begin
