@@ -254,4 +254,16 @@ failures are logged in redacted structured form (BIND-010).
   (BIND-012). `Select_Codec` is deterministic: exact → suffix (+json) → wildcard
   (type/* then */*) → none; no sniffing. Missing-Content-Type policy (reject /
   allow-empty / use-default). AUnit suite 99 → 102.
-- Phases 10–17: pending, in spec order.
+- **Phase 10 — Multipart streaming core: landed.** `Web.Binding.Multipart` is a
+  defensive streaming pull parser: skip the preamble, then per part read bounded
+  headers (Content-Disposition → name + optional filename; optional part
+  Content-Type) and stream the body up to the next boundary. Boundary detection
+  uses a compacting buffer with block search that holds back a delimiter-length
+  tail, so a boundary split across read chunks is found and the result is
+  fragmentation-invariant; scanning is linear and bounded, and file bodies are
+  never fully buffered (a caller streams them via Read_Body — phase 11 wires the
+  sink). Limits bound part count, header size and text-field size; malformed
+  framing is a structured Outcome, never an exception; client filenames are
+  metadata only. AUnit suite 102 → 106, including fragmentation across chunk
+  sizes 1…5000 and a fuzz harness (adversarial + pseudo-random, always terminates).
+- Phases 11–17: pending, in spec order.
