@@ -31,7 +31,13 @@ project Webframework is
       "Web.TLS",
       "Web.WebSocket",
       "Web.Assets",
-      "Web.Assets.Clients");
+      "Web.Assets.Clients",
+      "Web.Binding",
+      "Web.Binding.Errors",
+      "Web.Binding.Paths",
+      "Web.Binding.Limits",
+      "Web.Binding.Policies",
+      "Web.Binding.Results");
    package Compiler is
       for Default_Switches ("Ada") use
         Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");
