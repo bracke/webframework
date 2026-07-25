@@ -104,6 +104,12 @@ package Web.Binding.Paths is
    --  @return The root key text.
    function Source_Root_Key (Root : Source_Kind) return String;
 
+   --  The name of the last field or map-key segment, or "" if the path has none.
+   --  Used to attach an error to a form field by its leaf name.
+   --  @param Path The path.
+   --  @return The leaf field/key name, or the empty string.
+   function Last_Name (Path : Field_Path) return String;
+
 private
 
    type Segment_Array is array (Positive range 1 .. Max_Depth) of Path_Segment;

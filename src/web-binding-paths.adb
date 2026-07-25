@@ -102,6 +102,16 @@ package body Web.Binding.Paths is
       end case;
    end Source_Root_Key;
 
+   function Last_Name (Path : Field_Path) return String is
+   begin
+      for I in reverse 1 .. Path.Length loop
+         if Path.Segments (I).Kind in Field_Segment | Key_Segment then
+            return To_String (Path.Segments (I).Name);
+         end if;
+      end loop;
+      return "";
+   end Last_Name;
+
    --  Render an index number without the leading space Ada'Image inserts.
    function Index_Image (Index : Index_Number) return String is
    begin

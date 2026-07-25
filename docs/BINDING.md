@@ -278,4 +278,15 @@ failures are logged in redacted structured form (BIND-010).
   Memory` is the in-memory backend and test double (rolling checksum + injectable
   begin/write/finish faults). AUnit suite 106 → 110 (stream + checksum,
   per-upload / aggregate limits, injected sink failure, abort-on-scope-exit).
-- Phases 12–17: pending, in spec order.
+- **Phase 12 — Forms integration: landed.** No Forms sibling exists, so
+  `Web.Binding.Forms` defines the adapter contract and a usable in-place form.
+  It tracks the submission lifecycle (Not_Submitted → Decoded / Decode_Failed →
+  Validated / Validation_Failed), retains submitted raw values for safe
+  re-rendering **subject to sensitivity** (Public retained; Private and Secret
+  never retained, so passwords / tokens / CSRF secrets stay blank — BIND-011),
+  and converts a bind result's structured errors into per-field errors (matched
+  by the path's leaf name) and non-field (form-level) errors. Forms consume the
+  binding output and never reparse. AUnit suite 110 → 112 (a full re-render:
+  valid and invalid field values retained, secret redacted, per-field vs
+  non-field errors; and the state transitions).
+- Phases 13–17: pending, in spec order.
