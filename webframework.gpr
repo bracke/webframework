@@ -60,7 +60,12 @@ project Webframework is
       "Web.Binding.Headers",
       "Web.Binding.Cookies",
       "Web.Binding.Record_Binders",
-      "Web.Binding.Names");
+      "Web.Binding.Names",
+      "Web.Binding.Streams",
+      "Web.Binding.Streams.Memory",
+      "Web.Binding.Bodies",
+      "Web.Binding.Codecs",
+      "Web.Binding.Codecs.URL_Encoded");
    package Compiler is
       for Default_Switches ("Ada") use
         Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");

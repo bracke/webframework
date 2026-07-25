@@ -190,4 +190,19 @@ failures are logged in redacted structured form (BIND-010).
   pluggable flat-name adapters (dotted / bracketed / underscored) for nested
   fields on flat sources; `Guard_Depth` enforces a maximum path depth
   (`decode.nesting_too_deep`). AUnit suite 74 → 78.
-- Phases 5–17: pending, in spec order.
+- **Phase 5 — URL-encoded codec + stream abstraction: landed.**
+  `Web.Binding.Streams` (abstract bounded input stream: `Read` enforces the
+  aggregate byte limit and tracks the offset; outcomes cover chunk / EOF /
+  over-limit / cancelled / failed, none raising) with `Streams.Memory` — the
+  in-memory backing and test double (configurable chunking + injected premature
+  EOF / read failure). `Web.Binding.Bodies` tracks body ownership (Available /
+  Decoding / Consumed / Failed; a second claim is refused → the caller reports
+  binding.source_already_consumed). `Web.Binding.Codecs.URL_Encoded` is a
+  streaming byte-level state machine, so `%XX` escapes and `&`/`=` delimiters may
+  split across chunks and the result is fragmentation-invariant; percent + plus
+  decoded, malformed escape flagged, bounded pair count / name+value length /
+  body size (too_many_fields / field_too_large / body_too_large). UTF-8
+  validation stays a decoder concern (layering). AUnit suite 78 → 85, including a
+  fuzz harness (adversarial corpus + pseudo-random bytes at every chunk size:
+  always terminates, no exceptions, bounded output).
+- Phases 6–17: pending, in spec order.
