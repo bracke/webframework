@@ -4,6 +4,8 @@ with Ada.Strings.Fixed;
 with App.Auth;
 with App.Authz;
 with App.Projects;
+with App.Project_Validation;
+with Validation.Results;
 with Web.Assets.Clients;
 with App.Runtime;
 with App.State;
@@ -548,10 +550,22 @@ package body App.Pages is
          Has_GNAT : constant Boolean := Parse_Bool (Extract_Value (Gnat_Start, Body_Content));
          Has_GitHub : constant Boolean := Parse_Bool (Extract_Value (Github_Start, Body_Content));
          Has_Alire : constant Boolean := Parse_Bool (Extract_Value (Alire_Start, Body_Content));
+
+         --  Decode -> validate: feed the typed fields to the Validation library
+         --  before touching the database.
+         Input : constant App.Project_Validation.Project_Input :=
+           (Name         => To_Unbounded_String (Name),
+            Status       => To_Unbounded_String (Status),
+            Project_Type => To_Unbounded_String (Project_Type),
+            Functions    => To_Unbounded_String (Functions));
+         Check : constant Validation.Results.Result :=
+           App.Project_Validation.Validate (Input);
       begin
-         --  Validate required fields
-         if Name'Length = 0 then
-            return Web.Response.Bad_Request ("Name is required");
+         --  Reject invalid input with the structured issues as JSON.
+         if Validation.Results.Has_Errors (Check) then
+            return Web.Response.Create
+              (400, App.Project_Validation.Error_JSON (Check),
+               "application/json; charset=utf-8");
          end if;
 
          --  Add project to database

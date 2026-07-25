@@ -1,6 +1,10 @@
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Command_Line;
 with Ada.Containers;
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+
+with Validation.Results;
+with App.Project_Validation;
 
 with Web.Request;
 with Web.Context;
@@ -244,6 +248,30 @@ begin
              "live: admin on a remembered session may NOT (step-up)");
       App.Auth.Revoke_Session (Fresh_Tok);
       App.Auth.Revoke_Session (Remem_Tok);
+   end;
+
+   --  Add-project form validation via the standalone Validation library.
+   declare
+      use App.Project_Validation;
+      Good : constant Project_Input :=
+        (Name         => To_Unbounded_String ("Ada Web"),
+         Status       => To_Unbounded_String ("active"),
+         Project_Type => To_Unbounded_String ("library"),
+         Functions    => To_Unbounded_String ("http"));
+      Bad : constant Project_Input :=
+        (Name         => Null_Unbounded_String,   --  required
+         Status       => To_Unbounded_String ("active"),
+         Project_Type => Null_Unbounded_String,
+         Functions    => Null_Unbounded_String);
+      Good_Result : constant Validation.Results.Result := Validate (Good);
+      Bad_Result  : constant Validation.Results.Result := Validate (Bad);
+   begin
+      Check (not Validation.Results.Has_Errors (Good_Result),
+             "validation: a well-formed project passes");
+      Check (Validation.Results.Has_Errors (Bad_Result),
+             "validation: an empty name is rejected");
+      Check (Validation.Results.Error_Count (Bad_Result) = 1,
+             "validation: exactly the name/required error");
    end;
 
    New_Line;

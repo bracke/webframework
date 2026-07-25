@@ -68,6 +68,12 @@ database = "*"
 [[pins]]
 database = { path = "../../database" }
 
+[[depends-on]]
+validation = "*"
+
+[[pins]]
+validation = { path = "../../validation" }
+
 # Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib,
 # zlib and hostkit through webframework and database, so it must pin them itself.
 [[pins]]
