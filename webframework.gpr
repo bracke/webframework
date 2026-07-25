@@ -37,7 +37,15 @@ project Webframework is
       "Web.Binding.Paths",
       "Web.Binding.Limits",
       "Web.Binding.Policies",
-      "Web.Binding.Results");
+      "Web.Binding.Results",
+      "Web.Binding.Decoders",
+      "Web.Binding.Decoders.Integer_Decoders",
+      "Web.Binding.Decoders.Boolean_Decoders",
+      "Web.Binding.Decoders.Text_Decoders",
+      "Web.Binding.Decoders.Enum_Decoders",
+      "Web.Binding.Decoders.UUID_Decoders",
+      "Web.Binding.Decoders.Optional_Decoders",
+      "Web.Binding.Decoders.Defaulted_Decoders");
    package Compiler is
       for Default_Switches ("Ada") use
         Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");

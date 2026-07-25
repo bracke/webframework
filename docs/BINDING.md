@@ -126,4 +126,17 @@ failures are logged in redacted structured form (BIND-010).
   deterministically-truncated `Error_Collection`, generic results, typed limits
   with layered tightening, policy types, invariant registry. Unit-tested; no body
   decoding yet.
-- Phases 1–17: pending, in spec order.
+- **Phase 1 — Scalar decoder framework: core landed.** Decoder contract
+  (`Web.Binding.Decoders`: input kinds, metadata, `Single_Error`, UTF-8
+  validation) and built-in decoders: signed integer (full radix/sign/whitespace/
+  separator/leading-zero config, exact `decode.invalid_integer` vs
+  `decode.integer_out_of_range`, overflow-guarded — never raises), Boolean
+  (narrow default + optional sets + case folding), bounded text (UTF-8 + length),
+  enumeration (explicit wire mappings, case modes, aliases/deprecated aliases),
+  UUID (canonical, normalized). Optional and default combinators (a malformed
+  present value is an error, never silently defaulted). AUnit suite 53 → 59, all
+  acceptance rules met (exact classification, no malformed-input exception flow).
+  **Remaining Phase-1 built-ins:** date / time / date-time (ISO, RFC 3339, HTTP
+  date), plus the §10 extras (modular, float, fixed, duration, base64, hex,
+  media-type, URI) — landing next.
+- Phases 2–17: pending, in spec order.
