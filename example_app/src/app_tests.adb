@@ -1,5 +1,6 @@
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Command_Line;
+with Ada.Containers;
 
 with Web.Request;
 with Web.Context;
@@ -11,6 +12,7 @@ with App.Auth;
 with App.Authz;
 with App.State;
 with App.Guards;
+with App.Projects;
 
 --  Regression tests for the example app's stack integration: identity password
 --  hashing, the two-user credential store, and the role-based authorization
@@ -149,6 +151,20 @@ begin
    Check (Allowed_At ("d.principal.admin", View_Req, "BASIC"),
           "authz: a low-assurance session may still view");
 
+   --  The assurance mapping's upper levels (identity ladder -> the engine's).
+   --  Sensitive, Administrative and Service all clear the Substantial step-up;
+   --  Anonymous and an unrecognised level do not (fail-closed).
+   Check (Allowed_At ("d.principal.admin", Manage_Req, "SENSITIVE"),
+          "authz: a SENSITIVE session may manage");
+   Check (Allowed_At ("d.principal.admin", Manage_Req, "ADMINISTRATIVE"),
+          "authz: an ADMINISTRATIVE session may manage");
+   Check (Allowed_At ("d.principal.admin", Manage_Req, "SERVICE"),
+          "authz: a SERVICE session may manage");
+   Check (not Allowed_At ("d.principal.admin", Manage_Req, "ANONYMOUS"),
+          "authz: an ANONYMOUS session may NOT manage");
+   Check (not Allowed_At ("d.principal.admin", Manage_Req, "not-a-level"),
+          "authz: an unrecognised assurance fails closed");
+
    --  The tables plan, resolved per role.
    Check (Plan_For ("d.principal.admin").Ready,
           "plan: admin gets a ready plan");
@@ -158,6 +174,30 @@ begin
           "plan: viewer gets the functions column masked");
    Check (Plan_For ("d.principal.viewer").Scope_Applied,
           "plan: the authorization scope survives into the plan");
+
+   --  The scope is enforced in the query, not after: the scoped listing returns
+   --  strictly fewer rows than the unscoped one, and every row it returns is
+   --  Alire-tracked. (The seed mixes Alire and non-Alire projects.)
+   App.Projects.Initialize;
+   declare
+      use type Ada.Containers.Count_Type;
+      All_Rows : constant App.Projects.Project_Vectors.Vector :=
+        App.Projects.Get_Projects (Alire_Only => False);
+      Scoped   : constant App.Projects.Project_Vectors.Vector :=
+        App.Projects.Get_Projects (Alire_Only => True);
+      All_Alire : Boolean := True;
+   begin
+      for R of Scoped loop
+         if not R.Has_Alire then
+            All_Alire := False;
+         end if;
+      end loop;
+      Check (Scoped.Length > 0, "scope: the scoped query returns rows");
+      Check (Scoped.Length < All_Rows.Length,
+             "scope: the Alire scope drops out-of-scope rows in the query");
+      Check (All_Alire,
+             "scope: every row the scoped query returns is Alire-tracked");
+   end;
 
    --  The live (WebSocket) privileged action guard: like the HTTP manage path,
    --  it needs clearance AND an interactive session, not a remembered one.
