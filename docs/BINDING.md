@@ -311,4 +311,15 @@ failures are logged in redacted structured form (BIND-010).
   elsewhere — binding makes no permission decision. No authentication or
   authorization logic lives in binding core (the acceptance rule). AUnit suite
   114 → 117.
-- Phases 15–17: pending, in spec order.
+- **Phase 15 — Typed handlers: landed.** `Web.Binding.Requests` provides the
+  failure classification (`Classify`: malformed/missing → Bad_Request 400,
+  unsupported/missing media type → 415, over-size body/field → 413, binding-
+  config fault → 500, and route-parameter → 404 by policy; worst class wins) and
+  a generic `Dispatch` that runs the application handler **only on success** with
+  the fully typed value, sending failures to a response mapper with the class and
+  errors — binding never builds a response itself. `Web.Binding.Contexts` is the
+  minimal per-request `Binding_Context` (effective limits, aggregation mode,
+  diagnostics flag, correlation id), the §9 skeleton deferred from phase 0. AUnit
+  suite 117 → 120 (classification incl. worst-wins and route-404, the context,
+  and dispatch proving the handler runs only on success).
+- Phases 16–17: pending, in spec order.
