@@ -37,6 +37,15 @@ package App.Auth is
    --  @return Opaque session token, or an empty string on failure.
    function Create_Session (Principal : String) return String;
 
+   --  Create a *remembered* session: a returning user re-established from a
+   --  long-lived remember-me cookie, without a fresh password presentation. It
+   --  is therefore only BASIC assurance -- enough to view, but the policy will
+   --  refuse a privileged action until the user re-authenticates interactively.
+   --  Same opaque-token shape as Create_Session.
+   --  @param Principal Authorization principal id.
+   --  @return Opaque session token, or an empty string on failure.
+   function Create_Remembered_Session (Principal : String) return String;
+
    --  Validate a session token against the identity repository. Returns the
    --  authorization principal of the session when it is live, or an empty
    --  string when the token is malformed, expired, or revoked. Called on every

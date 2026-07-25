@@ -199,6 +199,8 @@ package body App.Auth is
         (Principal : String;
          Reference : String;
          Secret    : String;
+         Assurance : Levels.Assurance_Level;
+         Remembered : Boolean;
          Success   : out Boolean);
       function Validate_Session
         (Reference : String; Secret : String) return Unbounded_String;
@@ -302,6 +304,8 @@ package body App.Auth is
         (Principal : String;
          Reference : String;
          Secret    : String;
+         Assurance : Levels.Assurance_Level;
+         Remembered : Boolean;
          Success   : out Boolean)
       is
          Pid_Text : constant String := Identity_Pid_Of (Principal);
@@ -327,11 +331,12 @@ package body App.Auth is
                   External_Provider => (Present => False),
                   Public_Reference => Btext.From_String (Reference),
                   Secret => Sec_Txt.From_UTF_8 (Secret),
-                  --  A password login is an interactive credential
-                  --  presentation, so the session is Interactive assurance --
-                  --  the level the manage policy demands as a step-up.
-                  Assurance => Levels.Interactive,
-                  Attributes => (Recent_Authentication => True, others => <>),
+                  --  The assurance the caller established: a password login is
+                  --  an interactive presentation (Interactive, the level the
+                  --  manage policy demands); a remember-me cookie is not (Basic).
+                  Assurance => Assurance,
+                  Attributes =>
+                    (Recent_Authentication => not Remembered, others => <>),
                   Created_At => T,
                   Original_Authenticated_At => T,
                   Primary_Authenticated_At => T,
@@ -340,7 +345,7 @@ package body App.Auth is
                   Last_Seen_At => T,
                   Idle_Expires_At => Expir.At_Time (T + 3_600),
                   Absolute_Expires_At => Expir.At_Time (T + 86_400),
-                  Remembered => False,
+                  Remembered => Remembered,
                   Generation => 0),
                  Audit_Context, Next_Event, T);
          begin
@@ -442,18 +447,31 @@ package body App.Auth is
       return To_String (Principal);
    end Authenticate;
 
-   function Create_Session (Principal : String) return String is
+   --  Shared token minting; Assurance/Remembered distinguish an interactive
+   --  login from a remembered one.
+   function Mint_Session
+     (Principal  : String;
+      Assurance  : Levels.Assurance_Level;
+      Remembered : Boolean) return String
+   is
       Reference : constant String := Web.Security.New_Session_Id;
       Secret    : constant String := Web.Security.New_Session_Id;
       Success   : Boolean;
    begin
-      Vault.Create_Session (Principal, Reference, Secret, Success);
+      Vault.Create_Session
+        (Principal, Reference, Secret, Assurance, Remembered, Success);
       if Success then
          return Reference & "|" & Secret;
       else
          return "";
       end if;
-   end Create_Session;
+   end Mint_Session;
+
+   function Create_Session (Principal : String) return String is
+     (Mint_Session (Principal, Levels.Interactive, Remembered => False));
+
+   function Create_Remembered_Session (Principal : String) return String is
+     (Mint_Session (Principal, Levels.Basic, Remembered => True));
 
    function Validate_Session (Token : String) return String is
       Bar : constant Natural := Ada.Strings.Fixed.Index (Token, "|");

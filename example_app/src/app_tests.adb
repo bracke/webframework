@@ -3,11 +3,14 @@ with Ada.Command_Line;
 
 with Web.Request;
 with Web.Context;
+with Web.Events;
 with Authorization.Evaluator;
 with Authorization.Results;
 
 with App.Auth;
 with App.Authz;
+with App.State;
+with App.Guards;
 
 --  Regression tests for the example app's stack integration: identity password
 --  hashing, the two-user credential store, and the role-based authorization
@@ -94,13 +97,31 @@ begin
       Check (Token /= "", "session: created for a valid principal");
       Check (App.Auth.Validate_Session (Token) = "d.principal.admin",
              "session: a live token validates to its principal");
+      Check (App.Auth.Session_Assurance (Token) = "INTERACTIVE",
+             "session: a password login yields an INTERACTIVE session");
       App.Auth.Revoke_Session (Token);
       Check (App.Auth.Validate_Session (Token) = "",
              "session: a revoked token no longer validates");
+      Check (App.Auth.Session_Assurance (Token) = "",
+             "session: a revoked token has no assurance");
       Check (App.Auth.Validate_Session ("garbage") = "",
              "session: a malformed token is rejected");
+      Check (App.Auth.Session_Assurance ("garbage") = "",
+             "session: a malformed token has no assurance");
       Check (App.Auth.Create_Session ("d.principal.ghost") = "",
              "session: no session for an unknown principal");
+   end;
+
+   --  A remembered (remember-me cookie) session is only BASIC assurance.
+   declare
+      R_Token : constant String :=
+        App.Auth.Create_Remembered_Session ("d.principal.admin");
+   begin
+      Check (App.Auth.Validate_Session (R_Token) = "d.principal.admin",
+             "session: a remembered token validates to its principal");
+      Check (App.Auth.Session_Assurance (R_Token) = "BASIC",
+             "session: a remembered login yields a BASIC session");
+      App.Auth.Revoke_Session (R_Token);
    end;
 
    --  Role-based authorization.
@@ -137,6 +158,32 @@ begin
           "plan: viewer gets the functions column masked");
    Check (Plan_For ("d.principal.viewer").Scope_Applied,
           "plan: the authorization scope survives into the plan");
+
+   --  The live (WebSocket) privileged action guard: like the HTTP manage path,
+   --  it needs clearance AND an interactive session, not a remembered one.
+   declare
+      Dummy : constant Web.Events.Event :=
+        Web.Events.Create
+          (Web.Events.Click_Event, Element_Id => "btn",
+           Action => "profile.save");
+      Fresh_Tok : constant String :=
+        App.Auth.Create_Session ("d.principal.admin");
+      Remem_Tok : constant String :=
+        App.Auth.Create_Remembered_Session ("d.principal.admin");
+      Fresh_State : App.State.App_State;
+      Remem_State : App.State.App_State;
+   begin
+      App.State.Set_Authenticated
+        (Fresh_State, "d.principal.admin", "admin", 100, Fresh_Tok);
+      App.State.Set_Authenticated
+        (Remem_State, "d.principal.admin", "admin", 100, Remem_Tok);
+      Check (App.Guards.Require_Admin_Action (Fresh_State, Dummy),
+             "live: admin on an interactive session may run a privileged action");
+      Check (not App.Guards.Require_Admin_Action (Remem_State, Dummy),
+             "live: admin on a remembered session may NOT (step-up)");
+      App.Auth.Revoke_Session (Fresh_Tok);
+      App.Auth.Revoke_Session (Remem_Tok);
+   end;
 
    New_Line;
    Put_Line ("Failures:" & Natural'Image (Failures));

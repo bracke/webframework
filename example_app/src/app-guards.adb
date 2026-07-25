@@ -1,6 +1,7 @@
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Web.Response;
 with Webframework_Authorization;
+with Identity.Assurance.Levels;
 with App.Runtime;
 with App.Auth;
 with App.Authz;
@@ -95,13 +96,34 @@ package body App.Guards is
 
    Admin_Clearance : constant Natural := 100;
 
+   package ILvl renames Identity.Assurance.Levels;
+   use type ILvl.Assurance_Level;
+
+   --  True iff Text names an identity assurance level of at least Interactive.
+   --  Fail-closed: an empty, revoked-session ("") or unrecognised level is not
+   --  enough for a step-up.
+   function Interactive_Or_Stronger (Text : String) return Boolean is
+   begin
+      return ILvl.Assurance_Level'Value (Text) >= ILvl.Interactive;
+   exception
+      when others =>
+         return False;
+   end Interactive_Or_Stronger;
+
    function Require_Admin_Action
      (State : App.State.App_State;
       Event : Web.Events.Event) return Boolean
    is
       pragma Unreferenced (Event);
+      --  Read the session's assurance live, so a revoked session also fails.
+      Assurance : constant String :=
+        App.Auth.Session_Assurance (App.State.Get_Session_Token (State));
    begin
-      return App.State.Get_Clearance (State) >= Admin_Clearance;
+      --  Clearance AND a step-up: the live privileged action, like the HTTP
+      --  manage path, needs an interactive session -- not merely admin
+      --  clearance on a remembered, low-assurance one.
+      return App.State.Get_Clearance (State) >= Admin_Clearance
+        and then Interactive_Or_Stronger (Assurance);
    end Require_Admin_Action;
 
 end App.Guards;

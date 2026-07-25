@@ -66,6 +66,21 @@ package body App.Http_Support is
       return Sid;
    end Setup_Login;
 
+   --  A returning user re-established from a remember-me cookie: a Basic
+   --  (low-assurance) identity session with no fresh password presentation.
+   --  Returns the framework session id (the cookie value).
+   function Setup_Remembered (Principal : String) return String is
+      Seed : constant Web.Request.Request_Type := Web.Request.Create ("GET", "/");
+      Sid  : constant String := App.Runtime.Find_Or_Create_Session (Seed);
+   begin
+      Pending_Principal := To_Unbounded_String (Principal);
+      Pending_Clearance := App.Auth.Clearance_Of (Principal);
+      Pending_Token :=
+        To_Unbounded_String (App.Auth.Create_Remembered_Session (Principal));
+      App.Runtime.With_State (Sid, Apply_Auth'Access);
+      return Sid;
+   end Setup_Remembered;
+
    --  Dispatch a request (optionally carrying a session cookie) and return the
    --  HTTP status the guard chain produced.
    function Status_Of
@@ -120,6 +135,20 @@ package body App.Http_Support is
                 "http: viewer is admitted to the protected page");
          Check (Status_Of ("POST", "/api/projects/probe", Viewer) = 403,
                 "http: viewer is forbidden from managing");
+      end;
+
+      --  A remembered (low-assurance) administrator session: full clearance,
+      --  but the step-up gate refuses management until an interactive
+      --  re-authentication. This is the assurance gate proven over the wire.
+      declare
+         Admin_R : constant String := Setup_Remembered ("d.principal.admin");
+      begin
+         Check (Admin_R /= "", "http: admin returns on a remembered session");
+         Check (Status_Of ("GET", "/secure", Admin_R) = 200,
+                "http: a remembered session may view");
+         Check (Status_Of ("POST", "/api/projects/probe", Admin_R) = 403,
+                "http: a remembered low-assurance session may NOT manage "
+                & "(step-up)");
       end;
 
       --  Session revocation takes effect on the very next request.
