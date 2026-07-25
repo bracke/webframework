@@ -232,4 +232,15 @@ failures are logged in redacted structured form (BIND-010).
   structurally valid object. AUnit suite 93 → 96 (full object with array +
   nested; duplicate / unknown / null / type-mismatch / missing; path + order
   aggregation).
-- Phases 8–17: pending, in spec order.
+- **Phase 8 — Discriminated unions: landed.** `Web.Binding.Union_Binders`
+  (generic over the alternative enum): a `Selector` maps discriminator wire
+  values to alternatives (`Resolve` → found/not-found → union.missing /
+  union.invalid), and `Resolve_Structural` turns per-alternative match flags into
+  Exactly_One / Ambiguous (union.ambiguous_alternative) / No_Match
+  (union.no_matching_alternative). The safe-construction pattern: decode the
+  discriminator, collect the selected alternative's fields into locals, and build
+  the discriminated Ada value once with the resolved discriminant — never
+  mutating a mis-discriminated record; a field from another alternative is
+  rejected. AUnit suite 96 → 99 (both alternatives construct; missing / invalid /
+  wrong-alternative; structural exactly-one / ambiguous / no-match).
+- Phases 9–17: pending, in spec order.

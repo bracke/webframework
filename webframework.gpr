@@ -60,6 +60,7 @@ project Webframework is
       "Web.Binding.Headers",
       "Web.Binding.Cookies",
       "Web.Binding.Record_Binders",
+      "Web.Binding.Union_Binders",
       "Web.Binding.Names",
       "Web.Binding.Streams",
       "Web.Binding.Streams.Memory",
