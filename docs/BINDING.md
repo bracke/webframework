@@ -38,7 +38,7 @@ what is landed versus pending.
 | `Web.Binding.Record_Binders` / `Union_Binders` | builder-based record + tagged-union binding | 3, 8 |
 | `Web.Binding.Contexts` | per-request `Binding_Context`, body-ownership state | 2, 9 |
 | `Web.Binding.Bodies` / `Codecs` / `Codecs.*` / `Registry` | body stream, media-type + immutable codec registry | 5, 6, 9 |
-| `Web.Binding.Multipart` / `Uploads` | streaming multipart + upload adapter | 10, 11 |
+| `Web.Binding.Multipart` (+ `.Binding`) / `Uploads` | streaming multipart, typed-field helpers + upload adapter | 10, 11 |
 | `Web.Binding.Forms` / `Validation` | integration adapters (siblings absent → contracts + doubles) | 12, 13 |
 | `Web.Binding.Requests` | typed-handler entry points + response classification | 15 |
 | `Web.Binding.Diagnostics` (+ `.Recording`) | structured, redaction-safe events + sink | 16+ |

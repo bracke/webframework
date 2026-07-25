@@ -42,6 +42,7 @@ package Web.Binding.Errors is
       Decode_Too_Many_Items,
       Decode_Nesting_Too_Deep,
       Decode_Value_Too_Long,
+      Decode_Invalid_URI,
       --  body.*
       Body_Missing_Content_Type,
       Body_Unsupported_Media_Type,

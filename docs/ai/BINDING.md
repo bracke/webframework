@@ -11,7 +11,7 @@ validation, auth, storage, or rendering. Full guide: `../BINDING.md`.
   Field_Path + Render), `Web.Binding.Limits`, `Web.Binding.Policies`,
   `Web.Binding.Results` (generic value-or-errors).
 - Decoders: `Web.Binding.Decoders` + `.Integer_/Modular_/Float_/Boolean_/Text_/
-  Enum_/UUID_/Date_/Time_/DateTime_/Base64_Decoders`, combinators
+  Enum_/UUID_/Date_/Time_/DateTime_/Base64_/URI_Decoders`, combinators
   `Optional_/Defaulted_Decoders`, `.Guard` (exception → internal.decoder_failure).
 - Sources: `Web.Binding.Sources` (Occurrences + Resolve_Scalar), `Web.Binding.
   Percent`, adapters `Query` / `Route` / `Headers` / `Cookies`; `Web.Binding.Names`
@@ -38,6 +38,10 @@ validation, auth, storage, or rendering. Full guide: `../BINDING.md`.
 - JSON typed bind: drive `Codecs.JSON.Reader` with `JSON.Binding` primitives
   (Next_Member / Next_Element / Read_Scalar / Skip_Value) + `RB.Assign`; dispatch
   members with a case on the key (deterministic).
+- Multipart typed bind: iterate `Multipart.Next_Part`, dispatch on `Info.Name`;
+  text field → `Multipart.Binding.Read_Field` + `RB.Assign`; file field →
+  `Uploads.Stream_Part` (+ `RB.Assign` of the handle); `Field_Tracker` for dup/
+  required.
 - Example end to end: `example_app/src/app-query_binding.adb`.
 
 ## Dependency rules
