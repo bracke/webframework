@@ -289,4 +289,15 @@ failures are logged in redacted structured form (BIND-010).
   binding output and never reparse. AUnit suite 110 → 112 (a full re-render:
   valid and invalid field values retained, secret redacted, per-field vs
   non-field errors; and the state transitions).
-- Phases 13–17: pending, in spec order.
+- **Phase 13 — Validation integration: landed.** No Validation sibling exists,
+  so `Web.Binding.Validation` defines the seam: a merged `Presentation` that
+  combines a bind result's decoding errors with the validation layer's semantic
+  issues, preserving each entry's origin (From_Decoding / From_Validation) and
+  ordering decoding before validation. Decoding entries carry the stable
+  error-id key, leaf field name and rendered path; validation issues use the
+  same path form, so the two align. Binding hands validation a decoded typed
+  value and compatible paths; validation never touches the raw request and its
+  rules never live in binding descriptors. AUnit suite 112 → 114 (the marquee
+  case: decoding succeeds but a semantic rule fails; and a merged decode +
+  validation presentation preserving origin).
+- Phases 14–17: pending, in spec order.
