@@ -198,6 +198,30 @@ package body App.Http_Support is
                 "http: add-project with an empty body is rejected (400)");
       end;
 
+      --  Delete and login reject paths: a non-positive / non-integer id and a
+      --  blank username are rejected with 400 before any state change.
+      declare
+         Ctx : constant Web.Context.Request_Context := Web.Context.New_Context;
+         Zero_Id : constant Web.Response.Response_Type :=
+           App.Pages.Api_Delete_Project
+             (Web.Request.Create ("POST", "/api/projects/delete", "", "id=0"),
+              Ctx);
+         Bad_Id : constant Web.Response.Response_Type :=
+           App.Pages.Api_Delete_Project
+             (Web.Request.Create ("POST", "/api/projects/delete", "", "id=abc"),
+              Ctx);
+         Blank_User : constant Web.Response.Response_Type :=
+           App.Pages.Api_Login
+             (Web.Request.Create ("POST", "/api/login", "", "username=&password=x"));
+      begin
+         Check (Web.Response.Status (Zero_Id) = 400,
+                "http: delete with a non-positive id is rejected (400)");
+         Check (Web.Response.Status (Bad_Id) = 400,
+                "http: delete with a non-integer id is rejected (400)");
+         Check (Web.Response.Status (Blank_User) = 400,
+                "http: login with a blank username is rejected (400)");
+      end;
+
       New_Line;
       Put_Line ("Failures:" & Natural'Image (Fail_Count));
       Failures := Fail_Count;

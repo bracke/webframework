@@ -17,8 +17,16 @@ package App.Project_Validation is
       Functions    : Unbounded_String;
    end record;
 
+   type Delete_Input is record
+      Id : Integer := 0;
+   end record;
+
    --  Validate the decoded fields against the project-form rules.
    function Validate (Input : Project_Input) return Validation.Results.Result;
+
+   --  Validate a delete command: the id must be a positive project id.
+   function Validate_Delete
+     (Input : Delete_Input) return Validation.Results.Result;
 
    --  Render the result's issues as a JSON error body:
    --  {"status":"error","issues":[{"path":"$.name","message":"..."}, ...]}.

@@ -5,6 +5,7 @@ with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
 with Validation.Results;
 with App.Project_Validation;
+with App.Login_Validation;
 
 with Web.Request;
 with Web.Context;
@@ -272,6 +273,26 @@ begin
              "validation: an empty name is rejected");
       Check (Validation.Results.Error_Count (Bad_Result) = 1,
              "validation: exactly the name/required error");
+   end;
+
+   --  Delete-command and login-input validation.
+   declare
+      use App.Project_Validation;
+      Del_Ok  : constant Validation.Results.Result := Validate_Delete ((Id => 7));
+      Del_Bad : constant Validation.Results.Result := Validate_Delete ((Id => 0));
+      User_Ok : constant Validation.Results.Result :=
+        App.Login_Validation.Validate_Username ("alice");
+      User_Bad : constant Validation.Results.Result :=
+        App.Login_Validation.Validate_Username ("   ");
+   begin
+      Check (not Validation.Results.Has_Errors (Del_Ok),
+             "validation: a positive delete id passes");
+      Check (Validation.Results.Has_Errors (Del_Bad),
+             "validation: a non-positive delete id is rejected");
+      Check (not Validation.Results.Has_Errors (User_Ok),
+             "validation: a well-formed username passes");
+      Check (Validation.Results.Has_Errors (User_Bad),
+             "validation: a blank username is rejected");
    end;
 
    New_Line;

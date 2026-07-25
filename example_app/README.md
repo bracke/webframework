@@ -45,8 +45,11 @@ runs guards. All the meaning lives in the app packages below.
   required + bounded, status required, fields within the column widths). Invalid
   input returns an HTTP 400 with the structured issues as JSON; only valid input
   reaches the database. Validation is headless — it reports issues, and the
-  handler chooses the status code. Covered by an `app_http_tests` reject-path
-  check.
+  handler chooses the status code. The delete endpoint decodes its `id` as a
+  typed integer (`Web.Binding`) and validates it is positive; login validates the
+  username's input format only, staying within the credential boundary (it never
+  inspects the password or reveals account existence). Covered by `app_http_tests`
+  reject-path checks and `app_tests` unit checks.
 - **Per-action live authorization.** `profile.save` over the WebSocket is gated
   by a dispatcher action guard; a viewer's attempt is rejected before the
   handler runs — presentation and execution are authorized separately.

@@ -6,6 +6,7 @@ with App.Authz;
 with App.Projects;
 with App.Project_Binding;
 with App.Project_Validation;
+with App.Login_Validation;
 with Validation.Results;
 with Web.Assets.Clients;
 with App.Runtime;
@@ -287,7 +288,14 @@ package body App.Pages is
       --  Parse username and password from form data
       Parse_Form_Data (Body_Content, Username, Password);
 
-      if Length (Username) = 0 or else Length (Password) = 0 then
+      --  Input-format validation only: the username must be well-formed and the
+      --  password present. The generic message discloses nothing about which
+      --  field failed or whether an account exists; credential VERIFICATION is
+      --  Identity's job below. The password contents are never validated.
+      if Length (Password) = 0
+        or else Validation.Results.Has_Errors
+                  (App.Login_Validation.Validate_Username (To_String (Username)))
+      then
          return Web.Response.Bad_Request ("Username and password are required");
       end if;
 
@@ -562,45 +570,35 @@ package body App.Pages is
       Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use App.Projects;
       pragma Unreferenced (Context);
-      Body_Content : constant String := Web.Request.Request_Body (Request);
+      --  decode -> validate: Web.Binding decodes the id as a typed integer; the
+      --  Validation library then checks it is a positive project id.
+      Form  : constant App.Project_Binding.Delete_Form :=
+        App.Project_Binding.Bind_Delete (Request);
+      Check : constant Validation.Results.Result :=
+        App.Project_Validation.Validate_Delete ((Id => Form.Id));
    begin
-      --  Authorization is enforced by the route guard before this runs.
-      --  Parse project ID from request body (format: id=123)
-      declare
-         Id_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "id=") + 3;
-
-         function Extract_Id return Natural is
-            End_Pos : Natural;
-         begin
-            if Id_Start = 0 or else Id_Start > Body_Content'Last then
-               return 0;
-            end if;
-            End_Pos := Ada.Strings.Fixed.Index (Body_Content, "&", Id_Start);
-            if End_Pos = 0 then
-               End_Pos := Body_Content'Last + 1;
-            end if;
-            return Natural'Value (Body_Content (Id_Start .. End_Pos - 1));
-         end Extract_Id;
-
-         Project_Id : constant Natural := Extract_Id;
-      begin
-         if Project_Id = 0 then
-            return Web.Response.Bad_Request ("Invalid project ID");
-         end if;
-
-         --  Delete project from database
-         Delete_Project (Project_Id);
-
+      --  A missing / non-integer id never reaches validation.
+      if not Form.Decoded then
          return Web.Response.Create
-           (200, "{""status"": ""success""}", "application/json; charset=utf-8");
-      end;
-      exception
-         when Constraint_Error =>
-            return Web.Response.Bad_Request ("Invalid project ID");
-         when Error : others =>
-            Web.Logging.Error
-              ("delete project API failed: " & Ada.Exceptions.Exception_Message (Error));
-            return Web.Response.Internal_Server_Error;
+           (400, "{""status"":""error"",""message"":""invalid project id""}",
+            "application/json; charset=utf-8");
+      end if;
+
+      if Validation.Results.Has_Errors (Check) then
+         return Web.Response.Create
+           (400, App.Project_Validation.Error_JSON (Check),
+            "application/json; charset=utf-8");
+      end if;
+
+      Delete_Project (Form.Id);
+
+      return Web.Response.Create
+        (200, "{""status"": ""success""}", "application/json; charset=utf-8");
+   exception
+      when Error : others =>
+         Web.Logging.Error
+           ("delete project API failed: " & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
    end Api_Delete_Project;
 
 end App.Pages;

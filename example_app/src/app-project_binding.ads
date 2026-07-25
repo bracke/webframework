@@ -24,4 +24,13 @@ package App.Project_Binding is
 
    function Bind (Request : Web.Request.Request_Type) return Project_Form;
 
+   --  Delete command decoded from the body (id=NNN). Decoded is False when the
+   --  body is malformed or the id is absent / not an integer.
+   type Delete_Form is record
+      Id      : Integer := 0;
+      Decoded : Boolean := True;
+   end record;
+
+   function Bind_Delete (Request : Web.Request.Request_Type) return Delete_Form;
+
 end App.Project_Binding;
