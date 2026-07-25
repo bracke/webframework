@@ -52,7 +52,13 @@ project Webframework is
       "Web.Binding.Decoders.DateTime_Decoders",
       "Web.Binding.Decoders.Modular_Decoders",
       "Web.Binding.Decoders.Float_Decoders",
-      "Web.Binding.Decoders.Base64_Decoders");
+      "Web.Binding.Decoders.Base64_Decoders",
+      "Web.Binding.Sources",
+      "Web.Binding.Percent",
+      "Web.Binding.Query",
+      "Web.Binding.Route",
+      "Web.Binding.Headers",
+      "Web.Binding.Cookies");
    package Compiler is
       for Default_Switches ("Ada") use
         Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");

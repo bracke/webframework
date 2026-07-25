@@ -152,4 +152,16 @@ failures are logged in redacted structured form (BIND-010).
   duration, hex-bytes (niche scalar decoders, add on demand); normalized
   media-type and URI-component decoders belong with the structural media-type
   work in Phase 9.
-- Phases 2–17: pending, in spec order.
+- **Phase 2 — Non-body request sources: landed.** `Web.Binding.Sources` (ordered
+  bounded `Occurrences` with locations + malformed flag; `Resolve_Scalar` applies
+  the duplicate and empty policies deterministically — missing / present-empty /
+  present-value are distinct). `Web.Binding.Percent` (shared, total percent-
+  decode). Source adapters: `Query` (parse → ordered pairs, percent + plus,
+  duplicates/empty preserved, malformed flagged, ordinal locations), `Route`
+  (app-supplied captures — this router is exact-match, no path captures),
+  `Headers` (single-valued per the transport; no blind comma join/split),
+  `Cookies` (jar lookup; duplicate `Count` surfaced as repeated occurrences so
+  Reject fires). AUnit suite 65 → 71 (mixed-source extraction without body
+  access; deterministic duplicate handling). Body sources come with the codecs
+  (phases 5–10).
+- Phases 3–17: pending, in spec order.
