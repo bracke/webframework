@@ -4,6 +4,7 @@ with Ada.Strings.Fixed;
 with App.Auth;
 with App.Authz;
 with App.Projects;
+with App.Project_Binding;
 with App.Project_Validation;
 with Validation.Results;
 with Web.Assets.Clients;
@@ -508,85 +509,51 @@ package body App.Pages is
       Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use App.Projects;
       pragma Unreferenced (Context);
-      Body_Content : constant String := Web.Request.Request_Body (Request);
-   begin
       --  Authorization is enforced by the route guard before this runs.
-      --  Parse form data from request body
-      --  Expected format: name=...&status=...&project_type=...&functions=...&
-      --                  has_project_tools=true/false&has_gnat=true/false&...
-      declare
-         Name_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "name=") + 5;
-         Status_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "status=") + 7;
-         Type_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "project_type=") + 13;
-         Functions_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "functions=") + 10;
-         Tools_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "has_project_tools=") + 18;
-         Gnat_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "has_gnat=") + 9;
-         Github_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "has_github=") + 11;
-         Alire_Start : constant Natural := Ada.Strings.Fixed.Index (Body_Content, "has_alire=") + 10;
-
-         function Extract_Value (Start : Natural; Content : String) return String is
-            End_Pos : Natural;
-         begin
-            if Start = 0 or else Start > Content'Last then
-               return "";
-            end if;
-            End_Pos := Ada.Strings.Fixed.Index (Content, "&", Start);
-            if End_Pos = 0 then
-               End_Pos := Content'Last + 1;
-            end if;
-            return Content (Start .. End_Pos - 1);
-         end Extract_Value;
-
-         function Parse_Bool (Value : String) return Boolean is
-         begin
-            return Value = "true" or else Value = "1" or else Value = "yes";
-         end Parse_Bool;
-
-         Name : constant String := Extract_Value (Name_Start, Body_Content);
-         Status : constant String := Extract_Value (Status_Start, Body_Content);
-         Project_Type : constant String := Extract_Value (Type_Start, Body_Content);
-         Functions : constant String := Extract_Value (Functions_Start, Body_Content);
-         Has_Project_Tools : constant Boolean := Parse_Bool (Extract_Value (Tools_Start, Body_Content));
-         Has_GNAT : constant Boolean := Parse_Bool (Extract_Value (Gnat_Start, Body_Content));
-         Has_GitHub : constant Boolean := Parse_Bool (Extract_Value (Github_Start, Body_Content));
-         Has_Alire : constant Boolean := Parse_Bool (Extract_Value (Alire_Start, Body_Content));
-
-         --  Decode -> validate: feed the typed fields to the Validation library
-         --  before touching the database.
-         Input : constant App.Project_Validation.Project_Input :=
-           (Name         => To_Unbounded_String (Name),
-            Status       => To_Unbounded_String (Status),
-            Project_Type => To_Unbounded_String (Project_Type),
-            Functions    => To_Unbounded_String (Functions));
-         Check : constant Validation.Results.Result :=
-           App.Project_Validation.Validate (Input);
-      begin
-         --  Reject invalid input with the structured issues as JSON.
-         if Validation.Results.Has_Errors (Check) then
-            return Web.Response.Create
-              (400, App.Project_Validation.Error_JSON (Check),
-               "application/json; charset=utf-8");
-         end if;
-
-         --  Add project to database
-         Add_Project
-           (Name        => Name,
-            Status      => Status,
-            Project_Type => Project_Type,
-            Functions   => Functions,
-            Has_Project_Tools => Has_Project_Tools,
-            Has_GNAT        => Has_GNAT,
-            Has_GitHub      => Has_GitHub,
-            Has_Alire       => Has_Alire);
-
+      --  decode -> validate: Web.Binding decodes the urlencoded body into typed
+      --  fields; the Validation library then checks them before any DB write.
+      Form  : constant App.Project_Binding.Project_Form :=
+        App.Project_Binding.Bind (Request);
+      Input : constant App.Project_Validation.Project_Input :=
+        (Name         => Form.Name,
+         Status       => Form.Status,
+         Project_Type => Form.Project_Type,
+         Functions    => Form.Functions);
+      Check : constant Validation.Results.Result :=
+        App.Project_Validation.Validate (Input);
+   begin
+      --  A malformed / oversized form body never reaches validation.
+      if not Form.Decoded then
          return Web.Response.Create
-           (200, "{""status"": ""success""}", "application/json; charset=utf-8");
-      end;
-      exception
-         when Error : others =>
-            Web.Logging.Error
-              ("add project API failed: " & Ada.Exceptions.Exception_Message (Error));
-            return Web.Response.Internal_Server_Error;
+           (400, "{""status"":""error"",""message"":""malformed form body""}",
+            "application/json; charset=utf-8");
+      end if;
+
+      --  Reject invalid input with the structured issues as JSON.
+      if Validation.Results.Has_Errors (Check) then
+         return Web.Response.Create
+           (400, App.Project_Validation.Error_JSON (Check),
+            "application/json; charset=utf-8");
+      end if;
+
+      --  Add the validated project to the database.
+      Add_Project
+        (Name              => To_String (Form.Name),
+         Status            => To_String (Form.Status),
+         Project_Type      => To_String (Form.Project_Type),
+         Functions         => To_String (Form.Functions),
+         Has_Project_Tools => Form.Has_Project_Tools,
+         Has_GNAT          => Form.Has_GNAT,
+         Has_GitHub        => Form.Has_GitHub,
+         Has_Alire         => Form.Has_Alire);
+
+      return Web.Response.Create
+        (200, "{""status"": ""success""}", "application/json; charset=utf-8");
+   exception
+      when Error : others =>
+         Web.Logging.Error
+           ("add project API failed: " & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
    end Api_Add_Project;
 
    --  API endpoint to delete a project

@@ -38,12 +38,15 @@ runs guards. All the meaning lives in the app packages below.
 - **Authorization-aware data.** The `/projects` listing is planned through
   `tables`: the authorization data scope (Alire-tracked projects only) survives
   into the query, and the sensitive `functions` column is masked for viewers.
-- **Decode → validate.** The add-project API decodes the form body into typed
-  fields, then `App.Project_Validation` validates them with the standalone
-  `validation` library (name required + bounded, status required, fields within
-  the column widths). Invalid input returns an HTTP 400 with the structured
-  issues as JSON; only valid input reaches the database. Validation is headless —
-  it reports issues, and the handler chooses the status code.
+- **Decode → validate.** The add-project API decodes the `x-www-form-urlencoded`
+  body with `Web.Binding` (`App.Project_Binding`: the URL-encoded codec over the
+  buffered body, per-field scalar resolution), then `App.Project_Validation`
+  validates the typed fields with the standalone `validation` library (name
+  required + bounded, status required, fields within the column widths). Invalid
+  input returns an HTTP 400 with the structured issues as JSON; only valid input
+  reaches the database. Validation is headless — it reports issues, and the
+  handler chooses the status code. Covered by an `app_http_tests` reject-path
+  check.
 - **Per-action live authorization.** `profile.save` over the WebSocket is gated
   by a dispatcher action guard; a viewer's attempt is rejected before the
   handler runs — presentation and execution are authorized separately.

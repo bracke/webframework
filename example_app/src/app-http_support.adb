@@ -1,11 +1,13 @@
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Strings.Fixed;
 
 with Web.Request;
 with Web.Response;
 with Web.Context;
 with Web.Server;
 
+with App.Pages;
 with App.Runtime;
 with App.State;
 with App.Auth;
@@ -161,6 +163,39 @@ package body App.Http_Support is
          App.Auth.Revoke_Session (Token);
          Check (Status_Of ("GET", "/secure", Sid) = 303,
                 "http: a revoked identity session is anonymous at once");
+      end;
+
+      --  Add-project reject path: the handler decodes the urlencoded body via
+      --  Web.Binding, validates it, and returns HTTP 400 with the structured
+      --  issues as JSON. (Context is unused by the handler, so no session is
+      --  needed; the reject paths never touch the database.)
+      declare
+         Ctx : constant Web.Context.Request_Context := Web.Context.New_Context;
+
+         function Add_Project_Response
+           (Body_Value : String) return Web.Response.Response_Type is
+           (App.Pages.Api_Add_Project
+              (Web.Request.Create
+                 ("POST", "/api/projects/add", "", Body_Value), Ctx));
+
+         function Body_Has (Response : Web.Response.Response_Type; Text : String)
+           return Boolean is
+           (Ada.Strings.Fixed.Index
+              (Web.Response.Content_Body (Response), Text) > 0);
+
+         No_Name    : constant Web.Response.Response_Type :=
+           Add_Project_Response ("status=active");
+         Empty_Body : constant Web.Response.Response_Type :=
+           Add_Project_Response ("");
+      begin
+         Check (Web.Response.Status (No_Name) = 400,
+                "http: add-project with no name is rejected (400)");
+         Check (Body_Has (No_Name, "validation.not_empty"),
+                "http: 400 body carries the structured issue id");
+         Check (Body_Has (No_Name, "$.name"),
+                "http: 400 body carries the field path");
+         Check (Web.Response.Status (Empty_Body) = 400,
+                "http: add-project with an empty body is rejected (400)");
       end;
 
       New_Line;
