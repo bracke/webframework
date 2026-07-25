@@ -164,4 +164,16 @@ failures are logged in redacted structured form (BIND-010).
   Reject fires). AUnit suite 65 → 71 (mixed-source extraction without body
   access; deterministic duplicate handling). Body sources come with the codecs
   (phases 5–10).
-- Phases 3–17: pending, in spec order.
+- **Phase 3 — Record binding: landed.** `Web.Binding.Record_Binders` (generic
+  over the target record): a limited `Builder` holds a defaults-seeded working
+  copy + error collection + aggregation mode; the nested generic `Bind_Scalar`
+  resolves a field's occurrences (phase 2), decodes the value (phase 1) and
+  assigns it through a caller-supplied setter. No reflection, no unchecked layout
+  (BIND-013); `Finish` returns the record only on success, never a partial value
+  (BIND-002). Required-missing / duplicate / empty / malformed / undecodable are
+  structured errors at exact paths; a malformed present value is never replaced
+  by a default; fields bind in call order so error order is deterministic
+  (BIND-004); `Fail_Fast` vs `Aggregate_Fields`; `Note_Unknown` applies the
+  unknown-field policy. Mixed-source records need no implicit merge (each field
+  takes its own occurrences). AUnit suite 71 → 74.
+- Phases 4–17: pending, in spec order.
