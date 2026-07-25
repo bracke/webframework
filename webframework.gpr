@@ -65,7 +65,8 @@ project Webframework is
       "Web.Binding.Streams.Memory",
       "Web.Binding.Bodies",
       "Web.Binding.Codecs",
-      "Web.Binding.Codecs.URL_Encoded");
+      "Web.Binding.Codecs.URL_Encoded",
+      "Web.Binding.Codecs.JSON");
    package Compiler is
       for Default_Switches ("Ada") use
         Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");

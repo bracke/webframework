@@ -5,6 +5,7 @@ with Web_Binding_Source_Tests;
 with Web_Binding_Record_Tests;
 with Web_Binding_Collection_Tests;
 with Web_Binding_URLEncoded_Tests;
+with Web_Binding_JSON_Tests;
 with Web_Core_Tests;
 with Web_E2E_Tests;
 with Web_Live_Tests;
@@ -29,6 +30,7 @@ package body Web_Test_Suite is
       Web_Binding_Record_Tests.Add_Tests (Result);
       Web_Binding_Collection_Tests.Add_Tests (Result);
       Web_Binding_URLEncoded_Tests.Add_Tests (Result);
+      Web_Binding_JSON_Tests.Add_Tests (Result);
       Web_E2E_Tests.Add_Tests (Result);
       return Result;
    end Suite;

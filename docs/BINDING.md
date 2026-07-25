@@ -205,4 +205,17 @@ failures are logged in redacted structured form (BIND-010).
   validation stays a decoder concern (layering). AUnit suite 78 → 85, including a
   fuzz harness (adversarial corpus + pseudo-random bytes at every chunk size:
   always terminates, no exceptions, bounded output).
-- Phases 6–17: pending, in spec order.
+- **Phase 6 — JSON streaming core: landed.** `Web.Binding.Codecs.JSON` is a
+  strict streaming pull-tokenizer over the body stream, no DOM: one token at a
+  time (Start_Object, Key, String_Value, Number_Value, …, End_Document). A
+  one-character lookahead makes it fragmentation-invariant; an explicit state
+  stack (never recursion) enforces structure and a bounded nesting depth. Full
+  escape handling incl. surrogate pairs and UTF-8 validation; strict number
+  grammar (no leading zeros / bare dots / NaN / Infinity); rejects comments,
+  trailing commas, trailing content, control chars in strings, invalid escapes.
+  Source locations (line / column / byte offset); bounds on depth, token count,
+  string length and numeric-literal length. Malformed input yields an
+  Error_Token, never an exception. AUnit suite 85 → 93, including the escape and
+  number matrices and a fuzz harness (adversarial + pseudo-random bytes at every
+  chunk size: always terminates at End_Document or Error_Token).
+- Phases 7–17: pending, in spec order.
