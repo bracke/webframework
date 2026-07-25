@@ -243,4 +243,15 @@ failures are logged in redacted structured form (BIND-010).
   mutating a mis-discriminated record; a field from another alternative is
   rejected. AUnit suite 96 → 99 (both alternatives construct; missing / invalid /
   wrong-alternative; structural exactly-one / ambiguous / no-match).
-- Phases 9–17: pending, in spec order.
+- **Phase 9 — Media types + codec registry: landed.** `Web.Binding.Media_Types`
+  parses a Content-Type into type / subtype / structured suffix / charset /
+  boundary (case-insensitive, quoted params, verbatim boundary); malformed
+  syntax is Valid => False (→ body.invalid_content_type), never an exception.
+  Also covers the deferred phase-1 "normalized media type" via `Normalized`.
+  `Web.Binding.Codecs.Registry` registers codecs against exact / suffix / wildcard
+  patterns in a mutable Builder, then `Freeze` validates (ambiguous same-
+  specificity patterns, invalid wildcards) and yields an immutable Registry
+  (BIND-012). `Select_Codec` is deterministic: exact → suffix (+json) → wildcard
+  (type/* then */*) → none; no sniffing. Missing-Content-Type policy (reject /
+  allow-empty / use-default). AUnit suite 99 → 102.
+- Phases 10–17: pending, in spec order.

@@ -68,7 +68,9 @@ project Webframework is
       "Web.Binding.Codecs",
       "Web.Binding.Codecs.URL_Encoded",
       "Web.Binding.Codecs.JSON",
-      "Web.Binding.Codecs.JSON.Binding");
+      "Web.Binding.Codecs.JSON.Binding",
+      "Web.Binding.Media_Types",
+      "Web.Binding.Codecs.Registry");
    package Compiler is
       for Default_Switches ("Ada") use
         Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");
