@@ -300,4 +300,15 @@ failures are logged in redacted structured form (BIND-010).
   rules never live in binding descriptors. AUnit suite 112 → 114 (the marquee
   case: decoding succeeds but a semantic rule fails; and a merged decode +
   validation presentation preserving origin).
-- Phases 14–17: pending, in spec order.
+- **Phase 14 — Identity and Authorization adapters: landed.** `Web.Binding.Auth`
+  decodes the Authorization header *syntax* only — scheme (Basic / Bearer /
+  Digest / Other) + raw credentials, and for Basic the base64 userid:password
+  split — and verifies nothing (no password check, token signature, session
+  lookup or identity assignment). Credential fields are secrets. The tests are
+  the required examples: a login input where the password is a Secret_Value field
+  and is redacted on re-render (never retained), and a resource-identifier
+  binding (route UUID) that yields a typed value for authorization to consume
+  elsewhere — binding makes no permission decision. No authentication or
+  authorization logic lives in binding core (the acceptance rule). AUnit suite
+  114 → 117.
+- Phases 15–17: pending, in spec order.
