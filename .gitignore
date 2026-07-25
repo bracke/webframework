@@ -24,9 +24,9 @@
 /tools/obj/
 
 # Local runtime data
-/*.db
-/example_app/*.db
-/tests/*.db
+/*.db*
+/example_app/*.db*
+/tests/*.db*
 
 # Ada compiler and binder byproducts outside configured object dirs
 *.ali
