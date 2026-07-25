@@ -25,3 +25,25 @@
 - Native browser HTTPS/WSS uses `Web.Server.Run_TLS` and `Web.TLS`.
 - Production TLS policy uses `Web.TLS.Configure_Server`, explicit version and
   cipher settings where needed, and `Reload_TLS` for certificate replacement.
+
+Authorization (apps that authenticate and authorize):
+
+- Framework core depends on neither `identity` nor `authorization`; it carries
+  an opaque principal it never interprets. The meaning lives only in app code
+  (`App.Auth`, `App.Authz`, `App.Guards`).
+- Authorization is deny-by-default and fail-closed: a deny, a not-applicable, an
+  indeterminate result, a missing fact, and an unparseable principal all deny.
+- The policy is the single decision authority; the guard asks it and enforces
+  the answer. Presentation (what a page renders) is never authority — every
+  privileged execution re-authorizes.
+- The policy reads its facts (clearance, assurance) from the request context an
+  upstream guard attached; it does not map principals to roles itself.
+- Sessions validate against the `identity` repository on every request, so
+  revocation and expiry take effect at once; a stored principal is trusted only
+  while its session is live.
+- Privileged actions demand a step-up (an interactive-or-stronger assurance),
+  not merely a sufficient clearance.
+- Caches and plans never cross authorization contexts: principal, tenant and
+  security-revision handles are threaded into every `tables` result.
+- Passwords are never stored or compared in the clear; authentication runs
+  through the `identity` repository's verification.
