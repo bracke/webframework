@@ -45,7 +45,14 @@ project Webframework is
       "Web.Binding.Decoders.Enum_Decoders",
       "Web.Binding.Decoders.UUID_Decoders",
       "Web.Binding.Decoders.Optional_Decoders",
-      "Web.Binding.Decoders.Defaulted_Decoders");
+      "Web.Binding.Decoders.Defaulted_Decoders",
+      "Web.Binding.Decoders.Calendar",
+      "Web.Binding.Decoders.Date_Decoders",
+      "Web.Binding.Decoders.Time_Decoders",
+      "Web.Binding.Decoders.DateTime_Decoders",
+      "Web.Binding.Decoders.Modular_Decoders",
+      "Web.Binding.Decoders.Float_Decoders",
+      "Web.Binding.Decoders.Base64_Decoders");
    package Compiler is
       for Default_Switches ("Ada") use
         Webframework_Config.Ada_Compiler_Switches & ("-gnat2022", "-gnata", "-gnatwe", "-gnatyM120");

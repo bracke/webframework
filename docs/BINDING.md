@@ -126,17 +126,30 @@ failures are logged in redacted structured form (BIND-010).
   deterministically-truncated `Error_Collection`, generic results, typed limits
   with layered tightening, policy types, invariant registry. Unit-tested; no body
   decoding yet.
-- **Phase 1 — Scalar decoder framework: core landed.** Decoder contract
-  (`Web.Binding.Decoders`: input kinds, metadata, `Single_Error`, UTF-8
-  validation) and built-in decoders: signed integer (full radix/sign/whitespace/
-  separator/leading-zero config, exact `decode.invalid_integer` vs
-  `decode.integer_out_of_range`, overflow-guarded — never raises), Boolean
-  (narrow default + optional sets + case folding), bounded text (UTF-8 + length),
-  enumeration (explicit wire mappings, case modes, aliases/deprecated aliases),
-  UUID (canonical, normalized). Optional and default combinators (a malformed
-  present value is an error, never silently defaulted). AUnit suite 53 → 59, all
-  acceptance rules met (exact classification, no malformed-input exception flow).
-  **Remaining Phase-1 built-ins:** date / time / date-time (ISO, RFC 3339, HTTP
-  date), plus the §10 extras (modular, float, fixed, duration, base64, hex,
-  media-type, URI) — landing next.
+- **Phase 1 — Scalar decoder framework: landed.** Decoder contract
+  (`Web.Binding.Decoders`: input kinds, metadata, `Single_Error`, a total UTF-8
+  validator) and built-in decoders, all returning structured results and never
+  raising on malformed input:
+  - signed integer (radix/sign/whitespace/separator/leading-zero config; exact
+    `decode.invalid_integer` vs `decode.integer_out_of_range`, overflow-guarded);
+  - modular integer (unsigned, at-modulus is out of range);
+  - float (strict decimal; NaN/Inf → `decode.non_finite_float`; overflow caught
+    at a defensive boundary);
+  - Boolean (narrow `true`/`false` default + optional 1/0, yes/no, on/off + case
+    folding; checkbox semantics excluded);
+  - bounded text (UTF-8 validation + length bound);
+  - enumeration (explicit wire mappings, case modes, aliases/deprecated aliases);
+  - UUID (canonical hyphenated, normalized to lowercase);
+  - ISO date, time-of-day, and RFC 3339 date-time (real-calendar validation, so
+    `2026-02-31` is `decode.invalid_date`; leap years and leap seconds handled;
+    `Web.Binding.Decoders.Calendar` holds the shared model);
+  - Base64 (standard + URL-safe, padding policy, bounded byte output);
+  - optional and default combinators (a malformed present value is an error,
+    never silently defaulted).
+
+  AUnit suite 48 → 65. All acceptance rules met (exact classification, no
+  malformed-input exception flow). **Deferred by design:** fixed-point,
+  duration, hex-bytes (niche scalar decoders, add on demand); normalized
+  media-type and URI-component decoders belong with the structural media-type
+  work in Phase 9.
 - Phases 2–17: pending, in spec order.
