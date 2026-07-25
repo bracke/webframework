@@ -45,6 +45,16 @@ package App.Auth is
    --  @return Authorization principal id, or an empty string.
    function Validate_Session (Token : String) return String;
 
+   --  The assurance level the session was established at, as the identity
+   --  library's level name (e.g. "INTERACTIVE"), or an empty string when the
+   --  token is not live. A password login is an interactive presentation, so
+   --  its session is INTERACTIVE. Carried into the request context so the
+   --  authorization policy can demand a step-up (an interactive login) for a
+   --  privileged action, not merely a sufficient clearance.
+   --  @param Token Opaque session token.
+   --  @return Identity assurance level name, or an empty string.
+   function Session_Assurance (Token : String) return String;
+
    --  Revoke a session token (logout); its id can never be replayed.
    --  @param Token Opaque session token.
    --  @return No return value.

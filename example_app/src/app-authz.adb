@@ -6,6 +6,7 @@ with Authorization.Identifiers;          use Authorization.Identifiers;
 with Authorization.Identifiers.Kinds;
 with Authorization.Definitions;
 with Authorization.Definitions.Registry;
+with Authorization.Authentication;
 with Authorization.Conditions;
 with Authorization.Rules;
 with Authorization.Policies;
@@ -20,9 +21,13 @@ with Authorization.Scopes;
 with Tables;
 with Tables_Authorization;
 
+with Identity.Assurance.Levels;
+
 package body App.Authz is
 
    package K   renames Authorization.Identifiers.Kinds;
+   package Authn renames Authorization.Authentication;
+   package ILvl  renames Identity.Assurance.Levels;
    package D   renames Authorization.Definitions;
    package Reg renames Authorization.Definitions.Registry;
    package C   renames Authorization.Conditions;
@@ -53,6 +58,27 @@ package body App.Authz is
       when others =>
          return 0;
    end Parse_Clearance;
+
+   --  Map the identity assurance level an upstream guard attached to the
+   --  context (the session's level, as its identity name) onto the
+   --  authorization engine's own assurance ladder. Fail-closed: a missing or
+   --  unrecognised level authenticates nothing (Unauthenticated), which no
+   --  step-up condition accepts.
+   function Context_Assurance
+     (Context : Web.Context.Request_Context) return Authn.Assurance_Level
+   is
+      Text : constant String := Web.Context.Attribute (Context, "assurance");
+   begin
+      case ILvl.Assurance_Level'Value (Text) is
+         when ILvl.Anonymous                     => return Authn.Unauthenticated;
+         when ILvl.Basic                         => return Authn.Low;
+         when ILvl.Interactive | ILvl.Service    => return Authn.Substantial;
+         when ILvl.Sensitive | ILvl.Administrative => return Authn.High;
+      end case;
+   exception
+      when others =>
+         return Authn.Unauthenticated;
+   end Context_Assurance;
 
    --  Id helpers: raise on an invalid literal (a build-time constant, not input).
    generic
@@ -105,8 +131,14 @@ package body App.Authz is
    Manage_Policy : Set_Ref := null;  --  allows clearance >= Admin_Clearance
 
    --  Compile a policy whose single rule allows the action when the principal's
-   --  clearance is at least Threshold.
-   function Build_Policy (Threshold : Long_Long_Integer) return Set_Ref is
+   --  clearance is at least Threshold. When Require_Interactive, the rule also
+   --  demands an authentication assurance of at least Substantial -- a step-up
+   --  gate: a high clearance alone is not enough for a privileged action, the
+   --  session must have been established by an interactive login.
+   function Build_Policy
+     (Threshold           : Long_Long_Integer;
+      Require_Interactive : Boolean := False) return Set_Ref
+   is
       CB : constant Cond_Builder_Ref := new C.Builder;
       CT : constant Cond_Tree_Ref := new C.Tree;
       PB : constant Pol_Builder_Ref := new Po.Builder;
@@ -118,6 +150,11 @@ package body App.Authz is
    begin
       Cond := C.Ordered_Greater_Or_Equal
         (CB.all, Clearance_Attr, V.Of_Integer (Threshold));
+      if Require_Interactive then
+         Cond := C.All_Of
+           (CB.all, Cond,
+            C.Authentication_Assurance_At_Least (CB.all, Authn.Substantial));
+      end if;
       C.Freeze (CB.all, CT.all);
       declare
          R : constant Ru.Rule :=
@@ -146,16 +183,18 @@ package body App.Authz is
       end;
 
       View_Policy   := Build_Policy (Viewer_Clearance);
-      Manage_Policy := Build_Policy (Admin_Clearance);
+      Manage_Policy := Build_Policy (Admin_Clearance, Require_Interactive => True);
    end Initialize;
 
-   --  Evaluate the chosen policy for Principal, supplying its clearance fact.
-   --  The heavy request builder is released once the (self-contained) decision
-   --  is produced.
+   --  Evaluate the chosen policy for Principal, supplying its clearance fact
+   --  and the authentication context (assurance) the session was established
+   --  with. The heavy request builder is released once the (self-contained)
+   --  decision is produced.
    function Evaluate_For
      (Principal : String;
       Policy    : Set_Ref;
-      Clearance : Long_Long_Integer) return Ev.Decision
+      Clearance : Long_Long_Integer;
+      Auth      : Authn.Context := Authn.Anonymous) return Ev.Decision
    is
       Actor_Status : Identifier_Status;
       Actor_Id     : constant K.Principal_Id :=
@@ -180,6 +219,7 @@ package body App.Authz is
            (RB.all, Pn.Make (Actor_Id, Pn.User_Principal),
             View_Action, App_Type, Evaluation_Time => 1);
          Req.Set_Tenant (RB.all, Tn.Make (Tenant, Tenant));
+         Req.Set_Authentication (RB.all, Auth);
          Req.Add_Fact
            (RB.all, Req.Principal_Facts,
             F.Make (Clearance_Attr, V.Of_Integer (Clearance),
@@ -207,9 +247,19 @@ package body App.Authz is
       --  session), read as a request fact rather than mapped from the principal.
       Clearance : constant Long_Long_Integer :=
         Parse_Clearance (Web.Context.Attribute (Context, "clearance"));
+      --  The session's authentication context, likewise carried on the request
+      --  context. The manage policy demands Substantial assurance (an
+      --  interactive login), so a high clearance on a low-assurance session
+      --  still cannot manage.
+      Auth : constant Authn.Context :=
+        Authn.Make
+          (Assurance        => Context_Assurance (Context),
+           Methods          => [Authn.Password => True, others => False],
+           Authenticated_At => 1);
    begin
       return Evaluate_For
-        (Principal, (if Manage then Manage_Policy else View_Policy), Clearance);
+        (Principal, (if Manage then Manage_Policy else View_Policy),
+         Clearance, Auth);
    end Decide;
 
    function Plan_Projects_Listing

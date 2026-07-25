@@ -34,15 +34,21 @@ procedure App_Tests is
    function Manage_Req return Web.Request.Request_Type is
      (Web.Request.Create ("POST", "/api/projects/delete"));
 
-   --  Build the request context the guards would produce: principal plus the
-   --  clearance the user store records, carried as a derived fact.
-   function Context_For (Principal : String) return Web.Context.Request_Context is
+   --  Build the request context the guards would produce: principal, the
+   --  clearance the user store records, and the assurance level the session was
+   --  established at -- both carried as derived facts. Assurance defaults to
+   --  INTERACTIVE, what a password login yields.
+   function Context_For
+     (Principal : String;
+      Assurance : String := "INTERACTIVE") return Web.Context.Request_Context
+   is
       Ctx : Web.Context.Request_Context := Web.Context.New_Context;
    begin
       if Principal /= "" then
          Web.Context.Set_Principal (Ctx, Principal);
          Web.Context.Set_Attribute
            (Ctx, "clearance", Natural'Image (App.Auth.Clearance_Of (Principal)));
+         Web.Context.Set_Attribute (Ctx, "assurance", Assurance);
       end if;
       return Ctx;
    end Context_For;
@@ -51,6 +57,17 @@ procedure App_Tests is
      (Principal : String; Request : Web.Request.Request_Type) return Boolean is
      (Ev.Enforcement_Of
         (App.Authz.Decide (Principal, Request, Context_For (Principal))) in
+        Rez.Authorized | Rez.Authorized_With_Requirements);
+
+   --  As Allowed, but with an explicit session assurance level -- to exercise
+   --  the step-up gate independently of clearance.
+   function Allowed_At
+     (Principal : String;
+      Request   : Web.Request.Request_Type;
+      Assurance : String) return Boolean is
+     (Ev.Enforcement_Of
+        (App.Authz.Decide
+           (Principal, Request, Context_For (Principal, Assurance))) in
         Rez.Authorized | Rez.Authorized_With_Requirements);
 
    function Plan_For (Principal : String) return App.Authz.Listing_Plan is
@@ -100,6 +117,16 @@ begin
           "authz: an absent principal is denied");
    Check (not Allowed ("d.principal.ghost", Manage_Req),
           "authz: an unknown principal cannot manage");
+
+   --  Assurance step-up gate: managing needs an interactive login, not just a
+   --  high clearance. An administrator's clearance on a low-assurance session
+   --  (e.g. a remembered cookie) may view but must not manage.
+   Check (Allowed_At ("d.principal.admin", Manage_Req, "INTERACTIVE"),
+          "authz: admin on an interactive session may manage");
+   Check (not Allowed_At ("d.principal.admin", Manage_Req, "BASIC"),
+          "authz: admin on a low-assurance session may NOT manage (step-up)");
+   Check (Allowed_At ("d.principal.admin", View_Req, "BASIC"),
+          "authz: a low-assurance session may still view");
 
    --  The tables plan, resolved per role.
    Check (Plan_For ("d.principal.admin").Ready,

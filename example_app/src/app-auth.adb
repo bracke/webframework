@@ -202,6 +202,8 @@ package body App.Auth is
          Success   : out Boolean);
       function Validate_Session
         (Reference : String; Secret : String) return Unbounded_String;
+      function Session_Assurance
+        (Reference : String; Secret : String) return Unbounded_String;
       procedure Revoke_Session (Reference : String; Secret : String);
    private
       Store : Store_Ref := null;
@@ -325,7 +327,10 @@ package body App.Auth is
                   External_Provider => (Present => False),
                   Public_Reference => Btext.From_String (Reference),
                   Secret => Sec_Txt.From_UTF_8 (Secret),
-                  Assurance => Levels.Basic,
+                  --  A password login is an interactive credential
+                  --  presentation, so the session is Interactive assurance --
+                  --  the level the manage policy demands as a step-up.
+                  Assurance => Levels.Interactive,
                   Attributes => (Recent_Authentication => True, others => <>),
                   Created_At => T,
                   Original_Authenticated_At => T,
@@ -363,6 +368,31 @@ package body App.Auth is
             return Null_Unbounded_String;
          end;
       end Validate_Session;
+
+      --  The live session's assurance level, straight from the identity handle.
+      --  A production impl would return the principal and assurance in the one
+      --  lookup Validate_Session already does; kept separate here so the public
+      --  Validate_Session signature stays a simple principal query.
+      function Session_Assurance
+        (Reference : String; Secret : String) return Unbounded_String is
+      begin
+         if Store = null then
+            return Null_Unbounded_String;
+         end if;
+
+         declare
+            Handle : constant Handles.Session_Handle :=
+              Ss_Lookup.Execute
+                (Store.all, Btext.From_String (Reference),
+                 Sec_Txt.From_UTF_8 (Secret), Now);
+         begin
+            if Handles.Found (Handle.Status) then
+               return To_Unbounded_String
+                 (Levels.Assurance_Level'Image (Handle.Assurance));
+            end if;
+            return Null_Unbounded_String;
+         end;
+      end Session_Assurance;
 
       procedure Revoke_Session (Reference : String; Secret : String) is
       begin
@@ -435,6 +465,17 @@ package body App.Auth is
         (Vault.Validate_Session
            (Token (Token'First .. Bar - 1), Token (Bar + 1 .. Token'Last)));
    end Validate_Session;
+
+   function Session_Assurance (Token : String) return String is
+      Bar : constant Natural := Ada.Strings.Fixed.Index (Token, "|");
+   begin
+      if Bar = 0 then
+         return "";
+      end if;
+      return To_String
+        (Vault.Session_Assurance
+           (Token (Token'First .. Bar - 1), Token (Bar + 1 .. Token'Last)));
+   end Session_Assurance;
 
    procedure Revoke_Session (Token : String) is
       Bar : constant Natural := Ada.Strings.Fixed.Index (Token, "|");

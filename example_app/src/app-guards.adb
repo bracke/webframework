@@ -71,6 +71,12 @@ package body App.Guards is
             --  it from the context rather than mapping principals to roles.
             Web.Context.Set_Attribute
               (Context, "clearance", Natural'Image (Resolved_Clearance));
+            --  Carry the session's assurance level as a second derived fact, so
+            --  the policy can demand a step-up (an interactive login) for a
+            --  privileged action -- not merely a high enough clearance.
+            Web.Context.Set_Attribute
+              (Context, "assurance",
+               App.Auth.Session_Assurance (To_String (Resolved_Token)));
          end if;
       end if;
 
