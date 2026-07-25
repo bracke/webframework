@@ -12,6 +12,7 @@ with App.Auth;
 with App.Authz;
 with App.State;
 with App.Guards;
+with App.Query_Binding;
 with App.Projects;
 
 --  Regression tests for the example app's stack integration: identity password
@@ -197,6 +198,26 @@ begin
              "scope: the Alire scope drops out-of-scope rows in the query");
       Check (All_Alire,
              "scope: every row the scoped query returns is Alire-tracked");
+   end;
+
+   --  Web.Binding: a typed query binder for the projects listing.
+   declare
+      use type App.Query_Binding.Page_Number;
+      Full : constant App.Query_Binding.Projects_Query :=
+        App.Query_Binding.Bind
+          (Web.Request.Create ("GET", "/projects", "page=3&alire_only=true"));
+      Empty : constant App.Query_Binding.Projects_Query :=
+        App.Query_Binding.Bind (Web.Request.Create ("GET", "/projects"));
+      Bad_Page : constant App.Query_Binding.Projects_Query :=
+        App.Query_Binding.Bind
+          (Web.Request.Create ("GET", "/projects", "page=abc"));
+   begin
+      Check (Full.Page = 3 and then Full.Alire_Only,
+             "binding: typed query binds page and flag");
+      Check (Empty.Page = 1 and then not Empty.Alire_Only,
+             "binding: absent params use defaults");
+      Check (Bad_Page.Page = 1,
+             "binding: malformed page falls back to the default");
    end;
 
    --  The live (WebSocket) privileged action guard: like the HTTP manage path,

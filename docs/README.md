@@ -14,6 +14,10 @@
   authorization gate routes and the WebSocket upgrade without the framework
   core depending on either.
 - [API](API.md) — package-level API and boundaries.
+- [Request Binding & Input Decoding](BINDING.md) — the `Web.Binding.*` subsystem:
+  typed decoding of route/query/header/cookie and JSON/URL-encoded/multipart
+  bodies into Ada values, with exact paths, streaming codecs, and the Forms /
+  Validation / Uploads / Identity / Authorization seams.
 - [Deployment](DEPLOYMENT.md) — systemd/supervisord examples, restart behavior,
   and startup checks.
 - [Security](SECURITY.md) — host/origin policy, websocket, and session

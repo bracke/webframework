@@ -47,3 +47,15 @@ Authorization (apps that authenticate and authorize):
   security-revision handles are threaded into every `tables` result.
 - Passwords are never stored or compared in the clear; authentication runs
   through the `identity` repository's verification.
+
+Request binding (apps that decode typed input — see `BINDING.md`):
+
+- Decode with `Web.Binding.*`, never ad-hoc string parsing; a malformed value is
+  a structured error, never an exception.
+- Binding is syntactic only: no validation, auth, storage or rendering in
+  decoders or descriptors; semantic rules live in the Validation seam.
+- Credential fields use Secret_Value; secrets are never retained or logged.
+- Duplicates are rejected by default; missing, empty and JSON null stay distinct;
+  bounds apply to every attacker-controlled dimension.
+- Body codec is chosen from Content-Type via the immutable registry; no sniffing;
+  the body has one owner; uploads stream and abort on failure.

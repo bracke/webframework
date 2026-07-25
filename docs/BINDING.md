@@ -128,6 +128,78 @@ string. If binding fails after staging, every uncommitted upload is aborted and
 cleaned up deterministically; the primary decoding error is preserved; cleanup
 failures are logged in redacted structured form (BIND-010).
 
+## Binding lifecycle
+
+```
+context  ->  source lookup  ->  resolve (duplicate/empty/missing)  ->  decode
+         ->  assign into builder  ->  finish  ->  typed value | errors
+         ->  dispatch: on success run the handler; on failure classify + map
+```
+
+For a body, insert `select codec (media type) -> claim body -> stream-parse` after
+the context step; the codec produces sources (URL-encoded) or drives a typed bind
+(JSON, multipart). Uploads stream through the session and are aborted if the bind
+fails.
+
+## Missing, empty, and JSON null
+
+Three distinct states, never conflated:
+
+- **Missing** — the field is absent. Required → `binding.missing`; Optional /
+  Optional_With_Default → the seeded default is kept.
+- **Present-empty** — the field is supplied with an empty value. `Empty_Policy`
+  decides: decode it, reject it (`binding.empty_not_allowed`), treat as missing,
+  or map to None / an empty collection.
+- **JSON null** — an explicit `null`. `Null_Policy` decides: reject, map to None,
+  map to default, or custom. A default never replaces a *malformed supplied*
+  value — `page=abc` is an error, not the default.
+
+## Security and redaction
+
+- Every attacker-controlled dimension is bounded (body size, value/field length,
+  counts, JSON depth/tokens, collection items, path depth, errors); size and
+  offset arithmetic is overflow-checked; all three body parsers are fuzzed.
+- Malformed input is a structured result, never an exception; `Decoders.Guard`
+  backstops the unexpected as `internal.decoder_failure`.
+- Secret fields (`Secret_Value`) are never retained for re-render or logging
+  (Forms); errors carry only a path, id and bounded typed parameters — never the
+  raw value (BIND-011).
+- Deny-by-default: duplicates rejected, JSON duplicate members rejected, no
+  media-type sniffing, unsupported/ambiguous codec configs rejected at freeze.
+
+## Usage
+
+The minimal flat-record pattern (see `example_app/src/app-query_binding.adb` for
+a complete, tested example binding a listing query):
+
+```ada
+package RB   is new Web.Binding.Record_Binders (My_Record);
+package Ints is new Web.Binding.Decoders.Integer_Decoders (Field_T);
+function Dec (T : String; P : Field_Path; S : Source_Kind) return Ints.Results.Result
+  is (Ints.Decode (T, P, S));
+procedure Bind_F is new RB.Bind_Scalar (Field_T, Ints.Results, Dec, Set_F);
+
+B : RB.Builder := RB.Start (Defaults);
+Bind_F (B, Query.Lookup (Q, "f"), Path, Query_Parameter, Presence => Required);
+Result := RB.Finish (B);   --  Succeeded -> Value_Of; else Errors_Of (exact paths)
+```
+
+Collections use `RB.Bind_Collection` with an append setter; nested records use
+`RB.Bind_Nested`; JSON drives `Codecs.JSON.Reader` through `JSON.Binding`. See the
+AUnit suites (`tests/src/web_binding_*`) for a worked example of every feature,
+and `docs/ai/BINDING.md` for the AI-oriented map.
+
+## Migration notes
+
+- The subsystem is additive: it introduces the `Web.Binding.*` hierarchy and
+  adds those units to the standalone-library `Library_Interface`; nothing in the
+  existing framework changed. Handlers can adopt it incrementally, one route at a
+  time, alongside ad-hoc parsing.
+- Error ids (`Error_Id` literal spellings) are compatibility-sensitive
+  localization keys; treat additions as append-only.
+- Streaming is API-shaped over the currently-buffered body; a true streaming
+  transport is a framework follow-on that binding consumes unchanged.
+
 ## Phase status
 
 - **Phase 0 — Foundations: landed.** Identifiers, source kinds, typed paths and
@@ -341,4 +413,12 @@ failures are logged in redacted structured form (BIND-010).
   terminating, the guard, and secret redaction (BIND-011). AUnit suite 120 → 124;
   every invariant now has coverage (see the map above) and no attacker-controlled
   path is unbounded (all parsers fuzzed and bounded).
-- Phase 17: pending — documentation and the example-application update.
+- **Phase 17 — Documentation and integration example: landed.** This guide plus
+  the AI-oriented `docs/ai/BINDING.md` (package ownership, instantiation patterns,
+  dependency rules, extension points, prohibited shortcuts); pointers from
+  `docs/README.md` and `docs/ai/CHECKLIST.md`; and a complete, tested example in
+  the example app (`app-query_binding` binds the projects-listing query into a
+  typed record, exercised by `app_tests`).
+
+All 17 phases complete; 124 framework AUnit tests plus the example app's binding
+tests, green end to end.
