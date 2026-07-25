@@ -42,7 +42,8 @@ generic
    Anonymous : Web.Response.Response_Type;
    with function Decide
      (Principal : String;
-      Request   : Web.Request.Request_Type) return Ev.Decision;
+      Request   : Web.Request.Request_Type;
+      Context   : Web.Context.Request_Context) return Ev.Decision;
 function Guarded
   (Request : Web.Request.Request_Type;
    Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome;
@@ -53,7 +54,10 @@ builds an authorization request from the resolved principal and evaluates it
 against the app's policy), then registers the instance's `'Access` as a
 `Web.Guard.Guard_Access`. The principal is read from the request context — an
 opaque string the framework never interprets, that an upstream guard resolved
-from the session and that identity gave meaning.
+from the session and that identity gave meaning. The whole context is passed to
+`Decide` too, so the policy can read facts an upstream guard attached (the
+principal's clearance, the session's assurance level) without the framework
+knowing what any of them mean.
 
 ## Where it sits
 
