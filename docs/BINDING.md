@@ -266,4 +266,16 @@ failures are logged in redacted structured form (BIND-010).
   framing is a structured Outcome, never an exception; client filenames are
   metadata only. AUnit suite 102 → 106, including fragmentation across chunk
   sizes 1…5000 and a fuzz harness (adversarial + pseudo-random, always terminates).
-- Phases 11–17: pending, in spec order.
+- **Phase 11 — Files and Uploads adapter: landed.** `Web.Binding.Uploads` defines
+  the narrow backend contract (`Upload_Sink`: Begin_Upload / Write_Chunk /
+  Finish_Upload / Abort_Upload) and a controlled, request-scoped `Upload_Session`
+  that streams a multipart part's body into a sink chunk by chunk (never buffering
+  the whole file, BIND-009), enforces per-upload and aggregate byte limits, and
+  yields an opaque `Upload_Handle` with metadata (filename, content-type, byte
+  count, checksum) — never a path. On `Finalize` (scope exit) or `Discard` it
+  aborts every staged-but-uncommitted upload, so a failed bind cleans up
+  deterministically and handles never escape (BIND-010). `Web.Binding.Uploads.
+  Memory` is the in-memory backend and test double (rolling checksum + injectable
+  begin/write/finish faults). AUnit suite 106 → 110 (stream + checksum,
+  per-upload / aggregate limits, injected sink failure, abort-on-scope-exit).
+- Phases 12–17: pending, in spec order.

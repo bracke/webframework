@@ -10,6 +10,7 @@ with Web_Binding_JSON_Bind_Tests;
 with Web_Binding_Union_Tests;
 with Web_Binding_Media_Tests;
 with Web_Binding_Multipart_Tests;
+with Web_Binding_Upload_Tests;
 with Web_Core_Tests;
 with Web_E2E_Tests;
 with Web_Live_Tests;
@@ -39,6 +40,7 @@ package body Web_Test_Suite is
       Web_Binding_Union_Tests.Add_Tests (Result);
       Web_Binding_Media_Tests.Add_Tests (Result);
       Web_Binding_Multipart_Tests.Add_Tests (Result);
+      Web_Binding_Upload_Tests.Add_Tests (Result);
       Web_E2E_Tests.Add_Tests (Result);
       return Result;
    end Suite;
