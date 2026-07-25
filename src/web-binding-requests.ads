@@ -1,5 +1,6 @@
 with Web.Binding.Errors;
 with Web.Binding.Results;
+with Web.Binding.Diagnostics;
 
 --  Typed-handler dispatch and failure classification.
 --
@@ -48,6 +49,9 @@ package Web.Binding.Requests is
          Errors : Web.Binding.Errors.Error_Collection);
    procedure Dispatch
      (Result          : Input_Results.Result;
-      Route_Not_Found : Boolean := False);
+      Route_Not_Found : Boolean := False;
+      Sink            : access Web.Binding.Diagnostics.Sink'Class := null;
+      Correlation     : String := "";
+      Route           : String := "");
 
 end Web.Binding.Requests;

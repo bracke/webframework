@@ -11,12 +11,30 @@ package body Web.Binding.Uploads is
       Session.Max_Total := Max_Total;
    end Configure;
 
-   --  Abort the staged upload in a slot (idempotent).
+   procedure Attach_Diagnostics
+     (Session     : in out Upload_Session;
+      Sink        : access Web.Binding.Diagnostics.Sink'Class;
+      Correlation : String := "";
+      Route       : String := "") is
+   begin
+      Session.Diag := Sink;
+      Session.Corr := Meta_Strings.To_Bounded_String
+        (Correlation, Drop => Ada.Strings.Right);
+      Session.Route := Meta_Strings.To_Bounded_String
+        (Route, Drop => Ada.Strings.Right);
+   end Attach_Diagnostics;
+
+   --  Abort the staged upload in a slot (idempotent), with a diagnostic event.
    procedure Abort_Slot (Session : in out Upload_Session; Slot : Positive) is
    begin
       if Session.Slots (Slot).Active then
          Session.Slots (Slot).Active := False;
          Abort_Upload (Session.Sink.all, Session.Slots (Slot).Ref);
+         Web.Binding.Diagnostics.Emit_To
+           (Session.Diag,
+            Web.Binding.Diagnostics.Upload_Aborted_Event
+              (Meta_Strings.To_String (Session.Corr),
+               Meta_Strings.To_String (Session.Route)));
       end if;
    end Abort_Slot;
 

@@ -23,7 +23,8 @@ validation, auth, storage, or rendering. Full guide: `../BINDING.md`.
   `Web.Binding.Media_Types`, `Web.Binding.Codecs.Registry`, `Web.Binding.Uploads`
   (+ `.Memory`).
 - Integration: `Web.Binding.Forms`, `Web.Binding.Validation`, `Web.Binding.Auth`,
-  `Web.Binding.Contexts`, `Web.Binding.Requests` (Classify + Dispatch).
+  `Web.Binding.Contexts`, `Web.Binding.Requests` (Classify + Dispatch),
+  `Web.Binding.Diagnostics` (+ `.Recording`) — redaction-safe event sink.
 
 ## Instantiation patterns
 

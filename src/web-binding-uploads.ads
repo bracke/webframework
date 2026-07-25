@@ -1,6 +1,7 @@
 with Ada.Finalization;
 with Ada.Strings.Bounded;
 with Web.Binding.Multipart;
+with Web.Binding.Diagnostics;
 
 --  Files and Uploads adapter.
 --
@@ -99,6 +100,18 @@ package Web.Binding.Uploads is
       Max_Per_Upload : Web.Binding.Byte_Count;
       Max_Total      : Web.Binding.Byte_Count);
 
+   --  Attach a diagnostics sink; the session emits an Upload_Aborted event when
+   --  it aborts a staged upload (including on failed-bind cleanup).
+   --  @param Session The session.
+   --  @param Sink The diagnostics sink.
+   --  @param Correlation The request correlation id.
+   --  @param Route The route id.
+   procedure Attach_Diagnostics
+     (Session     : in out Upload_Session;
+      Sink        : access Web.Binding.Diagnostics.Sink'Class;
+      Correlation : String := "";
+      Route       : String := "");
+
    --  Stream a multipart part's body into a new staged upload. Never buffers the
    --  whole file; enforces the per-upload and aggregate limits; aborts the
    --  upload on any failure.
@@ -159,6 +172,9 @@ private
       Total     : Web.Binding.Byte_Count := 0;
       Max_Per   : Web.Binding.Byte_Count := Web.Binding.Byte_Count'Last;
       Max_Total : Web.Binding.Byte_Count := Web.Binding.Byte_Count'Last;
+      Diag      : access Web.Binding.Diagnostics.Sink'Class := null;
+      Corr      : Meta_Strings.Bounded_String;
+      Route     : Meta_Strings.Bounded_String;
    end record;
 
    overriding procedure Finalize (Session : in out Upload_Session);

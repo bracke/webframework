@@ -59,11 +59,21 @@ package body Web.Binding.Requests is
 
    procedure Dispatch
      (Result          : Input_Results.Result;
-      Route_Not_Found : Boolean := False) is
+      Route_Not_Found : Boolean := False;
+      Sink            : access Web.Binding.Diagnostics.Sink'Class := null;
+      Correlation     : String := "";
+      Route           : String := "") is
    begin
       if Input_Results.Succeeded (Result) then
+         Web.Binding.Diagnostics.Emit_To
+           (Sink,
+            Web.Binding.Diagnostics.Bind_Succeeded_Event (Correlation, Route));
          On_Success (Input_Results.Value_Of (Result));
       else
+         Web.Binding.Diagnostics.Emit_To
+           (Sink,
+            Web.Binding.Diagnostics.Bind_Failed_Event
+              (Input_Results.Errors_Of (Result), Correlation, Route));
          On_Failure
            (Classify (Input_Results.Errors_Of (Result), Route_Not_Found),
             Input_Results.Errors_Of (Result));

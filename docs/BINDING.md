@@ -41,6 +41,7 @@ what is landed versus pending.
 | `Web.Binding.Multipart` / `Uploads` | streaming multipart + upload adapter | 10, 11 |
 | `Web.Binding.Forms` / `Validation` | integration adapters (siblings absent → contracts + doubles) | 12, 13 |
 | `Web.Binding.Requests` | typed-handler entry points + response classification | 15 |
+| `Web.Binding.Diagnostics` (+ `.Recording`) | structured, redaction-safe events + sink | 16+ |
 | `Web.Binding.Testing` | test helpers for decoder authors | all |
 | `Web.Binding.Internal.*` | private parser implementations | as needed |
 
@@ -166,6 +167,16 @@ Three distinct states, never conflated:
   raw value (BIND-011).
 - Deny-by-default: duplicates rejected, JSON duplicate members rejected, no
   media-type sniffing, unsupported/ambiguous codec configs rejected at freeze.
+
+`Web.Binding.Diagnostics` emits structured events at the seams (codec selected,
+bind succeeded/failed, limit exceeded, upload aborted, internal exception,
+registry failure) through a `Sink` an application implements; the default sink is
+a no-op. Events carry only safe fields — correlation id, route id, codec id,
+error id, error count, source kind, redacted rendered path, limit category —
+**never** a raw body, password, token, cookie, uploaded content or secret value.
+`Web.Binding.Requests.Dispatch` emits bind succeeded/failed and the upload
+session emits upload-aborted on cleanup; `Web.Binding.Diagnostics.Recording` is an
+in-memory sink for tests.
 
 ## Usage
 
