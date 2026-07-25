@@ -8,7 +8,7 @@ with Ada.Strings.Unbounded;
 --  against fragmentation and transport faults deterministically.
 package Web.Binding.Streams.Memory is
 
-   type Fault_Kind is (No_Fault, Premature_Eof, Read_Failure);
+   type Fault_Kind is (No_Fault, Premature_Eof, Read_Failure, Cancel);
 
    type Memory_Stream is new Input_Stream with private;
 

@@ -96,8 +96,17 @@ Namespaces: `binding.*`, `decode.*`, `body.*`, `json.*`, `form.*`,
 | BIND-015 | Union selection is explicit; ambiguity is an error |
 
 Each invariant carries a guard/assertion where practical plus AUnit (and, where
-relevant, fuzz) coverage. Phase 0 lands BIND-002 (result shape), BIND-004/005/006
-(errors + paths), BIND-007 (policy types), BIND-013 (no-reflection foundations).
+relevant, fuzz) coverage. Coverage map (as of phase 16): BIND-001
+(Bodies.Claim), BIND-002 (Results shape + record binder), BIND-003 (bounded
+parsers + fuzz for url/JSON/multipart), BIND-004 (deterministic error order),
+BIND-005 (Id_Key), BIND-006 (exact paths, collection/nested/JSON tests),
+BIND-007 (duplicate policy resolution), BIND-008 (decoders are pure syntax),
+BIND-009 (upload streaming, never fully buffered), BIND-010 (upload abort on
+scope exit), BIND-011 (secret redaction, Forms + hardening), BIND-012 (frozen
+registry + concurrent-use test), BIND-013 (builder, no reflection/layout),
+BIND-014 (decoder consumption discipline), BIND-015 (union ambiguity). The
+defensive boundary (`Web.Binding.Decoders.Guard`) converts any unexpected
+exception to internal.decoder_failure.
 
 ## Resource-limit layering
 
@@ -322,4 +331,14 @@ failures are logged in redacted structured form (BIND-010).
   diagnostics flag, correlation id), the §9 skeleton deferred from phase 0. AUnit
   suite 117 → 120 (classification incl. worst-wins and route-404, the context,
   and dispatch proving the handler runs only on success).
-- Phases 16–17: pending, in spec order.
+- **Phase 16 — Hardening: landed.** `Web.Binding.Decoders.Guard` is the defensive
+  boundary — it wraps a decoder so any exception (violated invariant, programmer
+  error, unexpected runtime fault) is caught and converted to
+  internal.decoder_failure carrying only the path and id, never request data. A
+  `Cancel` stream fault was added. New hardening suite: concurrent shared use
+  (four tasks × 3000 iterations over immutable decoders and a frozen registry,
+  no corruption — BIND-012), stream cancellation yielding a defined error and
+  terminating, the guard, and secret redaction (BIND-011). AUnit suite 120 → 124;
+  every invariant now has coverage (see the map above) and no attacker-controlled
+  path is unbounded (all parsers fuzzed and bounded).
+- Phase 17: pending — documentation and the example-application update.

@@ -30,8 +30,11 @@ package body Web.Binding.Streams.Memory is
 
       --  Injected faults trigger once enough bytes have been delivered.
       if Stream.Inject /= No_Fault and then Stream.Pos >= Stream.Fault_After then
-         Outcome := (if Stream.Inject = Premature_Eof then End_Of_Input
-                     else Failed);
+         Outcome :=
+           (case Stream.Inject is
+               when Premature_Eof => End_Of_Input,
+               when Cancel        => Cancelled,
+               when others        => Failed);
          return;
       end if;
 
