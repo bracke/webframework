@@ -62,6 +62,34 @@ package body Web.Binding.Sources is
       return Item.Overflow;
    end Truncated;
 
+   function Split (Text : String; Delimiter : Character) return Occurrences is
+      Result : Occurrences;
+      First  : Integer := Text'First;
+      Ord    : Natural := 0;
+
+      procedure Emit (Piece_First, Piece_Last : Integer) is
+         Loc : Web.Binding.Errors.Source_Location;
+      begin
+         Ord := Ord + 1;
+         Loc.Has_Ordinal := True;
+         Loc.Ordinal := Parameter_Ordinal (Ord);
+         Add (Result, Text (Piece_First .. Piece_Last), Loc);
+      end Emit;
+
+   begin
+      if Text'Length = 0 then
+         return Result;
+      end if;
+      for I in Text'Range loop
+         if Text (I) = Delimiter then
+            Emit (First, I - 1);
+            First := I + 1;
+         end if;
+      end loop;
+      Emit (First, Text'Last);
+      return Result;
+   end Split;
+
    --  Whether every retained occurrence has the same value text.
    function All_Identical (Item : Occurrences) return Boolean is
    begin

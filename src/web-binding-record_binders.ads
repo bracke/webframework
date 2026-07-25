@@ -63,6 +63,61 @@ package Web.Binding.Record_Binders is
       On_Empty   : Web.Binding.Policies.Empty_Policy :=
         Web.Binding.Policies.Reject_Empty);
 
+   --  Bind a collection field from repeated occurrences.
+   --
+   --  Each occurrence is decoded independently and appended through Append, in
+   --  source order, with an exact indexed path (Base_Path[0], Base_Path[1], ...).
+   --  A malformed or undecodable element is a structured error at its index and,
+   --  under Aggregate_Fields, does not stop the others. The item count is bounded:
+   --  more than Max_Items is decode.too_many_items (and never appended); fewer
+   --  than Min_Items is decode.invalid_list.
+   generic
+      type Element is private;
+      with package Element_Results is new Web.Binding.Results (Element);
+      with function Decode
+        (Text   : String;
+         Path   : Web.Binding.Paths.Field_Path;
+         Source : Source_Kind) return Element_Results.Result;
+      with procedure Append (Rec : in out Target; Value : Element);
+   procedure Bind_Collection
+     (B         : in out Builder;
+      Occ       : Web.Binding.Sources.Occurrences;
+      Base_Path : Web.Binding.Paths.Field_Path;
+      Source    : Source_Kind;
+      Min_Items : Natural := 0;
+      Max_Items : Natural := 1_024);
+
+   --  Bind a nested record by merging a sub-record bind into this builder.
+   --
+   --  Sub_Bind performs the nested binding (its own builder over the mapped
+   --  keys, using nested paths) and returns a value-or-errors result. On success
+   --  the value is assigned through Setter; on failure the sub-errors -- already
+   --  carrying their nested paths -- are merged here. When the nested object is
+   --  absent and Optional, it is skipped (the seeded default/None is kept); when
+   --  present, Sub_Bind runs and its missing fields surface as errors.
+   generic
+      type Sub_Type is private;
+      with package Sub_Results is new Web.Binding.Results (Sub_Type);
+      with function Sub_Bind return Sub_Results.Result;
+      with procedure Setter (Rec : in out Target; Value : Sub_Type);
+   procedure Bind_Nested
+     (B        : in out Builder;
+      Present  : Boolean;
+      Path     : Web.Binding.Paths.Field_Path;
+      Source   : Source_Kind;
+      Optional : Boolean := False);
+
+   --  Record decode.nesting_too_deep when Path is deeper than Max_Depth.
+   --  @param B The builder.
+   --  @param Path The nested path to check.
+   --  @param Source The source kind.
+   --  @param Max_Depth The maximum permitted path depth.
+   procedure Guard_Depth
+     (B         : in out Builder;
+      Path      : Web.Binding.Paths.Field_Path;
+      Source    : Source_Kind;
+      Max_Depth : Depth_Count);
+
    --  Record an unknown source field per the unknown-field policy.
    --  @param B The builder.
    --  @param Path The unknown field's path.

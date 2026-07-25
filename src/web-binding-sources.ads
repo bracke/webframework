@@ -74,6 +74,14 @@ package Web.Binding.Sources is
    --  @return True when truncated.
    function Truncated (Item : Occurrences) return Boolean;
 
+   --  Split a single delimited value into ordered occurrences (empty pieces
+   --  preserved), for a delimited scalar collection. Each piece carries its
+   --  1-based ordinal as its location.
+   --  @param Text The delimited value.
+   --  @param Delimiter The separating character.
+   --  @return The pieces as occurrences.
+   function Split (Text : String; Delimiter : Character) return Occurrences;
+
    --  The outcome of resolving a scalar descriptor against occurrences.
    type Resolution_State is
      (Resolved_Value,

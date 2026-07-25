@@ -176,4 +176,18 @@ failures are logged in redacted structured form (BIND-010).
   (BIND-004); `Fail_Fast` vs `Aggregate_Fields`; `Note_Unknown` applies the
   unknown-field policy. Mixed-source records need no implicit merge (each field
   takes its own occurrences). AUnit suite 71 → 74.
-- Phases 4–17: pending, in spec order.
+- **Phase 4 — Collections and nesting: landed.** Both integrate with the phase-3
+  builder through caller-supplied setters (no container types inside `Result`).
+  `Record_Binders.Bind_Collection` (nested generic): each repeated occurrence is
+  decoded and appended in source order at an exact indexed path (`base[0]`,
+  `base[1]`, …); more than `Max_Items` is `decode.too_many_items` (excess never
+  appended), fewer than `Min_Items` is `decode.invalid_list`; per-element errors
+  aggregate. `Sources.Split` turns a delimited scalar into occurrences so the
+  same binder handles delimited collections. `Bind_Nested` (nested generic)
+  composes a sub-record bind into the parent, merging the sub-errors (already
+  carrying nested paths); absent + optional is None, absent + required is
+  `binding.missing`, present-but-malformed aggregates. `Web.Binding.Names` gives
+  pluggable flat-name adapters (dotted / bracketed / underscored) for nested
+  fields on flat sources; `Guard_Depth` enforces a maximum path depth
+  (`decode.nesting_too_deep`). AUnit suite 74 → 78.
+- Phases 5–17: pending, in spec order.

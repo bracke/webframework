@@ -80,6 +80,115 @@ package body Web.Binding.Record_Binders is
       end case;
    end Bind_Scalar;
 
+   procedure Bind_Collection
+     (B         : in out Builder;
+      Occ       : Web.Binding.Sources.Occurrences;
+      Base_Path : Web.Binding.Paths.Field_Path;
+      Source    : Source_Kind;
+      Min_Items : Natural := 0;
+      Max_Items : Natural := 1_024)
+   is
+      use Web.Binding.Sources;
+      use Web.Binding.Paths;
+      N      : constant Natural := Count (Occ);
+      Usable : constant Natural := Natural'Min (N, Max_Items);
+   begin
+      if B.Sealed then
+         return;
+      end if;
+
+      if N > Max_Items then
+         declare
+            Params : Error_Parameters;
+         begin
+            Params.Has_Maximum := True;
+            Params.Maximum := Long_Long_Integer (Max_Items);
+            Params.Has_Actual := True;
+            Params.Actual := Long_Long_Integer (N);
+            Record_One
+              (B, Make_Error (Decode_Too_Many_Items, Base_Path, Source,
+                              Decode_Origin, Parameters => Params));
+         end;
+      elsif N < Min_Items then
+         declare
+            Params : Error_Parameters;
+         begin
+            Params.Has_Minimum := True;
+            Params.Minimum := Long_Long_Integer (Min_Items);
+            Params.Has_Actual := True;
+            Params.Actual := Long_Long_Integer (N);
+            Record_One
+              (B, Make_Error (Decode_Invalid_List, Base_Path, Source,
+                              Decode_Origin, Parameters => Params));
+         end;
+      end if;
+
+      for I in 1 .. Usable loop
+         exit when B.Sealed;
+         declare
+            Elem_Path : constant Field_Path :=
+              Append_Index (Base_Path, Index_Number (I - 1));
+         begin
+            if Malformed (Occ, I) then
+               Record_One
+                 (B, Make_Error (Form_Invalid_Percent_Escape, Elem_Path, Source));
+            else
+               declare
+                  D : constant Element_Results.Result :=
+                    Decode (Value (Occ, I), Elem_Path, Source);
+               begin
+                  if Element_Results.Succeeded (D) then
+                     Append (B.Working, Element_Results.Value_Of (D));
+                  else
+                     Merge (B, Element_Results.Errors_Of (D));
+                  end if;
+               end;
+            end if;
+         end;
+      end loop;
+   end Bind_Collection;
+
+   procedure Bind_Nested
+     (B        : in out Builder;
+      Present  : Boolean;
+      Path     : Web.Binding.Paths.Field_Path;
+      Source   : Source_Kind;
+      Optional : Boolean := False) is
+   begin
+      if B.Sealed then
+         return;
+      end if;
+      if not Present then
+         --  Absent object: None when optional, otherwise the whole object is a
+         --  required-but-missing error at its path.
+         if not Optional then
+            Record_One (B, Make_Error (Binding_Missing, Path, Source));
+         end if;
+         return;
+      end if;
+
+      declare
+         R : constant Sub_Results.Result := Sub_Bind;
+      begin
+         if Sub_Results.Succeeded (R) then
+            Setter (B.Working, Sub_Results.Value_Of (R));
+         else
+            Merge (B, Sub_Results.Errors_Of (R));
+         end if;
+      end;
+   end Bind_Nested;
+
+   procedure Guard_Depth
+     (B         : in out Builder;
+      Path      : Web.Binding.Paths.Field_Path;
+      Source    : Source_Kind;
+      Max_Depth : Depth_Count) is
+   begin
+      if not B.Sealed and then Web.Binding.Paths.Depth (Path) > Max_Depth then
+         Record_One (B, Make_Error (Decode_Nesting_Too_Deep, Path, Source));
+      end if;
+   end Guard_Depth;
+
    procedure Note_Unknown
      (B      : in out Builder;
       Path   : Web.Binding.Paths.Field_Path;
