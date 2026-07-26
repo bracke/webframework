@@ -42,13 +42,13 @@ tables = { path = "../../tables" }
 webframework_authorization = "*"
 
 [[pins]]
-webframework_authorization = { path = "../../webframework_authorization" }
+webframework_authorization = { path = "../webframework_authorization" }
 
 [[depends-on]]
 tables_authorization = "*"
 
 [[pins]]
-tables_authorization = { path = "../../tables_authorization" }
+tables_authorization = { path = "../../tables/tables_authorization" }
 
 [[depends-on]]
 terminal_styles = "*"

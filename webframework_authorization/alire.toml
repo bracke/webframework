@@ -28,21 +28,21 @@ command = ["sh", "-c", "cd tests && alr build && ./bin/test_bridge"]
 "*" = "development"
 
 [[pins]]
-authorization = { path = "../authorization" }
+authorization = { path = "../../authorization" }
 
 [[pins]]
-webframework = { path = "../webframework" }
+webframework = { path = ".." }
 
 # webframework's transitive path pins are root-only in Alire, so every root
 # that builds webframework must repeat them.
 [[pins]]
-cryptolib = { path = "../cryptolib" }
+cryptolib = { path = "../../cryptolib" }
 
 [[pins]]
-ssh_lib = { path = "../sshlib" }
+ssh_lib = { path = "../../sshlib" }
 
 [[pins]]
-zlib = { path = "../zlib" }
+zlib = { path = "../../zlib" }
 
 [[pins]]
-hostkit = { path = "../hostkit" }
+hostkit = { path = "../../hostkit" }

@@ -23,19 +23,19 @@ webframework_authorization = "*"
 webframework_authorization = { path = ".." }
 
 [[pins]]
-authorization = { path = "../../authorization" }
+authorization = { path = "../../../authorization" }
 
 [[pins]]
-webframework = { path = "../../webframework" }
+webframework = { path = "../.." }
 
 [[pins]]
-cryptolib = { path = "../../cryptolib" }
+cryptolib = { path = "../../../cryptolib" }
 
 [[pins]]
-ssh_lib = { path = "../../sshlib" }
+ssh_lib = { path = "../../../sshlib" }
 
 [[pins]]
-zlib = { path = "../../zlib" }
+zlib = { path = "../../../zlib" }
 
 [[pins]]
-hostkit = { path = "../../hostkit" }
+hostkit = { path = "../../../hostkit" }
