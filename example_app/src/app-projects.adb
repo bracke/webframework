@@ -223,7 +223,8 @@ package body App.Projects is
       end if;
 
       --  Table might already exist, try to find it
-      Result := Standard.Database.Catalog.Find_By_Name ("projects", Schema);
+      Result := Standard.Database.Catalog.Find_By_Name
+        (Standard.Database.Catalog_State_Key (DB), "projects", Schema);
       if Standard.Database.Status.Is_Ok (Result) then
          Registered := True;
          return;

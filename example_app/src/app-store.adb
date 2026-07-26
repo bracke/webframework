@@ -124,7 +124,8 @@ package body App.Store is
          return;
       end if;
 
-      Result := Standard.Database.Catalog.Find_By_Name ("todos", Schema);
+      Result := Standard.Database.Catalog.Find_By_Name
+        (Standard.Database.Catalog_State_Key (DB), "todos", Schema);
       Raise_On_Error (Result, "todo table registration failed");
       Registered := True;
    end Ensure_Registered;
