@@ -8,6 +8,7 @@ with Web.Context;
 with Web.Server;
 
 with App.Pages;
+with App.Projects;
 with App.Runtime;
 with App.State;
 with App.Auth;
@@ -220,6 +221,59 @@ package body App.Http_Support is
                 "http: delete with a non-integer id is rejected (400)");
          Check (Web.Response.Status (Blank_User) = 400,
                 "http: login with a blank username is rejected (400)");
+      end;
+
+      --  Add-project success round-trip: a valid body is decoded, validated and
+      --  written to the database (HTTP 200); the row is then found and deleted
+      --  (HTTP 200) -- the full decode -> validate -> insert -> delete path.
+      --  Re-running this suite reopens the persisted database and replays its
+      --  uncheckpointed WAL, so the delete-by-key of a freshly written row on a
+      --  re-run is the regression guard for the database primary-key-reuse
+      --  recovery fix (a replayed committed deletion must stay deleted).
+      declare
+         Ctx : constant Web.Context.Request_Context := Web.Context.New_Context;
+         Probe : constant String := "RoundTripProbe";
+
+         function Trim (S : String) return String is
+           (Ada.Strings.Fixed.Trim (S, Ada.Strings.Both));
+
+         function Find_Probe_Id return Natural is
+         begin
+            for P of App.Projects.Get_Projects loop
+               if Trim (P.Name) = Probe then
+                  return P.Id;
+               end if;
+            end loop;
+            return 0;
+         end Find_Probe_Id;
+
+         Add_Resp : constant Web.Response.Response_Type :=
+           App.Pages.Api_Add_Project
+             (Web.Request.Create
+                ("POST", "/api/projects/add", "",
+                 "name=" & Probe & "&status=active"), Ctx);
+         New_Id : Natural;
+      begin
+         App.Projects.Initialize;
+         Check (Web.Response.Status (Add_Resp) = 200,
+                "http: add-project with a valid body succeeds (200)");
+         New_Id := Find_Probe_Id;
+         Check (New_Id > 0,
+                "http: the added project is present in the database");
+         if New_Id > 0 then
+            declare
+               Del_Resp : constant Web.Response.Response_Type :=
+                 App.Pages.Api_Delete_Project
+                   (Web.Request.Create
+                      ("POST", "/api/projects/delete", "",
+                       "id=" & Trim (New_Id'Image)), Ctx);
+            begin
+               Check (Web.Response.Status (Del_Resp) = 200,
+                      "http: deleting the added project succeeds (200)");
+            end;
+            Check (Find_Probe_Id = 0,
+                   "http: the deleted project is gone from the database");
+         end if;
       end;
 
       New_Line;
