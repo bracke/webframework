@@ -1,0 +1,48 @@
+name = "webframework_authorization"
+description = "Bridge from the authorization engine to the webframework guard seam"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework_authorization"
+tags = ["webframework", "authorization", "bridge"]
+
+project-files = ["webframework_authorization.gpr"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+authorization = "*"
+
+[[depends-on]]
+webframework = "*"
+
+[[actions]]
+type = "test"
+command = ["sh", "-c", "cd tests && alr build && ./bin/test_bridge"]
+
+[build-profiles]
+"*" = "development"
+
+[[pins]]
+authorization = { path = "../authorization" }
+
+[[pins]]
+webframework = { path = "../webframework" }
+
+# webframework's transitive path pins are root-only in Alire, so every root
+# that builds webframework must repeat them.
+[[pins]]
+cryptolib = { path = "../cryptolib" }
+
+[[pins]]
+ssh_lib = { path = "../sshlib" }
+
+[[pins]]
+zlib = { path = "../zlib" }
+
+[[pins]]
+hostkit = { path = "../hostkit" }

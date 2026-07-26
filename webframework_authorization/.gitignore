@@ -1,0 +1,13 @@
+/alire/
+/config/
+/obj/
+/lib/
+/tests/alire/
+/tests/config/
+/tests/obj/
+/tests/bin/
+*.ali
+*.o
+*.bexch
+b__*.adb
+b__*.ads

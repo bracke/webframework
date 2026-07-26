@@ -1,0 +1,41 @@
+name = "webframework_authorization_tests"
+description = "Tests for the webframework_authorization bridge"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework_authorization"
+
+project-files = ["test_bridge.gpr"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+webframework_authorization = "*"
+
+[build-profiles]
+"*" = "development"
+
+[[pins]]
+webframework_authorization = { path = ".." }
+
+[[pins]]
+authorization = { path = "../../authorization" }
+
+[[pins]]
+webframework = { path = "../../webframework" }
+
+[[pins]]
+cryptolib = { path = "../../cryptolib" }
+
+[[pins]]
+ssh_lib = { path = "../../sshlib" }
+
+[[pins]]
+zlib = { path = "../../zlib" }
+
+[[pins]]
+hostkit = { path = "../../hostkit" }
