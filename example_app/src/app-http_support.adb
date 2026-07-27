@@ -365,6 +365,37 @@ package body App.Http_Support is
                 "http: a token bound to another session is refused (403)");
       end;
 
+      --  API error contract: every JSON endpoint answers with a single shape,
+      --  {"status":"error",...} as application/json -- never plain text and
+      --  never a second {"error":...} shape. Covers the two responses that used
+      --  to diverge: a failed login (was text/plain) and a CSRF rejection (was
+      --  {"error":...}).
+      declare
+         Sid : constant String := New_Session;
+         --  Valid session + token, wrong password -> 401.
+         Bad_Login : constant Web.Response.Response_Type :=
+           Web.Server.Dispatch
+             (Csrf_Post ("/api/login", "username=admin&password=wrongpass", Sid));
+         --  No token -> CSRF rejection.
+         No_Token : constant Web.Response.Response_Type :=
+           Web.Server.Dispatch
+             (Web.Request.Create
+                ("POST", "/api/login", "", "username=admin&password=admin123"));
+
+         function Is_Error_Json (R : Web.Response.Response_Type) return Boolean is
+           (Ada.Strings.Fixed.Index
+              (Web.Response.Content_Body (R), """status"":""error""") > 0
+            and then Ada.Strings.Fixed.Index
+              (Web.Response.Header (R, "Content-Type"), "application/json") > 0);
+      begin
+         Check (Web.Response.Status (Bad_Login) = 401
+                and then Is_Error_Json (Bad_Login),
+                "http: a failed login returns the JSON error contract (401)");
+         Check (Web.Response.Status (No_Token) = 403
+                and then Is_Error_Json (No_Token),
+                "http: a CSRF rejection returns the JSON error contract (403)");
+      end;
+
       --  Add-project reject path: the handler decodes the urlencoded body via
       --  Web.Binding, validates it, and returns HTTP 400 with the structured
       --  issues as JSON. (Context is unused by the handler, so no session is

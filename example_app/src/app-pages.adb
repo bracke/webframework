@@ -39,6 +39,32 @@ package body App.Pages is
          return 0;
    end Clearance_Of;
 
+   --  API response contract. Every JSON endpoint returns exactly one of:
+   --    * {"status":"success"}                          (Api_Success)
+   --    * {"status":"error","message":"..."}            (Api_Error)
+   --    * {"status":"error","issues":[...]}             (validation, Error_JSON)
+   --  -- one "status" discriminator across all of them. Message must be a
+   --  JSON-safe literal (no quotes/backslashes); user-influenced text is only
+   --  ever emitted through Error_JSON, which escapes it.
+   Json_Content_Type : constant String := "application/json; charset=utf-8";
+   Success_Body      : constant String := "{""status"":""success""}";
+
+   function Api_Error
+     (Status : Positive; Message : String) return Web.Response.Response_Type is
+     (Web.Response.Create
+        (Status,
+         "{""status"":""error"",""message"":""" & Message & """}",
+         Json_Content_Type));
+
+   function Api_Success return Web.Response.Response_Type is
+     (Web.Response.Create (200, Success_Body, Json_Content_Type));
+
+   --  A one-line context tag for API error logs, so a failure line names the
+   --  route it came from (the framework logs request_id/method/path at the
+   --  transport layer; this correlates the handler-level line to the route).
+   function Log_Tag (Request : Web.Request.Request_Type) return String is
+     (Web.Request.Method (Request) & " " & Web.Request.Path (Request) & ": ");
+
    --  The navigation bar: the menu (Home / Projects / To-Do) comes from the
    --  navigation library via App.Nav -- the active page highlighted from the
    --  path, items filtered by Clearance -- wrapped with a logout control (the
@@ -288,9 +314,7 @@ package body App.Pages is
    begin
       --  CSRF: the POST must carry a token valid for this (anonymous) session.
       if not App.Csrf.Verify (Request, Session_Id) then
-         return Web.Response.Create
-           (403, "{""error"": ""invalid csrf token""}",
-            "application/json; charset=utf-8");
+         return Api_Error (403, "invalid csrf token");
       end if;
 
       --  Decode the urlencoded body into a submission with the forms library,
@@ -343,17 +367,16 @@ package body App.Pages is
             begin
                App.Runtime.With_State (Effective, Applier);
                return App.Runtime.Html_Response
-                 (Effective, "{""status"": ""success""}");
+                 (Effective, Success_Body);
             end;
          else
-            return Web.Response.Create
-              (401, "Invalid username or password", "text/plain; charset=utf-8");
+            return Api_Error (401, "invalid username or password");
          end if;
       end;
       exception
          when Error : others =>
             Web.Logging.Error
-              ("login API failed: " & Ada.Exceptions.Exception_Message (Error));
+              (Log_Tag (Request) & "login API failed: " & Ada.Exceptions.Exception_Message (Error));
             return Web.Response.Internal_Server_Error;
    end Api_Login;
 
@@ -365,9 +388,7 @@ package body App.Pages is
       if Session_Id'Length > 0
         and then not App.Csrf.Verify (Request, Session_Id)
       then
-         return Web.Response.Create
-           (403, "{""error"": ""invalid csrf token""}",
-            "application/json; charset=utf-8");
+         return Api_Error (403, "invalid csrf token");
       end if;
 
       if Session_Id'Length > 0 then
@@ -387,11 +408,11 @@ package body App.Pages is
       end if;
 
       --  Return success response
-      return App.Runtime.Html_Response (Session_Id, "{""status"": ""success""}");
+      return App.Runtime.Html_Response (Session_Id, Success_Body);
       exception
          when Error : others =>
             Web.Logging.Error
-              ("logout API failed: " & Ada.Exceptions.Exception_Message (Error));
+              (Log_Tag (Request) & "logout API failed: " & Ada.Exceptions.Exception_Message (Error));
             return Web.Response.Internal_Server_Error;
    end Api_Logout;
 
@@ -579,23 +600,19 @@ package body App.Pages is
       if not App.Csrf.Verify
         (Request, App.Runtime.Find_Or_Create_Session (Request))
       then
-         return Web.Response.Create
-           (403, "{""status"":""error"",""message"":""invalid csrf token""}",
-            "application/json; charset=utf-8");
+         return Api_Error (403, "invalid csrf token");
       end if;
 
       --  A malformed / oversized form body never reaches validation.
       if not Form.Decoded then
-         return Web.Response.Create
-           (400, "{""status"":""error"",""message"":""malformed form body""}",
-            "application/json; charset=utf-8");
+         return Api_Error (400, "malformed form body");
       end if;
 
       --  Reject invalid input with the structured issues as JSON.
       if Validation.Results.Has_Errors (Check) then
          return Web.Response.Create
            (400, App.Project_Validation.Error_JSON (Check),
-            "application/json; charset=utf-8");
+            Json_Content_Type);
       end if;
 
       --  Add the validated project to the database.
@@ -609,12 +626,11 @@ package body App.Pages is
          Has_GitHub        => Form.Has_GitHub,
          Has_Alire         => Form.Has_Alire);
 
-      return Web.Response.Create
-        (200, "{""status"": ""success""}", "application/json; charset=utf-8");
+      return Api_Success;
    exception
       when Error : others =>
          Web.Logging.Error
-           ("add project API failed: " & Ada.Exceptions.Exception_Message (Error));
+           (Log_Tag (Request) & "add project API failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Api_Add_Project;
 
@@ -635,32 +651,27 @@ package body App.Pages is
       if not App.Csrf.Verify
         (Request, App.Runtime.Find_Or_Create_Session (Request))
       then
-         return Web.Response.Create
-           (403, "{""status"":""error"",""message"":""invalid csrf token""}",
-            "application/json; charset=utf-8");
+         return Api_Error (403, "invalid csrf token");
       end if;
 
       --  A missing / non-integer id never reaches validation.
       if not Form.Decoded then
-         return Web.Response.Create
-           (400, "{""status"":""error"",""message"":""invalid project id""}",
-            "application/json; charset=utf-8");
+         return Api_Error (400, "invalid project id");
       end if;
 
       if Validation.Results.Has_Errors (Check) then
          return Web.Response.Create
            (400, App.Project_Validation.Error_JSON (Check),
-            "application/json; charset=utf-8");
+            Json_Content_Type);
       end if;
 
       Delete_Project (Form.Id);
 
-      return Web.Response.Create
-        (200, "{""status"": ""success""}", "application/json; charset=utf-8");
+      return Api_Success;
    exception
       when Error : others =>
          Web.Logging.Error
-           ("delete project API failed: " & Ada.Exceptions.Exception_Message (Error));
+           (Log_Tag (Request) & "delete project API failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Api_Delete_Project;
 
