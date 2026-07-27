@@ -1,5 +1,6 @@
 with Ada.Command_Line;
 with Ada.Text_IO;
+with Ada.Directories;
 with Ada.Streams; use Ada.Streams;
 
 with Web.Request;
@@ -118,9 +119,15 @@ begin
       begin
          Web.Request.Set_Header (Get_Req, "Cookie", "wf_session=" & Sid);
          Resp := App.Pages.Download_Attachment (Get_Req, Ctx);
+         --  Local-backed download streams from disk: a file-body response
+         --  pointing at the stored object (16 bytes of "hello attachment").
          Check (Web.Response.Status (Resp) = 200
-                and then Web.Response.Content_Body (Resp) = "hello attachment",
-                "download returns the stored bytes (durable round-trip)");
+                and then Web.Response.Is_File_Body (Resp)
+                and then Ada.Directories.Exists (Web.Response.File_Body_Path (Resp))
+                and then Natural
+                           (Ada.Directories.Size
+                              (Web.Response.File_Body_Path (Resp))) = 16,
+                "download streams the stored file (durable round-trip)");
       end;
 
       --  A wrong CSRF token is refused before any body is read.
