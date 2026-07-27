@@ -119,6 +119,42 @@ package body App.Http_Support is
    function New_Session return String is
      (App.Runtime.Find_Or_Create_Session (Web.Request.Create ("GET", "/")));
 
+   --  The wf_session id a response sets in its Set-Cookie header ("" if none).
+   function Cookie_From (Resp : Web.Response.Response_Type) return String is
+      Header : constant String := Web.Response.Header (Resp, "Set-Cookie");
+      Key    : constant String := "wf_session=";
+      At_Key : constant Natural := Ada.Strings.Fixed.Index (Header, Key);
+   begin
+      if At_Key = 0 then
+         return "";
+      end if;
+      declare
+         Start : constant Positive := At_Key + Key'Length;
+         Semi  : constant Natural :=
+           Ada.Strings.Fixed.Index (Header (Start .. Header'Last), ";");
+      begin
+         return (if Semi = 0 then Header (Start .. Header'Last)
+                 else Header (Start .. Semi - 1));
+      end;
+   end Cookie_From;
+
+   --  The CSRF token a rendered page carries in its <meta> tag ("" if none).
+   function Meta_Token_From (Page : String) return String is
+      Key    : constant String := "name=""csrf-token"" content=""";
+      At_Key : constant Natural := Ada.Strings.Fixed.Index (Page, Key);
+   begin
+      if At_Key = 0 then
+         return "";
+      end if;
+      declare
+         Start : constant Positive := At_Key + Key'Length;
+         Quote : constant Natural :=
+           Ada.Strings.Fixed.Index (Page (Start .. Page'Last), """");
+      begin
+         return (if Quote = 0 then "" else Page (Start .. Quote - 1));
+      end;
+   end Meta_Token_From;
+
    procedure Run (Failures : out Natural) is
    begin
       App.Auth.Initialize;
@@ -133,6 +169,12 @@ package body App.Http_Support is
       App.Runtime.Post
         ("/api/projects/probe", Stub'Access,
          App.Guards.Require_App_Access_Api'Access);
+
+      --  The real, public login routes (rendered page + API), so the tests can
+      --  exercise the actual first-contact flow through Dispatch rather than
+      --  constructing sessions directly.
+      App.Runtime.Get ("/login", App.Pages.Login'Access);
+      App.Runtime.Post ("/api/login", App.Pages.Api_Login'Access);
 
       --  Anonymous: redirected from a page, 401 from an API.
       Check (Status_Of ("GET", "/secure") = 303,
@@ -260,6 +302,45 @@ package body App.Http_Support is
             Check (Ada.Strings.Fixed.Index (Shown, Secret) > 0,
                    "tables: the functions value is shown in an unmasked render");
          end;
+      end;
+
+      --  Real first-contact login through Dispatch: a fresh cookieless client
+      --  GETs the login page (the ACTUAL Login handler renders it and sets the
+      --  session cookie), reads the CSRF token from the page, and logs in with
+      --  exactly the cookie + token it was handed. This drives the real
+      --  Login/Api_Login handlers end to end -- the path Setup_Login bypasses --
+      --  and is the regression guard for the session-bound CSRF binding (a token
+      --  and a cookie that name the same session).
+      declare
+         Get_Login : constant Web.Response.Response_Type :=
+           Web.Server.Dispatch (Web.Request.Create ("GET", "/login"));
+         Sid   : constant String := Cookie_From (Get_Login);
+         Token : constant String :=
+           Meta_Token_From (Web.Response.Content_Body (Get_Login));
+
+         First_Login : Web.Request.Request_Type :=
+           Web.Request.Create
+             ("POST", "/api/login", "",
+              "username=admin&password=admin123&"
+              & App.Csrf.Field & "=" & Token);
+
+         --  Same cookie, but a token bound to a DIFFERENT session.
+         Wrong_Token : Web.Request.Request_Type :=
+           Web.Request.Create
+             ("POST", "/api/login", "",
+              "username=admin&password=admin123&"
+              & App.Csrf.Field & "=" & App.Csrf.Token (New_Session));
+      begin
+         Web.Request.Set_Header (First_Login, "Cookie", "wf_session=" & Sid);
+         Web.Request.Set_Header (Wrong_Token, "Cookie", "wf_session=" & Sid);
+
+         Check (Web.Response.Status (Get_Login) = 200
+                and then Sid'Length > 0 and then Token'Length > 0,
+                "http: GET /login renders, sets a session cookie and a token");
+         Check (Web.Response.Status (Web.Server.Dispatch (First_Login)) = 200,
+                "http: a first cookieless visit logs in with the page's token");
+         Check (Web.Response.Status (Web.Server.Dispatch (Wrong_Token)) = 403,
+                "http: a token bound to another session is refused (403)");
       end;
 
       --  Add-project reject path: the handler decodes the urlencoded body via
