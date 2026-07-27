@@ -170,8 +170,8 @@ begin
    Audit ("webframework_forms",      Sibling => "Navigation");
 
    if Proc.Has_Argument ("--release") then
-      Build_And_Test ("webframework_navigation", Has_Tests => True,  Exe => "test_bridge");
-      Build_And_Test ("webframework_forms",      Has_Tests => True,  Exe => "test_bridge");
+      Build_And_Test ("webframework_navigation", Has_Tests => True,  Exe => "tests");
+      Build_And_Test ("webframework_forms",      Has_Tests => True,  Exe => "tests");
       Build_And_Test ("integration_demo",        Has_Tests => False, Exe => "demo");
    end if;
 

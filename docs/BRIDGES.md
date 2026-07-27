@@ -15,9 +15,19 @@ neither forms bridge nor navigation bridge may reach the *other* sibling, and no
 bridge may reach authorization, identity, persistence, i18n, an HTTP client, or
 sockets.
 
+## Test harness
+
+Each bridge is tested with **AUnit** (matching the sibling libraries, not the
+older host framework's plain drivers): `tests/` builds `./bin/tests`, with a
+functional+hardening fixture (`bridge_tests`) and a **deterministic fuzz** fixture
+(`fuzz_tests`, a reproducible LCG, 2000 iterations each). The navigation fuzz
+proves rendered HTML stays injection-safe and a redirect never lets a param value
+inject a header (response splitting); the forms fuzz proves body decoding and
+CSRF verification never raise and stay deterministic on arbitrary input.
+
 ## Invariants (BRIDGE-*)
 
-Each is covered by a case in the bridge test drivers (see mapping below).
+Each is covered by a case in the bridge test suites (see mapping below).
 
 | ID | Invariant | Owner |
 |----|-----------|-------|
@@ -29,6 +39,7 @@ Each is covered by a case in the bridge test drivers (see mapping below).
 | BRIDGE-06 | CSRF verification is constant-time and fail-closed: an absent, empty, malformed, oversized, or mismatched cookie/field returns False | webframework_forms |
 | BRIDGE-07 | Sensitive field values are never re-rendered (sticky returns "" for a redacted field) | webframework_forms |
 | BRIDGE-08 | No bridge reaches the other sibling or any auth/identity/persistence/transport crate | all (boundary audit) |
+| BRIDGE-09 | Rendering/decoding/CSRF are deterministic and total (never raise) on arbitrary input | fuzz suites |
 
 ## Acceptance evidence
 
@@ -42,6 +53,7 @@ Each is covered by a case in the bridge test drivers (see mapping below).
 | BRIDGE-06 | driver: matching/mismatched/absent/malformed-hex/empty/oversized/wrong-length cookie cases |
 | BRIDGE-07 | driver: `Sticky` returns the submitted value; sensitivity redaction covered in the forms library |
 | BRIDGE-08 | `check_bridges` dependency-boundary audit |
+| BRIDGE-09 | `fuzz_tests` — 2000× render/redirect (navigation) and decode/verify (forms), asserting injection-safety + no header split + determinism |
 
 ## Release gate
 
