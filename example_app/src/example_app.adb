@@ -14,6 +14,7 @@ with App.Guards;
 with App.Nav;
 with App.Projects;
 with App.Counter;
+with App.Csrf;
 with App.Database;
 with App.Runtime;
 with App.Pages;
@@ -312,6 +313,7 @@ procedure Example_App is
       Log_Info
         ("webframework: allowed_host=" & Effective_Allowed_Host (Settings)
          & " allowed_origin=" & Allowed_Origin (Settings));
+      Log_Info ("app: CSRF signing key = " & App.Csrf.Key_Source);
 
       if Settings.TLS_Enabled then
          if Length (Settings.Certificate) = 0 or else Length (Settings.Private_Key) = 0 then
