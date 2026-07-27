@@ -59,11 +59,10 @@ package Webframework_Forms is
    --  multipart, none) yields Body_Unsupported_Media -- so an unexpected body is
    --  refused, never mis-decoded as a form.
    --
-   --  Note: webframework's server currently rejects multipart/form-data request
-   --  bodies at parse time (Web.Errors.Bad_Request_Error), so a multipart body
-   --  never reaches a handler. `forms` has a multipart decoder ready; wiring it
-   --  is a webframework-core change (streaming multipart intake), not a bridge
-   --  one, so this bridge does not pretend to support it.
+   --  This procedure decodes only urlencoded bodies. A multipart/form-data body
+   --  reaches the handler intact (bounded by the server's max request size); the
+   --  handler parses it with Web.Multipart and feeds file parts to an upload
+   --  adapter, so multipart is handled there rather than through this decoder.
    procedure Read_Body
      (Request : Web.Request.Request_Type;
       Into    : in out Forms.Submission.Data;
