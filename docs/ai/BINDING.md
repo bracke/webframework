@@ -24,9 +24,8 @@ validation, auth, storage, or rendering. Full guide: `../BINDING.md`.
   (+ `.Memory`).
 - Integration: `Web.Binding.Auth`, `Web.Binding.Contexts`,
   `Web.Binding.Requests` (Classify + Dispatch), `Web.Binding.Diagnostics`
-  (+ `.Recording`) — redaction-safe event sink. (Forms/Validation integration
-  now lives in the `forms`/`validation` libraries + the `webframework_forms`
-  bridge; the former `Web.Binding.Forms`/`Validation` adapters were removed.)
+  (+ `.Recording`) — redaction-safe event sink. Forms/validation integration is
+  the `forms`/`validation` libraries via the `webframework_forms` bridge.
 
 ## Instantiation patterns
 
