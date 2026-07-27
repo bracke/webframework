@@ -16,11 +16,17 @@ With this bridge an application can:
   menu.
 - Build a reverse URL as a plain string with `Location_Of` for embedding in a
   response body.
+- **Render a menu or breadcrumb trail to HTML** — `Render_Menu` emits a nested
+  `<ul>` with the active item (and its trail) marked for styling; the active
+  item comes from `Active_For`. `Render_Breadcrumbs` emits `<nav><ol>…`. Every
+  label and URL is HTML-escaped (`Web.Html`), so navigation data can never
+  inject markup.
+- **Render only what a viewer may see** — instantiate the generic
+  `Webframework_Navigation.Filtered_Menu` with your viewer type and a `Can_See`
+  predicate (the seam an app wires `Authorization.Capabilities` into); hidden
+  items and their whole subtrees are omitted, fail-closed.
 
 Everything is fail-closed and nothing raises, consistent with both libraries.
-
-Later phases add menu/breadcrumb HTML render helpers and visibility filtering
-wired to the request context.
 
 ## Build & test
 

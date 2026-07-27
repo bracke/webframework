@@ -1,5 +1,6 @@
 with Ada.Text_IO;     use Ada.Text_IO;
 with Ada.Command_Line;
+with Ada.Strings.Fixed;
 
 with Web.Request;
 with Web.Response;
@@ -8,8 +9,11 @@ with Web.Server;
 with Navigation.Routes;
 with Navigation.Params;
 with Navigation.Menu;  use Navigation.Menu;
+with Navigation.Breadcrumbs;
+with Navigation.Visibility;
 
 with Webframework_Navigation;
+with Webframework_Navigation.Filtered_Menu;
 
 --  Verifies the navigation -> webframework bridge: type-safe reverse-URL
 --  redirects (fail-closed on a bad build) and active-item resolution straight
@@ -32,7 +36,18 @@ procedure Test_Bridge is
       end if;
    end Check;
 
+   function Contains (Haystack, Needle : String) return Boolean is
+     (Ada.Strings.Fixed.Index (Haystack, Needle) > 0);
+
    CRLF : constant String := (Character'Val (13), Character'Val (10));
+
+   --  A viewer + predicate for the filtered-menu test: "admin" needs Admin.
+   use Navigation.Visibility;
+   type Role is (Guest, Admin);
+   function Can_See (Key : String; V : Role) return Visibility is
+     (if Key = "admin" then (if V = Admin then Visible else Hidden)
+      else Visible);
+   package FM is new Webframework_Navigation.Filtered_Menu (Role, Can_See);
 
    Routes : R.Table (8, 256);
    Menu   : Navigation.Menu.Menu (8, 256);
@@ -100,6 +115,65 @@ begin
    begin
       Check (Web.Request.Path (Req) = "/docs/guides", "request path parsed");
       Check (Active = Docs, "Active_For resolves the section match from the path");
+   end;
+
+   --  Menu for rendering tests: Home, Docs (>Intro), and a gated Admin heading.
+   declare
+      RMenu : Navigation.Menu.Menu (16, 512);
+      Dv, Adm, Ig : Item_Ref;
+   begin
+      Add_Link (RMenu, No_Item, "Home", "/", Ig);
+      Add_Link (RMenu, No_Item, "Docs & More", "/docs", Dv);
+      Add_Link (RMenu, Dv, "Intro", "/docs/intro", Ig);
+      Add_Heading (RMenu, No_Item, "Admin", Adm, Visibility_Key => "admin");
+      Add_Link (RMenu, Adm, "Settings", "/admin/settings", Ig);
+      Navigation.Menu.Finalize (RMenu);
+
+      --  Render_Menu with active highlighting + escaping of "&".
+      declare
+         HTML : constant String :=
+           Webframework_Navigation.Render_Menu (RMenu, Routes, Dv);
+      begin
+         Check (Contains (HTML, "<a href=""/docs"">Docs &amp; More</a>"),
+                "Render_Menu links items and escapes labels");
+         Check (Contains (HTML, "<li class=""active""><a href=""/docs"""),
+                "Render_Menu marks the active item");
+         Check (Contains (HTML, "<span>Admin</span>"),
+                "Render_Menu renders a heading as a span");
+      end;
+
+      --  Breadcrumbs for /docs/intro.
+      declare
+         Crumbs : Navigation.Breadcrumbs.Trail (8, 512);
+      begin
+         Navigation.Breadcrumbs.Build_For_Path
+           (Crumbs, RMenu, Routes, "/docs/intro");
+         declare
+            HTML : constant String :=
+              Webframework_Navigation.Render_Breadcrumbs (Crumbs);
+         begin
+            Check (Contains (HTML, "<nav class=""breadcrumbs""><ol>"),
+                   "Render_Breadcrumbs wraps in nav/ol");
+            Check (Contains (HTML, "<a href=""/docs"">Docs &amp; More</a>")
+                   and then Contains (HTML, "<a href=""/docs/intro"">Intro</a>"),
+                   "Render_Breadcrumbs links each crumb");
+         end;
+      end;
+
+      --  Filtered_Menu: the Admin section is hidden from a Guest, shown to Admin.
+      declare
+         Guest_HTML : constant String := FM.Render (RMenu, Routes, Guest);
+         Admin_HTML : constant String := FM.Render (RMenu, Routes, Admin);
+      begin
+         Check (not Contains (Guest_HTML, "Settings")
+                and then not Contains (Guest_HTML, "<span>Admin</span>"),
+                "Filtered_Menu hides the gated section and its subtree from a guest");
+         Check (Contains (Admin_HTML, "<span>Admin</span>")
+                and then Contains (Admin_HTML, "/admin/settings"),
+                "Filtered_Menu shows the gated section to an admin");
+         Check (Contains (Guest_HTML, "Home") and then Contains (Guest_HTML, "Docs"),
+                "Filtered_Menu still shows public items to a guest");
+      end;
    end;
 
    New_Line;

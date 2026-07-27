@@ -4,6 +4,7 @@ with Web.Response;
 with Navigation.Routes;
 with Navigation.Params;
 with Navigation.Menu;
+with Navigation.Breadcrumbs;
 with Navigation.Limits;
 
 --  Bridge from the navigation library to the webframework HTTP handler seam.
@@ -63,5 +64,27 @@ package Webframework_Navigation is
       Request : Web.Request.Request_Type;
       Limits  : Navigation.Limits.Limits :=
         Navigation.Limits.Default_Limits) return Navigation.Menu.Item_Ref;
+
+   --  Render helpers. These are the presentation layer navigation deliberately
+   --  omits: they turn navigation data into an HTML fragment for a response
+   --  body. Every label and URL is HTML-escaped (Web.Html), so a menu label or
+   --  a built URL can never inject markup.
+
+   --  A breadcrumb trail as <nav class="Class"><ol>…</ol></nav>. A crumb with a
+   --  link becomes an <a href>; a heading crumb is plain text.
+   function Render_Breadcrumbs
+     (Trail : Navigation.Breadcrumbs.Trail;
+      Class : String := "breadcrumbs") return String;
+
+   --  A menu as a nested <ul>. Each linkable item is an <a href> to its resolved
+   --  URL; a heading is a <span>. The active item's <li> gets class "active" and
+   --  every ancestor on its trail gets class "active-trail" (so a stylesheet can
+   --  highlight the open section). Pass Active from Active_For.
+   function Render_Menu
+     (Menu   : Navigation.Menu.Menu;
+      Routes : Navigation.Routes.Table;
+      Active : Navigation.Menu.Item_Ref := Navigation.Menu.No_Item;
+      Limits : Navigation.Limits.Limits :=
+        Navigation.Limits.Default_Limits) return String;
 
 end Webframework_Navigation;
