@@ -90,8 +90,9 @@ alr build
                        # step-up gate denying a remembered session end to end
 ```
 
-Both are also driven by `../scripts/verify_full_stack.sh`, which builds and
-tests the whole stack against the sibling checkouts.
+Both are also driven by the `stack_check` tool (`../stack_check/bin/stack_check`),
+the canonical Ada gate that builds and tests the whole stack against the sibling
+checkouts.
 
 ## Where the pieces live
 

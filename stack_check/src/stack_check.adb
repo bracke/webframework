@@ -7,14 +7,17 @@ with GNAT.OS_Lib;
 with Project_Tools.Files;
 with Project_Tools.Processes;
 
---  Integration gate for the web-stack slice: build + test each component in
---  dependency order, so a change in an upstream library (representation, ...)
---  that breaks a downstream (forms, navigation, webframework, the bridges) is
---  caught by one command. The path-pin web has no other gate that spans repos.
+--  Integration gate for the whole web-stack slice: build + test each component
+--  in dependency order, so a change in an upstream library (representation, ...)
+--  that breaks a downstream (forms, navigation, webframework, the bridges, the
+--  example app) is caught by one command. The path-pin web has no other gate
+--  that spans repos. This is the single canonical full-stack verifier -- it
+--  supersedes the former scripts/verify_full_stack.sh (whose example_app and CLI
+--  checks are folded in below).
 --
---  Each library is verified via its own `alr test` action; webframework and the
---  bridge gate are run explicitly. Run from anywhere inside the webframework
---  checkout.
+--  Each library is verified via its own `alr test` action; webframework, the
+--  bridges, the example app, and the CLI checker are run explicitly. Run from
+--  anywhere inside the webframework checkout.
 procedure Stack_Check is
 
    package Files renames Project_Tools.Files;
@@ -97,12 +100,34 @@ begin
       end if;
    end if;
 
-   --  The bridge integration gate (surface + boundary + build/test all bridges).
+   --  The bridge integration gate (surface + boundary + build/test all bridges,
+   --  including the webframework_authorization bridge and the demo).
    Put_Line ("== bridges ==");
    if Run ("bridge_tools build", The_Root & "/bridge_tools", Alr, Build) then
       Ignored := Run ("bridges gate", The_Root & "/bridge_tools",
                       The_Root & "/bridge_tools/bin/check_bridges",
                       [new String'("--release")]);
+   end if;
+
+   --  The reference application + its integration tests (folded in from the
+   --  former scripts/verify_full_stack.sh).
+   Put_Line ("== example_app ==");
+   if Run ("example_app build", The_Root & "/example_app", Alr, Build) then
+      if Run ("example_app tests", The_Root & "/example_app",
+              The_Root & "/example_app/bin/app_tests", No_Args)
+      then
+         Ignored := Run ("example_app http tests", The_Root & "/example_app",
+                         The_Root & "/example_app/bin/app_http_tests", No_Args);
+      end if;
+   end if;
+
+   --  The framework CLI checker run against the example app.
+   Put_Line ("== webframework_cli ==");
+   if Run ("webframework_cli build", The_Root & "/webframework_cli", Alr, Build)
+   then
+      Ignored := Run ("cli check example_app", The_Root & "/webframework_cli",
+                      The_Root & "/webframework_cli/bin/webframework",
+                      [new String'("check"), new String'("../example_app")]);
    end if;
 
    New_Line;

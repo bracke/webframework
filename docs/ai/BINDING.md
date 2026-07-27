@@ -77,6 +77,6 @@ validation, auth, storage, or rendering. Full guide: `../BINDING.md`.
 ## Workflows
 
 - Build: `cd webframework && alr build`. Tests: `cd tests && alr build && ./bin/tests`.
-- Whole stack incl. example: `./scripts/verify_full_stack.sh`.
+- Whole stack incl. example: `cd stack_check && alr build && ./bin/stack_check`.
 - Error-ID registry: the `Error_Id` type in `web-binding-errors.ads`. Invariant
   registry + coverage map: `../BINDING.md`.
