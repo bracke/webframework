@@ -1,5 +1,5 @@
-with Ada.Text_IO;            use Ada.Text_IO;
-with Ada.Command_Line;
+with AUnit.Assertions; use AUnit.Assertions;
+with AUnit.Test_Caller;
 
 with Authorization.Identifiers;          use Authorization.Identifiers;
 with Authorization.Identifiers.Kinds;
@@ -20,10 +20,11 @@ with Web.Guard;
 with Web.Response;
 with Webframework_Authorization;
 
---  Verifies that the bridge maps authorization decisions to guard outcomes
---  fail-closed: an authorized decision proceeds, and any rejection halts with a
---  denial response (403 by default, or a caller-supplied override).
-procedure Test_Bridge is
+--  Verifies the authorization -> webframework guard bridge is fail-closed: an
+--  authorized decision proceeds; a denial halts (403 by default, or a caller
+--  override).
+package body Bridge_Tests is
+
    package K   renames Authorization.Identifiers.Kinds;
    package D   renames Authorization.Definitions;
    package Reg renames Authorization.Definitions.Registry;
@@ -41,19 +42,6 @@ procedure Test_Bridge is
 
    use type Web.Guard.Guard_Decision;
 
-   Failures : Natural := 0;
-
-   procedure Check (Cond : Boolean; Label : String) is
-   begin
-      if Cond then
-         Put_Line ("OK   " & Label);
-      else
-         Put_Line ("FAIL " & Label);
-         Failures := Failures + 1;
-      end if;
-   end Check;
-
-   --  Id helpers: raise on an invalid literal (a test bug, not input).
    generic
       type Id is private;
       with function Create (S : String; St : out Identifier_Status) return Id;
@@ -85,7 +73,6 @@ procedure Test_Bridge is
    Dept   : constant K.Attribute_Id := Att ("d.attribute.department");
    Reason : constant K.Reason_Id := Rsn ("d.reason.ok");
 
-   --  These structures are multi-megabyte; allocate them rather than stacking.
    type Reg_Ref is access Reg.Snapshot;
    type Set_Ref is access Po.Compiled_Set;
    type Req_Ref is access Req.Authorization_Request;
@@ -95,7 +82,16 @@ procedure Test_Bridge is
    type Pol_Builder_Ref is access Po.Builder;
    type Req_Builder_Ref is access Req.Request_Builder;
 
-   RS : constant Reg_Ref := new Reg.Snapshot;
+   function Fresh_Registry return Reg_Ref is
+      RS : constant Reg_Ref := new Reg.Snapshot;
+      RB : constant Reg_Builder_Ref := new Reg.Builder;
+      RO : Reg.Register_Outcome;
+   begin
+      Reg.Register_Attribute
+        (RB.all, D.Define_Attribute (Dept, V.Integer_Kind), RO);
+      Reg.Seal (RB.all, RS.all);
+      return RS;
+   end Fresh_Registry;
 
    --  A compiled policy set whose single rule has the given effect.
    function Build_Set (Effect : Ru.Effect) return Set_Ref is
@@ -136,57 +132,55 @@ procedure Test_Bridge is
       return RQ;
    end Build_Request;
 
-begin
-   declare
-      RB : constant Reg_Builder_Ref := new Reg.Builder;
-      RO : Reg.Register_Outcome;
+   function Decide (Effect : Ru.Effect) return Ev.Decision is
+      RS : constant Reg_Ref := Fresh_Registry;
+      S  : constant Set_Ref := Build_Set (Effect);
+      RQ : constant Req_Ref := Build_Request;
    begin
-      Reg.Register_Attribute
-        (RB.all, D.Define_Attribute (Dept, V.Integer_Kind), RO);
-      Reg.Seal (RB.all, RS.all);
-   end;
+      return Ev.Evaluate (S.all, RQ.all, RS.all);
+   end Decide;
 
-   --  1. An allow decision proceeds -- the request reaches the handler.
-   declare
-      Allow : constant Set_Ref := Build_Set (Ru.Allow_Effect);
-      RQ    : constant Req_Ref := Build_Request;
-      Dec   : constant Ev.Decision := Ev.Evaluate (Allow.all, RQ.all, RS.all);
-      Outcome : constant Web.Guard.Guard_Outcome := WA.Outcome_Of (Dec);
-   begin
-      Check (Outcome.Decision = Web.Guard.Proceed,
-             "an authorized decision proceeds");
-   end;
-
-   --  2. A deny decision halts, defaulting to 403 Forbidden.
-   declare
-      Deny : constant Set_Ref := Build_Set (Ru.Deny_Effect);
-      RQ   : constant Req_Ref := Build_Request;
-      Dec  : constant Ev.Decision := Ev.Evaluate (Deny.all, RQ.all, RS.all);
-      Outcome : constant Web.Guard.Guard_Outcome := WA.Outcome_Of (Dec);
-   begin
-      Check (Outcome.Decision = Web.Guard.Halt, "a denied decision halts");
-      if Outcome.Decision = Web.Guard.Halt then
-         Check (Web.Response.Status (Outcome.Response) = 403,
-                "a denial defaults to 403 Forbidden");
-      end if;
-   end;
-
-   --  3. On_Deny overrides the halt response (fail-closed, caller's choice).
-   declare
-      Deny : constant Set_Ref := Build_Set (Ru.Deny_Effect);
-      RQ   : constant Req_Ref := Build_Request;
-      Dec  : constant Ev.Decision := Ev.Evaluate (Deny.all, RQ.all, RS.all);
+   procedure Test_Authorized_Proceeds (T : in out Fixture) is
+      pragma Unreferenced (T);
       Outcome : constant Web.Guard.Guard_Outcome :=
-        WA.Outcome_Of (Dec, Web.Response.Unauthorized);
+        WA.Outcome_Of (Decide (Ru.Allow_Effect));
    begin
-      Check (Outcome.Decision = Web.Guard.Halt
-             and then Web.Response.Status (Outcome.Response) = 401,
-             "On_Deny overrides the halt response");
-   end;
+      Assert (Outcome.Decision = Web.Guard.Proceed,
+              "an authorized decision proceeds");
+   end Test_Authorized_Proceeds;
 
-   New_Line;
-   Put_Line ("Failures:" & Natural'Image (Failures));
-   if Failures > 0 then
-      Ada.Command_Line.Set_Exit_Status (1);
-   end if;
-end Test_Bridge;
+   procedure Test_Denied_Halts (T : in out Fixture) is
+      pragma Unreferenced (T);
+      Outcome : constant Web.Guard.Guard_Outcome :=
+        WA.Outcome_Of (Decide (Ru.Deny_Effect));
+   begin
+      Assert (Outcome.Decision = Web.Guard.Halt, "a denied decision halts");
+      if Outcome.Decision = Web.Guard.Halt then
+         Assert (Web.Response.Status (Outcome.Response) = 403,
+                 "a denial defaults to 403 Forbidden");
+      end if;
+   end Test_Denied_Halts;
+
+   procedure Test_On_Deny_Override (T : in out Fixture) is
+      pragma Unreferenced (T);
+      Outcome : constant Web.Guard.Guard_Outcome :=
+        WA.Outcome_Of (Decide (Ru.Deny_Effect), Web.Response.Unauthorized);
+   begin
+      Assert (Outcome.Decision = Web.Guard.Halt
+              and then Web.Response.Status (Outcome.Response) = 401,
+              "On_Deny overrides the halt response (fail-closed, caller's choice)");
+   end Test_On_Deny_Override;
+
+   package Caller is new AUnit.Test_Caller (Fixture);
+
+   procedure Add_Tests (Suite : AUnit.Test_Suites.Access_Test_Suite) is
+   begin
+      Suite.Add_Test
+        (Caller.Create ("Authz: authorized proceeds", Test_Authorized_Proceeds'Access));
+      Suite.Add_Test
+        (Caller.Create ("Authz: denied halts (403)", Test_Denied_Halts'Access));
+      Suite.Add_Test
+        (Caller.Create ("Authz: On_Deny override", Test_On_Deny_Override'Access));
+   end Add_Tests;
+
+end Bridge_Tests;

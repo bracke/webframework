@@ -72,6 +72,34 @@ package Webframework_Forms is
       Name    : String := Default_Cookie) return Boolean;
 
    ----------------------------------------------------------------------
+   --  Session-bound CSRF (signed synchronizer token). Stronger than the
+   --  double-submit cookie above: the token is HMAC-SHA256 (Key, Session_Id),
+   --  so an attacker who can plant a cookie still cannot forge a valid token
+   --  without the server signing Key. No CSRF cookie is needed -- verification
+   --  recomputes the expected token from the session, which the server derives
+   --  from its own (authenticated) session, not from client-controlled input.
+   --
+   --  Key is a STABLE server secret (deployment config -- a keyring value that
+   --  survives restarts and is shared across instances), NOT per-request
+   --  randomness. Bind Session_Id to the user's session (e.g.
+   --  Web.Context.Session).
+   ----------------------------------------------------------------------
+
+   --  The CSRF token bound to Session_Id under the signing Key. Put its
+   --  Token_Hex in the hidden field when rendering the form.
+   function Session_Token
+     (Key : Byte_Array; Session_Id : String) return Forms.CSRF.Token;
+
+   --  Verify the submission's CSRF field against the token derived from
+   --  Session_Id and Key. Constant-time; fail-closed on any mismatch (wrong
+   --  session, wrong key, tampered field). No cookie is consulted.
+   function Verify_Session_Csrf
+     (Sub        : Forms.Submission.Data;
+      Key        : Byte_Array;
+      Session_Id : String;
+      Field      : Byte_Array := Forms.CSRF.Default_Field) return Boolean;
+
+   ----------------------------------------------------------------------
    --  Diagnostics and sticky re-render. After Forms.Binding.Bind (and any
    --  Forms.Rules.Merge of validation results) populates a shared
    --  Diagnostic_Set, these turn it into a response or feed a re-render.

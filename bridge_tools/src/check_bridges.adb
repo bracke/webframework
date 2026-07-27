@@ -66,8 +66,10 @@ procedure Check_Bridges is
    end Check_Surface;
 
    --  Dependency-boundary audit: scan a bridge's src for forbidden with-clauses.
-   --  Sibling is the OTHER sibling this bridge must not reach.
-   procedure Audit (Bridge : String; Sibling : String) is
+   --  Domain_1/Domain_2 are the sibling domains this bridge must not reach (a
+   --  bridge may touch webframework + its own domain only); the rest is a common
+   --  cross-domain deny-list.
+   procedure Audit (Bridge : String; Domain_1, Domain_2 : String) is
       Src    : constant String := The_Root & "/" & Bridge & "/src";
       Search : Ada.Directories.Search_Type;
       Item   : Ada.Directories.Directory_Entry_Type;
@@ -81,8 +83,8 @@ procedure Check_Bridges is
             end if;
          end Forbid;
       begin
-         Forbid (Sibling);           --  no cross-sibling coupling
-         Forbid ("Authorization");
+         Forbid (Domain_1);          --  no cross-domain coupling
+         Forbid (Domain_2);
          Forbid ("Identity");
          Forbid ("Database");
          Forbid ("Tables");
@@ -162,17 +164,21 @@ procedure Check_Bridges is
 begin
    Check_Surface ("webframework_navigation");
    Check_Surface ("webframework_forms");
+   Check_Surface ("webframework_authorization");
    Need_Directory ("integration_demo");
    Need_File ("integration_demo/src/demo.adb");
    Need_File ("docs/BRIDGES.md");
 
-   Audit ("webframework_navigation", Sibling => "Forms");
-   Audit ("webframework_forms",      Sibling => "Navigation");
+   --  Each bridge may touch webframework + its own domain only.
+   Audit ("webframework_navigation",    "Forms",      "Authorization");
+   Audit ("webframework_forms",          "Navigation", "Authorization");
+   Audit ("webframework_authorization",  "Navigation", "Forms");
 
    if Proc.Has_Argument ("--release") then
-      Build_And_Test ("webframework_navigation", Has_Tests => True,  Exe => "tests");
-      Build_And_Test ("webframework_forms",      Has_Tests => True,  Exe => "tests");
-      Build_And_Test ("integration_demo",        Has_Tests => False, Exe => "demo");
+      Build_And_Test ("webframework_navigation",    Has_Tests => True,  Exe => "tests");
+      Build_And_Test ("webframework_forms",         Has_Tests => True,  Exe => "tests");
+      Build_And_Test ("webframework_authorization", Has_Tests => True,  Exe => "tests");
+      Build_And_Test ("integration_demo",           Has_Tests => False, Exe => "demo");
    end if;
 
    if Errors = 0 then

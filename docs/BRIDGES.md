@@ -7,13 +7,13 @@ core depends on none of the sibling crates.
 | Bridge | Wires in | May depend on |
 |--------|----------|---------------|
 | `webframework_navigation` | `navigation` | webframework + navigation only |
-| `webframework_forms` | `forms` | webframework + forms (+ representation) only |
-| `integration_demo` | both bridges | webframework + both bridges + navigation + forms |
+| `webframework_forms` | `forms` | webframework + forms (+ representation, cryptolib) only |
+| `webframework_authorization` | `authorization` | webframework + authorization only |
+| `integration_demo` | the bridges | webframework + the bridges + their siblings |
 
 The **dependency boundary** is machine-checked by `bridge_tools/check_bridges`:
-neither forms bridge nor navigation bridge may reach the *other* sibling, and no
-bridge may reach authorization, identity, persistence, i18n, an HTTP client, or
-sockets.
+each bridge may touch webframework + its own domain only — never another
+bridge's domain, nor identity, persistence, i18n, an HTTP client, or sockets.
 
 ## Test harness
 
@@ -37,9 +37,11 @@ Each is covered by a case in the bridge test suites (see mapping below).
 | BRIDGE-04 | Active-state is resolved only from the request path; rendering never raises, even on an empty menu or hostile input | webframework_navigation |
 | BRIDGE-05 | A malformed/oversized request body decodes to a value status, never a crash | webframework_forms |
 | BRIDGE-06 | CSRF verification is constant-time and fail-closed: an absent, empty, malformed, oversized, or mismatched cookie/field returns False | webframework_forms |
+| BRIDGE-06b | Session-bound CSRF (HMAC synchronizer token) rejects a valid token replayed under a different session or a different signing key | webframework_forms |
 | BRIDGE-07 | Sensitive field values are never re-rendered (sticky returns "" for a redacted field) | webframework_forms |
 | BRIDGE-08 | No bridge reaches the other sibling or any auth/identity/persistence/transport crate | all (boundary audit) |
 | BRIDGE-09 | Rendering/decoding/CSRF are deterministic and total (never raise) on arbitrary input | fuzz suites |
+| BRIDGE-10 | The authorization guard bridge is fail-closed: only an authorized decision proceeds; a denial (or override) halts | webframework_authorization |
 
 ## Acceptance evidence
 
@@ -53,7 +55,9 @@ Each is covered by a case in the bridge test suites (see mapping below).
 | BRIDGE-06 | driver: matching/mismatched/absent/malformed-hex/empty/oversized/wrong-length cookie cases |
 | BRIDGE-07 | driver: `Sticky` returns the submitted value; sensitivity redaction covered in the forms library |
 | BRIDGE-08 | `check_bridges` dependency-boundary audit |
+| BRIDGE-06b | `webframework_forms` driver: `Test_Session_Csrf` — right session verifies; wrong session, wrong key, and tampered field all fail |
 | BRIDGE-09 | `fuzz_tests` — 2000× render/redirect (navigation) and decode/verify (forms), asserting injection-safety + no header split + determinism |
+| BRIDGE-10 | `webframework_authorization` driver: authorized→proceed, denied→halt 403, On_Deny→override |
 
 ## Release gate
 

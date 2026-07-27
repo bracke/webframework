@@ -41,21 +41,37 @@ procedure Demo is
    end Post;
 
    --  Pull the csrf_token value out of a Set-Cookie header.
-   function Cookie_Token (Set_Cookie : String) return String is
-      Key : constant String := "csrf_token=";
-      P   : constant Natural := Index (Set_Cookie, Key);
+   --  Value of the named cookie in a Set-Cookie header ("" if absent).
+   function Cookie_Value (Header : String; Name : String) return String is
+      Key : constant String := Name & "=";
+      P   : constant Natural := Index (Header, Key);
    begin
       if P = 0 then
          return "";
       end if;
       declare
          S : constant Positive := P + Key'Length;
-         E : constant Natural := Index (Set_Cookie (S .. Set_Cookie'Last), ";");
+         E : constant Natural := Index (Header (S .. Header'Last), ";");
       begin
-         return (if E = 0 then Set_Cookie (S .. Set_Cookie'Last)
-                 else Set_Cookie (S .. E - 1));
+         return (if E = 0 then Header (S .. Header'Last) else Header (S .. E - 1));
       end;
-   end Cookie_Token;
+   end Cookie_Value;
+
+   --  Value of a hidden input in the rendered form ("" if absent).
+   function Hidden_Field (Body_S : String; Field : String) return String is
+      Key : constant String := "name=""" & Field & """ value=""";
+      P   : constant Natural := Index (Body_S, Key);
+   begin
+      if P = 0 then
+         return "";
+      end if;
+      declare
+         S : constant Positive := P + Key'Length;
+         E : constant Natural := Index (Body_S (S .. Body_S'Last), """");
+      begin
+         return (if E = 0 then "" else Body_S (S .. E - 1));
+      end;
+   end Hidden_Field;
 
    procedure Show (Label : String; Cond : Boolean) is
    begin
@@ -65,32 +81,32 @@ procedure Demo is
 begin
    Site.Setup;
 
-   --  1. GET /contact -- render chrome + form, issue a CSRF cookie.
+   --  1. GET /contact -- render chrome + form, establish a session + a
+   --  session-bound CSRF token.
    Put_Line ("GET /contact");
    declare
       Resp : constant Web.Response.Response_Type :=
         Site.Contact_Get (Get ("/contact"));
       Body_S : constant String := Web.Response.Content_Body (Resp);
       Cookie : constant String := Web.Response.Header (Resp, "Set-Cookie");
-      Token  : constant String := Cookie_Token (Cookie);
+      Sid    : constant String := Cookie_Value (Cookie, "sid");
+      Csrf   : constant String := Hidden_Field (Body_S, Csrf_Field);
    begin
       Show ("200 OK", Web.Response.Status (Resp) = 200);
       Show ("menu marks the active Contact item",
             Index (Body_S, "<li class=""active""><a href=""/contact"">") > 0);
       Show ("breadcrumbs rendered", Index (Body_S, "breadcrumbs") > 0);
-      Show ("Set-Cookie issues a CSRF token", Token'Length > 0);
-      Show ("form carries the matching hidden CSRF field",
-            Index (Body_S, "name=""" & Csrf_Field & """ value=""" & Token) > 0);
+      Show ("Set-Cookie establishes a session", Sid'Length > 0);
+      Show ("form carries a session-bound CSRF token", Csrf'Length > 0);
 
-      --  2. Valid POST -- correct cookie + echoed token + valid fields.
+      --  2. Valid POST -- session cookie + its CSRF token + valid fields.
       New_Line;
-      Put_Line ("POST /contact (valid, with CSRF)");
+      Put_Line ("POST /contact (valid, session-bound CSRF)");
       declare
          Body_S : constant String :=
-           "name=Ada+Lovelace&email=ada%40example.com&"
-           & Csrf_Field & "=" & Token;
+           "name=Ada+Lovelace&email=ada%40example.com&" & Csrf_Field & "=" & Csrf;
          Resp : constant Web.Response.Response_Type :=
-           Site.Contact_Post (Post (Body_S, Cookie => "csrf_token=" & Token));
+           Site.Contact_Post (Post (Body_S, Cookie => "sid=" & Sid));
       begin
          Show ("303 redirect", Web.Response.Status (Resp) = 303);
          Show ("Location is the reverse URL for 'thanks'",
@@ -102,9 +118,9 @@ begin
       Put_Line ("POST /contact (invalid: missing email)");
       declare
          Body_S : constant String :=
-           "name=Ada+Lovelace&" & Csrf_Field & "=" & Token;
+           "name=Ada+Lovelace&" & Csrf_Field & "=" & Csrf;
          Resp : constant Web.Response.Response_Type :=
-           Site.Contact_Post (Post (Body_S, Cookie => "csrf_token=" & Token));
+           Site.Contact_Post (Post (Body_S, Cookie => "sid=" & Sid));
          Page : constant String := Web.Response.Content_Body (Resp);
       begin
          Show ("400 with a re-rendered form", Web.Response.Status (Resp) = 400);
@@ -112,14 +128,28 @@ begin
          Show ("a diagnostic is shown", Index (Page, "errors") > 0);
       end;
 
-      --  4. POST without the CSRF cookie -- refused.
+      --  4. Forged POST -- the CSRF token but a DIFFERENT session -- refused
+      --  (this is what session binding buys over pure double-submit).
       New_Line;
-      Put_Line ("POST /contact (no CSRF cookie)");
+      Put_Line ("POST /contact (CSRF token, wrong session)");
       declare
          Body_S : constant String :=
-           "name=Ada&email=ada%40example.com&" & Csrf_Field & "=" & Token;
+           "name=Ada&email=ada%40example.com&" & Csrf_Field & "=" & Csrf;
          Resp : constant Web.Response.Response_Type :=
-           Site.Contact_Post (Post (Body_S));   --  no cookie
+           Site.Contact_Post (Post (Body_S, Cookie => "sid=attacker-session"));
+      begin
+         Show ("403 Forbidden (token not valid for this session)",
+               Web.Response.Status (Resp) = 403);
+      end;
+
+      --  5. POST without a session cookie -- refused.
+      New_Line;
+      Put_Line ("POST /contact (no session cookie)");
+      declare
+         Body_S : constant String :=
+           "name=Ada&email=ada%40example.com&" & Csrf_Field & "=" & Csrf;
+         Resp : constant Web.Response.Response_Type :=
+           Site.Contact_Post (Post (Body_S));   --  no session cookie
       begin
          Show ("403 Forbidden", Web.Response.Status (Resp) = 403);
       end;

@@ -7,6 +7,7 @@ package Bridge_Tests is
 
    procedure Test_Decode (T : in out Fixture);
    procedure Test_Csrf_Roundtrip (T : in out Fixture);
+   procedure Test_Session_Csrf (T : in out Fixture);
    procedure Test_Bind_Diagnostics (T : in out Fixture);
    procedure Test_Sticky (T : in out Fixture);
    procedure Test_Hardening (T : in out Fixture);

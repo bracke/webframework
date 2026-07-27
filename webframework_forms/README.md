@@ -11,11 +11,15 @@ With this bridge a handler can:
   Status)` turns an `application/x-www-form-urlencoded` body into a
   `Forms.Submission.Data` ready for `Forms.Binding.Bind`. String request data is
   converted to `Representation.Byte_Array` (forms' currency) at the boundary.
-- **Enforce CSRF with a double-submit cookie** — `New_Token` mints a token from
-  the stack CSPRNG; `Set_Cookie` returns a `Set-Cookie` value (HttpOnly,
-  SameSite=Strict) and `Token_Hex` the hidden-field value; `Verify_Csrf
-  (Request, Sub)` checks the submitted field against the request's cookie,
-  constant-time and fail-closed.
+- **Enforce CSRF.** Two mechanisms:
+  - *Session-bound (preferred)* — `Session_Token (Key, Session_Id)` is an
+    HMAC-SHA256 synchronizer token; `Verify_Session_Csrf (Sub, Key, Session_Id)`
+    recomputes and constant-time compares it. Because the token is signed and
+    bound to the session, a valid token replayed under another session (or a
+    planted cookie) is rejected. `Key` is a stable server secret.
+  - *Stateless double-submit* — `New_Token` / `Set_Cookie` (HttpOnly,
+    SameSite=Strict) / `Verify_Csrf (Request, Sub)`, for session-less endpoints.
+  Both are constant-time and fail-closed.
 
 - **Turn diagnostics into a response** — after `Forms.Binding.Bind` (and any
   `Forms.Rules.Merge` of validation results) fills a `Diagnostic_Set`,

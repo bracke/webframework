@@ -1,12 +1,45 @@
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Streams;            use Ada.Streams;
 
 with Web.Cookie;
 
 with Forms.Binding;
 
+with CryptoLib.Hashes;
+with CryptoLib.Macs;
+
 package body Webframework_Forms is
 
    package RD renames Representation.Diagnostics;
+
+   --  Byte_Array / String -> Stream_Element_Array (cryptolib's currency).
+   function SE (B : Byte_Array) return Stream_Element_Array is
+      R : Stream_Element_Array (1 .. Stream_Element_Offset (B'Length));
+   begin
+      for I in B'Range loop
+         R (Stream_Element_Offset (1 + (I - B'First))) := Stream_Element (B (I));
+      end loop;
+      return R;
+   end SE;
+
+   function SE (S : String) return Stream_Element_Array is
+      R : Stream_Element_Array (1 .. Stream_Element_Offset (S'Length));
+   begin
+      for I in S'Range loop
+         R (Stream_Element_Offset (1 + (I - S'First))) :=
+           Stream_Element (Character'Pos (S (I)));
+      end loop;
+      return R;
+   end SE;
+
+   function Digest_Bytes (D : CryptoLib.Hashes.SHA256_Digest) return Byte_Array is
+      R : Byte_Array (1 .. D'Length);
+   begin
+      for I in D'Range loop
+         R (1 + (I - D'First)) := Representation.Byte (D (I));
+      end loop;
+      return R;
+   end Digest_Bytes;
 
    function To_Bytes (S : String) return Byte_Array is
       R : Byte_Array (1 .. S'Length);
@@ -83,6 +116,24 @@ package body Webframework_Forms is
          return Forms.CSRF.Verify_Submission (Sub, Field, Expected);
       end;
    end Verify_Csrf;
+
+   function Session_Token
+     (Key : Byte_Array; Session_Id : String) return Forms.CSRF.Token
+   is
+      D : constant CryptoLib.Hashes.SHA256_Digest :=
+        CryptoLib.Macs.HMAC_SHA256
+          (Key_Data => SE (Key), Message_Data => SE (Session_Id));
+   begin
+      return Forms.CSRF.Make (Digest_Bytes (D));
+   end Session_Token;
+
+   function Verify_Session_Csrf
+     (Sub        : Forms.Submission.Data;
+      Key        : Byte_Array;
+      Session_Id : String;
+      Field      : Byte_Array := Forms.CSRF.Default_Field) return Boolean is
+     (Forms.CSRF.Verify_Submission
+        (Sub, Field, Session_Token (Key, Session_Id)));
 
    function Diagnostics_Text
      (Report : Representation.Diagnostics.Diagnostic_Set) return String

@@ -1,4 +1,5 @@
 with Web.Html;
+with Web.Cookie;
 
 with Navigation.Routes;
 with Navigation.Menu;
@@ -32,8 +33,29 @@ package body Site is
    Menu   : NM.Menu (16, 512);
    Form   : Forms.Form.Definition (8);
 
-   --  The CSRF hidden-field name forms expects (so the double-submit matches).
+   --  The CSRF hidden-field name forms expects.
    Csrf_Field : constant String := WF.To_String (Forms.CSRF.Default_Field);
+
+   --  Server CSRF signing key. In a real app this is a stable deployment secret
+   --  loaded from a keyring/config -- NOT a literal, and NOT per-request random.
+   Signing_Key : constant WF.Byte_Array :=
+     WF.To_Bytes ("demo-server-csrf-signing-key-change-me");
+
+   Session_Cookie : constant String := "sid";
+
+   --  The session id carried by the request's session cookie ("" if none). A
+   --  real app derives this from its authenticated session, not from arbitrary
+   --  client input; here the GET establishes it.
+   function Session_Of (Request : Web.Request.Request_Type) return String is
+      Jar : constant Web.Cookie.Cookie_Jar :=
+        Web.Cookie.Parse (Web.Request.Header (Request, "Cookie"));
+   begin
+      if Web.Cookie.Has (Jar, Session_Cookie) then
+         return Web.Cookie.Value (Jar, Session_Cookie);
+      else
+         return "";
+      end if;
+   end Session_Of;
 
    procedure Setup is
       Added  : Boolean;
@@ -101,26 +123,49 @@ package body Site is
         & "</form>";
    end Contact_Form;
 
+   --  Render the page for a given session, embedding a session-bound CSRF token.
+   function Render_Page
+     (Request : Web.Request.Request_Type;
+      Sid     : String;
+      Name_V  : String := "";
+      Email_V : String := "";
+      Errors  : String := "";
+      Status  : Positive := 200) return Web.Response.Response_Type
+   is
+      Csrf_Hex : constant String :=
+        WF.Token_Hex (WF.Session_Token (Signing_Key, Sid));
+      Body_S : constant String :=
+        Page (Request, Contact_Form (Csrf_Hex, Name_V, Email_V, Errors));
+      Resp : Web.Response.Response_Type :=
+        Web.Response.Create (Status, Body_S, "text/html; charset=utf-8");
+   begin
+      --  Establish / refresh the session cookie (HttpOnly).
+      Web.Response.Set_Header
+        (Resp, "Set-Cookie",
+         Web.Cookie.Set_Cookie
+           (Name => Session_Cookie, Value => Sid, Path => "/",
+            Http_Only => True, Secure => False,
+            Same_Site => Web.Cookie.Strict));
+      return Resp;
+   end Render_Page;
+
    function Contact_Get
      (Request : Web.Request.Request_Type) return Web.Response.Response_Type
    is
-      Tok : Forms.CSRF.Token;
-      Ok  : Boolean;
+      Existing : constant String := Session_Of (Request);
+      Sid_Tok  : Forms.CSRF.Token;
+      Ok       : Boolean;
    begin
-      WF.New_Token (Tok, Ok);
+      --  Reuse the request's session, or start one (a random id from the stack
+      --  CSPRNG). The CSRF token is bound to it via Session_Token.
+      if Existing /= "" then
+         return Render_Page (Request, Existing);
+      end if;
+      WF.New_Token (Sid_Tok, Ok);
       if not Ok then
          return Web.Response.Internal_Server_Error;
       end if;
-      declare
-         Body_S : constant String :=
-           Page (Request, Contact_Form (WF.Token_Hex (Tok)));
-         Resp : Web.Response.Response_Type :=
-           Web.Response.Create (200, Body_S, "text/html; charset=utf-8");
-      begin
-         Web.Response.Set_Header
-           (Resp, "Set-Cookie", WF.Set_Cookie (Tok, Secure => False));
-         return Resp;
-      end;
+      return Render_Page (Request, WF.Token_Hex (Sid_Tok));
    end Contact_Get;
 
    function Contact_Post
@@ -130,14 +175,17 @@ package body Site is
       St     : Forms.Urlencoded.Decode_Status;
       Report : Representation.Diagnostics.Diagnostic_Set;
       Ok     : Boolean;
+      Sid    : constant String := Session_Of (Request);
    begin
       WF.Read_Urlencoded (Request, Sub, St);
       if St /= Forms.Urlencoded.Decode_Ok then
          return Web.Response.Bad_Request;
       end if;
 
-      --  CSRF must match before we trust anything in the body.
-      if not WF.Verify_Csrf (Request, Sub) then
+      --  Session-bound CSRF must match before we trust anything in the body: the
+      --  token is verified against this session under the server key, so a
+      --  planted cookie alone cannot forge it.
+      if Sid = "" or else not WF.Verify_Session_Csrf (Sub, Signing_Key, Sid) then
          return Web.Response.Forbidden;
       end if;
 
@@ -148,28 +196,13 @@ package body Site is
          return WN.Redirect_To (Routes, "thanks");
       end if;
 
-      --  Re-render sticky, with a fresh CSRF token and the diagnostics.
-      declare
-         Tok : Forms.CSRF.Token;
-         Gen : Boolean;
-      begin
-         WF.New_Token (Tok, Gen);
-         declare
-            Body_S : constant String :=
-              Page (Request,
-                    Contact_Form
-                      (Csrf_Hex => WF.Token_Hex (Tok),
-                       Name_V   => WF.Sticky (Form, Sub, WF.To_Bytes ("name")),
-                       Email_V  => WF.Sticky (Form, Sub, WF.To_Bytes ("email")),
-                       Errors   => WF.Diagnostics_Text (Report)));
-            Resp : Web.Response.Response_Type :=
-              Web.Response.Create (400, Body_S, "text/html; charset=utf-8");
-         begin
-            Web.Response.Set_Header
-              (Resp, "Set-Cookie", WF.Set_Cookie (Tok, Secure => False));
-            return Resp;
-         end;
-      end;
+      --  Re-render sticky (same session, so the CSRF token stays valid).
+      return Render_Page
+        (Request, Sid,
+         Name_V  => WF.Sticky (Form, Sub, WF.To_Bytes ("name")),
+         Email_V => WF.Sticky (Form, Sub, WF.To_Bytes ("email")),
+         Errors  => WF.Diagnostics_Text (Report),
+         Status  => 400);
    end Contact_Post;
 
 end Site;

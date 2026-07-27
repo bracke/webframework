@@ -86,6 +86,32 @@ package body Bridge_Tests is
       end;
    end Test_Csrf_Roundtrip;
 
+   procedure Test_Session_Csrf (T : in out Fixture) is
+      pragma Unreferenced (T);
+      Key   : constant WF.Byte_Array := WF.To_Bytes ("server-signing-key-v1");
+      Key2  : constant WF.Byte_Array := WF.To_Bytes ("different-key");
+      Sess  : constant String := "session-abc-123";
+      Hex   : constant String := WF.Token_Hex (WF.Session_Token (Key, Sess));
+      Sub   : Forms.Submission.Data (4, 512);
+      Bad   : Forms.Submission.Data (4, 512);
+      Added : Boolean;
+   begin
+      Forms.Submission.Add (Sub, Forms.CSRF.Default_Field, WF.To_Bytes (Hex), Added);
+      Assert (WF.Verify_Session_Csrf (Sub, Key, Sess),
+              "token verifies for the right session + key");
+      Assert (not WF.Verify_Session_Csrf (Sub, Key, "session-other"),
+              "a different session fails (token is session-bound)");
+      Assert (not WF.Verify_Session_Csrf (Sub, Key2, Sess),
+              "a different signing key fails (token is signed)");
+
+      --  A tampered field fails.
+      Forms.Submission.Add
+        (Bad, Forms.CSRF.Default_Field,
+         WF.To_Bytes (Hex (Hex'First .. Hex'Last - 1) & "0"), Added);
+      Assert (not WF.Verify_Session_Csrf (Bad, Key, Sess),
+              "a tampered token field fails");
+   end Test_Session_Csrf;
+
    procedure Test_Bind_Diagnostics (T : in out Fixture) is
       pragma Unreferenced (T);
       Def   : Forms.Form.Definition (4);
@@ -175,6 +201,8 @@ package body Bridge_Tests is
       Suite.Add_Test (Caller.Create ("Bridge: decode", Test_Decode'Access));
       Suite.Add_Test
         (Caller.Create ("Bridge: CSRF round-trip", Test_Csrf_Roundtrip'Access));
+      Suite.Add_Test
+        (Caller.Create ("Bridge: session-bound CSRF", Test_Session_Csrf'Access));
       Suite.Add_Test
         (Caller.Create ("Bridge: bind diagnostics", Test_Bind_Diagnostics'Access));
       Suite.Add_Test (Caller.Create ("Bridge: sticky", Test_Sticky'Access));
