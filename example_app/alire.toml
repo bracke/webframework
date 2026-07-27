@@ -9,7 +9,7 @@ licenses = "MIT"
 website = "https://github.com/bracke/webframework"
 tags = ["webframework", "example", "server-driven"]
 
-executables = ["example_app", "app_tests", "app_http_tests"]
+executables = ["example_app", "app_tests", "app_http_tests", "app_attachments_tests"]
 
 [[depends-on]]
 gnat_native = "=15.2.1"
@@ -97,6 +97,32 @@ webframework_navigation = "*"
 
 [[pins]]
 webframework_navigation = { path = "../webframework_navigation" }
+
+# Attachments feature: the webfiles/webuploads subsystem + its adapters.
+[[depends-on]]
+webfiles = "*"
+[[pins]]
+webfiles = { path = "../../webfiles" }
+[[depends-on]]
+webuploads = "*"
+[[pins]]
+webuploads = { path = "../../webuploads" }
+[[depends-on]]
+webfiles_storage_local = "*"
+[[pins]]
+webfiles_storage_local = { path = "../../webfiles_storage_local" }
+[[depends-on]]
+webfiles_repository_memory = "*"
+[[pins]]
+webfiles_repository_memory = { path = "../../webfiles_repository_memory" }
+[[depends-on]]
+webfiles_webframework_adapter = "*"
+[[pins]]
+webfiles_webframework_adapter = { path = "../../webfiles_webframework_adapter" }
+[[depends-on]]
+webfiles_runtime = "*"
+[[pins]]
+webfiles_runtime = { path = "../../webfiles_runtime" }
 
 # Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib,
 # zlib, hostkit and representation through webframework, database, and forms, so

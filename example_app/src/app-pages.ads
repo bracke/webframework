@@ -98,4 +98,25 @@ package App.Pages is
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type;
 
+   --  Attachments page: the upload form and the list of stored files. Guarded.
+   function Attachments
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
+   --  Multipart upload handler: CSRF-checked, ingests + commits the file, then
+   --  redirects back to the attachments page. Guarded.
+   function Upload_Attachment
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
+   --  Stream a stored attachment (query parameter doc=N). Guarded.
+   function Download_Attachment
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
+   --  Delete an attachment (urlencoded doc=N), CSRF-checked, then redirect.
+   function Delete_Attachment
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
 end App.Pages;

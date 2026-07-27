@@ -4,7 +4,9 @@ with Ada.Strings.Fixed;
 with App.Auth;
 with App.Authz;
 with App.Projects;
+with App.Attachments;
 with App.Project_Binding;
+with Web.Multipart;
 with App.Project_Validation;
 with App.Login_Validation;
 with Validation.Results;
@@ -18,6 +20,7 @@ with Templates.Values;
 with Web.Html;
 with Web.Server;
 with Web.Logging;
+with Webfiles;
 with Webframework_Forms;
 with Forms.Submission;
 with Forms.Urlencoded;
@@ -674,5 +677,233 @@ package body App.Pages is
            (Log_Tag (Request) & "delete project API failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Api_Delete_Project;
+
+   ---------------------------------------------------------------------------
+   --  Attachments (file upload / list / download / delete)
+   ---------------------------------------------------------------------------
+
+   function Trim (S : String) return String is
+     (Ada.Strings.Fixed.Trim (S, Ada.Strings.Both));
+
+   --  Value of Name in an "a=b&c=d" string (query or urlencoded body); "" if
+   --  absent. The values here are integers, so no percent-decoding is needed.
+   function Param_Value (Source : String; Name : String) return String is
+      Key    : constant String := Name & "=";
+      Cursor : Natural := Source'First;
+   begin
+      while Cursor <= Source'Last loop
+         declare
+            Amp  : constant Natural :=
+              Ada.Strings.Fixed.Index (Source (Cursor .. Source'Last), "&");
+            Stop : constant Natural := (if Amp = 0 then Source'Last else Amp - 1);
+            Pair : String renames Source (Cursor .. Stop);
+         begin
+            if Pair'Length >= Key'Length
+              and then Pair (Pair'First .. Pair'First + Key'Length - 1) = Key
+            then
+               return Pair (Pair'First + Key'Length .. Pair'Last);
+            end if;
+            exit when Amp = 0;
+            Cursor := Amp + 1;
+         end;
+      end loop;
+      return "";
+   end Param_Value;
+
+   --  The attachments page body: the multipart upload form and the file table.
+   function Attachments_Content (Session_Id : String) return String is
+      Items : App.Attachments.Entry_Array (1 .. App.Attachments.Max_Attachments);
+      Count : Natural;
+      Token : constant String := App.Csrf.Token (Session_Id);
+      Body_Html : Unbounded_String;
+      procedure P (S : String) is
+      begin
+         Append (Body_Html, S);
+      end P;
+   begin
+      App.Attachments.List (Items, Count);
+      P ("<div class=""panel""><h1>Attachments</h1>");
+      P ("<p>Upload a file &mdash; it is staged, integrity-hashed, committed to "
+         & "durable storage, and served back on demand.</p>");
+      P ("<form method=""post"" action=""/attachments/upload"" "
+         & "enctype=""multipart/form-data"">");
+      P ("<input type=""hidden"" name=""" & App.Csrf.Field & """ value=""");
+      P (Web.Html.Escape_Attribute (Token) & """>");
+      P ("<input type=""file"" name=""document"" required> ");
+      P ("<button type=""submit"">Upload</button></form>");
+      if Count = 0 then
+         P ("<p><em>No attachments yet.</em></p>");
+      else
+         P ("<table><thead><tr><th>#</th><th>Name</th><th>Size</th>"
+            & "<th></th></tr></thead><tbody>");
+         for I in 1 .. Count loop
+            declare
+               E   : App.Attachments.Entry_View renames Items (I);
+               Num : constant String :=
+                 Trim (App.Attachments.Doc_Number'Image (E.Number));
+               Nm  : constant String := E.Name (1 .. E.Name_Length);
+            begin
+               P ("<tr><td>" & Num & "</td>");
+               P ("<td><a href=""/attachments/download?doc=" & Num & """>"
+                  & Web.Html.Escape_Text (Nm) & "</a></td>");
+               P ("<td>" & Trim (Webfiles.Byte_Count'Image (E.Size))
+                  & " bytes</td>");
+               P ("<td><form method=""post"" action=""/attachments/delete"" "
+                  & "style=""display:inline"">");
+               P ("<input type=""hidden"" name=""" & App.Csrf.Field
+                  & """ value=""" & Web.Html.Escape_Attribute (Token) & """>");
+               P ("<input type=""hidden"" name=""doc"" value=""" & Num & """>");
+               P ("<button type=""submit"">Delete</button></form></td></tr>");
+            end;
+         end loop;
+         P ("</tbody></table>");
+      end if;
+      P ("</div>");
+      return To_String (Body_Html);
+   end Attachments_Content;
+
+   function Attachments
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      use Standard.Templates.Values;
+      View       : Value := Object;
+      Page       : Unbounded_String;
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+   begin
+      Set (View, "title", String_Item ("Attachments"));
+      Set (View, "csrf_token", String_Item (App.Csrf.Token (Session_Id)));
+      Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
+
+      declare
+         Current_Path : constant String := Web.Request.Path (Request);
+         Nav_Bar : constant String :=
+           Generate_Nav_Bar (Current_Path, Clearance_Of (Context));
+      begin
+         Page := To_Unbounded_String
+           (App.Templates.Replace_Marker
+              (To_String (Page), "<main>", Nav_Bar & "<main>"));
+      end;
+
+      Page := To_Unbounded_String
+        (App.Templates.Replace_Marker
+           (To_String (Page), "<!-- wf:body -->",
+            Attachments_Content (Session_Id)));
+      Page := To_Unbounded_String
+        (App.Templates.Replace_Asset_Urls
+           (To_String (Page), Web.Assets.Clients.Css_Url,
+            Web.Assets.Clients.Js_Url));
+
+      return App.Runtime.Html_Response (Session_Id, To_String (Page));
+   exception
+      when Error : others =>
+         Web.Logging.Error
+           ("attachments route render failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Attachments;
+
+   function Upload_Attachment
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Context);
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+      Body_Text  : constant String := Web.Request.Request_Body (Request);
+      Content_T  : constant String := Web.Request.Header (Request, "Content-Type");
+      Boundary   : constant String := Web.Multipart.Boundary_Of (Content_T);
+      Parts      : Web.Multipart.Part_Array (1 .. 32);
+      Count      : Natural;
+      Status     : Web.Multipart.Parse_Status;
+      Csrf_Value : Unbounded_String;
+      Uploaded   : Boolean;
+      use type Web.Multipart.Parse_Status;
+      use type Web.Multipart.Part_Kind;
+   begin
+      if Boundary = "" then
+         return Web.Response.Bad_Request ("expected multipart/form-data");
+      end if;
+      Web.Multipart.Parse (Body_Text, Boundary, Parts, Count, Status);
+      if Status /= Web.Multipart.Ok then
+         return Web.Response.Bad_Request ("malformed upload");
+      end if;
+      for I in 1 .. Count loop
+         if Parts (I).Kind = Web.Multipart.Field_Part
+           and then To_String (Parts (I).Name) = App.Csrf.Field
+           and then Parts (I).Last >= Parts (I).First
+         then
+            Csrf_Value :=
+              To_Unbounded_String (Body_Text (Parts (I).First .. Parts (I).Last));
+         end if;
+      end loop;
+
+      if not App.Csrf.Verify_Token (Session_Id, To_String (Csrf_Value)) then
+         return Web.Response.Forbidden ("invalid csrf token");
+      end if;
+
+      App.Attachments.Upload_From
+        (Request, Actor => "example-user", Ok => Uploaded);
+      if not Uploaded then
+         Web.Logging.Error (Log_Tag (Request) & "attachment was not accepted");
+      end if;
+      return App.Nav.Redirect ("attachments");
+   exception
+      when Error : others =>
+         Web.Logging.Error
+           (Log_Tag (Request) & "attachment upload failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Upload_Attachment;
+
+   function Download_Attachment
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Context);
+      Doc_Text : constant String :=
+        Param_Value (Web.Request.Query_String (Request), "doc");
+   begin
+      if Doc_Text = "" then
+         return Web.Response.Not_Found;
+      end if;
+      return App.Attachments.Download (App.Attachments.Doc_Number'Value (Doc_Text));
+   exception
+      when Constraint_Error =>
+         return Web.Response.Not_Found;
+      when Error : others =>
+         Web.Logging.Error
+           (Log_Tag (Request) & "attachment download failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Download_Attachment;
+
+   function Delete_Attachment
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Context);
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+      Doc_Text   : constant String :=
+        Param_Value (Web.Request.Request_Body (Request), "doc");
+   begin
+      if not App.Csrf.Verify (Request, Session_Id) then
+         return Web.Response.Forbidden ("invalid csrf token");
+      end if;
+      if Doc_Text /= "" then
+         begin
+            App.Attachments.Delete (App.Attachments.Doc_Number'Value (Doc_Text));
+         exception
+            when Constraint_Error =>
+               null;  --  unparsable number: nothing to delete
+         end;
+      end if;
+      return App.Nav.Redirect ("attachments");
+   exception
+      when Error : others =>
+         Web.Logging.Error
+           (Log_Tag (Request) & "attachment delete failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Delete_Attachment;
 
 end App.Pages;

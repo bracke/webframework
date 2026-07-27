@@ -31,4 +31,9 @@ package App.Csrf is
    function Verify
      (Request : Web.Request.Request_Type; Session_Id : String) return Boolean;
 
+   --  True iff Presented is the valid token for Session_Id, compared in constant
+   --  time. For multipart forms, where the token arrives as a parsed field part
+   --  rather than in a urlencoded body that Verify can decode. Fail-closed.
+   function Verify_Token (Session_Id : String; Presented : String) return Boolean;
+
 end App.Csrf;

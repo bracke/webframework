@@ -1,4 +1,5 @@
 with Ada.Environment_Variables;
+with Interfaces; use Interfaces;
 with Web.Security;
 with Webframework_Forms;
 with Forms.Submission;
@@ -53,5 +54,25 @@ package body App.Csrf is
       return Webframework_Forms.Verify_Session_Csrf
         (Sub, Key, Session_Id, Webframework_Forms.To_Bytes (Field));
    end Verify;
+
+   function Verify_Token (Session_Id : String; Presented : String) return Boolean
+   is
+      Expected    : constant String := Token (Session_Id);
+      Accumulator : Unsigned_32 := 0;
+   begin
+      if Session_Id'Length = 0
+        or else Expected'Length /= Presented'Length
+        or else Expected'Length = 0
+      then
+         return False;
+      end if;
+      --  Constant-time compare of two equal-length hex tokens.
+      for I in 0 .. Expected'Length - 1 loop
+         Accumulator := Accumulator or
+           (Unsigned_32 (Character'Pos (Expected (Expected'First + I))) xor
+            Unsigned_32 (Character'Pos (Presented (Presented'First + I))));
+      end loop;
+      return Accumulator = 0;
+   end Verify_Token;
 
 end App.Csrf;

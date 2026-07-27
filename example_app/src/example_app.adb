@@ -13,6 +13,7 @@ with App.Authz;
 with App.Guards;
 with App.Nav;
 with App.Projects;
+with App.Attachments;
 with App.Counter;
 with App.Csrf;
 with App.Database;
@@ -41,7 +42,7 @@ procedure Example_App is
       Allowed_Host    : Unbounded_String;
       Help_Only       : Boolean := False;
       Session_Timeout : Natural := 3_600;
-      Max_Request_Size : Natural := 1_048_576;
+      Max_Request_Size : Natural := 10_485_760;  --  10 MiB: headroom for uploads
       Max_Connections : Natural := 1_024;
       Compression_Enabled : Boolean := True;
       Compression_Min_Size : Natural := 256;
@@ -385,7 +386,19 @@ begin
    end if;
    --  Initialize projects table with sample data.
    App.Projects.Initialize;
-   null;
+   --  Compose the webfiles service for the attachments feature (durable local
+   --  store under a data directory; created on first run).
+   declare
+      Attach_Status : App.Attachments.Init_Status;
+      use type App.Attachments.Init_Status;
+   begin
+      App.Attachments.Initialize ("example_app_attachments", Attach_Status);
+      if Attach_Status /= App.Attachments.Ready then
+         Web.Logging.Error
+           ("attachments feature failed to initialize: "
+            & App.Attachments.Init_Status'Image (Attach_Status));
+      end if;
+   end;
    --  Action-to-handler mapping for websocket events.
    App.Runtime.Register ("counter.increment", App.Counter.Increment'Access);
    --  Per-action authorization on the live channel: saving the profile over the
@@ -422,6 +435,21 @@ begin
    App.Runtime.Post
      ("/api/projects/delete", App.Pages.Api_Delete_Project'Access,
       App.Guards.Require_App_Access_Api'Access);
+   --  Attachments feature: a page plus multipart upload, download, and delete.
+   --  All are guarded pages (an anonymous caller is redirected to /login); the
+   --  upload and delete forms carry the session-bound CSRF token.
+   App.Runtime.Get
+     ("/attachments", App.Pages.Attachments'Access,
+      App.Guards.Require_App_Access'Access);
+   App.Runtime.Post
+     ("/attachments/upload", App.Pages.Upload_Attachment'Access,
+      App.Guards.Require_App_Access'Access);
+   App.Runtime.Get
+     ("/attachments/download", App.Pages.Download_Attachment'Access,
+      App.Guards.Require_App_Access'Access);
+   App.Runtime.Post
+     ("/attachments/delete", App.Pages.Delete_Attachment'Access,
+      App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/health", App.Pages.Health'Access);
    App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
    --  The live channel requires authentication: guard the upgrade so an

@@ -40,6 +40,7 @@ package body App.Nav is
       NR.Add (Routes, "login", "/login", Added);
       NR.Add (Routes, "projects", "/projects", Added);
       NR.Add (Routes, "todo", "/todo", Added);
+      NR.Add (Routes, "attachments", "/attachments", Added);
       NR.Add (Routes, "health", "/health", Added);
       NR.Finalize (Routes);
 
@@ -51,6 +52,9 @@ package body App.Nav is
         (Menu, NM.No_Item, "Projects", "projects", Ignore, Visibility_Key => "10");
       NM.Add_Route
         (Menu, NM.No_Item, "To-Do", "todo", Ignore, Visibility_Key => "10");
+      NM.Add_Route
+        (Menu, NM.No_Item, "Attachments", "attachments", Ignore,
+         Visibility_Key => "10");
       NM.Finalize (Menu);
       Ready := True;
    end Setup;
