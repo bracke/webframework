@@ -1,0 +1,47 @@
+name = "webframework_forms_tests"
+description = "Tests for the webframework_forms bridge"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework_forms"
+
+project-files = ["test_bridge.gpr"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+webframework_forms = "*"
+
+[build-profiles]
+"*" = "development"
+
+[[pins]]
+webframework_forms = { path = ".." }
+
+[[pins]]
+forms = { path = "../../../forms" }
+
+[[pins]]
+webframework = { path = "../.." }
+
+[[pins]]
+representation = { path = "../../../representation" }
+
+[[pins]]
+validation = { path = "../../../validation" }
+
+[[pins]]
+cryptolib = { path = "../../../cryptolib" }
+
+[[pins]]
+ssh_lib = { path = "../../../sshlib" }
+
+[[pins]]
+zlib = { path = "../../../zlib" }
+
+[[pins]]
+hostkit = { path = "../../../hostkit" }

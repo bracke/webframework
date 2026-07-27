@@ -1,0 +1,71 @@
+with Web.Request;
+
+with Representation;
+with Forms.Submission;
+with Forms.Urlencoded;
+with Forms.CSRF;
+with Forms.Limits;
+
+--  Bridge from the forms library to the webframework HTTP handler seam.
+--
+--  forms is headless and byte-oriented: it decodes a wire body into a
+--  submission multimap, binds it against a form definition, and runs CSRF —
+--  but it never touches a request or a response. webframework core depends on
+--  none of forms' crates. This crate is the only unit that depends on both, so
+--  a handler can turn a Web.Request straight into a bound submission and enforce
+--  CSRF using the request's cookies.
+--
+--  Everything is fail-closed and nothing raises. String request data is
+--  converted to Representation.Byte_Array (forms' currency) at the boundary.
+package Webframework_Forms is
+
+   subtype Byte_Array is Representation.Byte_Array;
+
+   --  Convert between a webframework String and forms' Byte_Array (Latin-1,
+   --  byte-wise — a UTF-8 body round-trips unchanged).
+   function To_Bytes (S : String) return Byte_Array;
+   function To_String (B : Byte_Array) return String;
+
+   --  Decode an application/x-www-form-urlencoded request body into Into.
+   --  Status is the forms decode result (Decode_Ok on success); on any decode
+   --  error Into holds whatever was decoded before the failure.
+   procedure Read_Urlencoded
+     (Request        : Web.Request.Request_Type;
+      Into           : in out Forms.Submission.Data;
+      Status         : out Forms.Urlencoded.Decode_Status;
+      Name_Capacity  : Positive := 256;
+      Value_Capacity : Positive := 4096;
+      Limits         : Forms.Limits.Limits := Forms.Limits.Default_Limits);
+
+   ----------------------------------------------------------------------
+   --  CSRF (double-submit cookie): the server binds a fresh token into both a
+   --  cookie and a hidden form field when rendering, then verifies on submit
+   --  that the submitted field matches the cookie. Constant-time; fails closed.
+   ----------------------------------------------------------------------
+
+   Default_Cookie : constant String := "csrf_token";
+
+   --  A fresh CSRF token from the stack CSPRNG. Ok is False only if OS entropy
+   --  is unavailable — do not render the form then.
+   procedure New_Token (Tok : out Forms.CSRF.Token; Ok : out Boolean);
+
+   --  The token as hex, for the hidden form field (also the cookie value).
+   function Token_Hex (Tok : Forms.CSRF.Token) return String;
+
+   --  A Set-Cookie header value binding the token: HttpOnly, SameSite=Strict,
+   --  Path=/. Set Secure => False only for plain-HTTP local testing.
+   function Set_Cookie
+     (Tok    : Forms.CSRF.Token;
+      Name   : String := Default_Cookie;
+      Secure : Boolean := True) return String;
+
+   --  Verify the submission's CSRF field against the token in the request's
+   --  cookie. False (fail-closed) if the cookie is absent, malformed, or the
+   --  values differ.
+   function Verify_Csrf
+     (Request : Web.Request.Request_Type;
+      Sub     : Forms.Submission.Data;
+      Field   : Byte_Array := Forms.CSRF.Default_Field;
+      Name    : String := Default_Cookie) return Boolean;
+
+end Webframework_Forms;
