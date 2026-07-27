@@ -2,6 +2,7 @@ with AUnit.Assertions; use AUnit.Assertions;
 with AUnit.Test_Caller;
 
 with Ada.Streams; use Ada.Streams;
+with Ada.Streams.Stream_IO;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
@@ -41,6 +42,21 @@ package body Web_Stream_Tests is
       end loop;
       return Web.Response.Text ("got" & Natural'Image (Total));
    end Echo_Size;
+
+   Big_Path : constant String := "/tmp/webframework-stream-download.bin";
+   Big_Size : constant Natural := 5_000_000;
+
+   --  A plain GET handler returning a file-body response; the framework streams
+   --  the file from disk (Send_File_Body) rather than buffering it -- the same
+   --  path a webfiles download uses.
+   function Serve_Big
+     (Request : Web.Request.Request_Type) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Request);
+   begin
+      return Web.Response.Create_File
+        (200, Big_Path, Big_Size, "application/octet-stream");
+   end Serve_Big;
 
    task type Server_Task is
       entry Start (Port : Natural);
@@ -162,11 +178,85 @@ package body Web_Stream_Tests is
       Web.Server.Stop;
    end Test_Stream_Upload;
 
+   --  A 5 MB file up (streaming lane) and back down (file-body streaming): far
+   --  beyond the 1 MiB request cap, proving neither direction buffers the body.
+   procedure Test_Big_File (T : in out Fixture) is
+      pragma Unreferenced (T);
+      Port   : constant Natural := Free_Port;
+      Worker : Server_Task;
+      Chunk  : constant String := [1 .. 50_000 => 'x'];
+      Rounds : constant Natural := Big_Size / Chunk'Length;
+   begin
+      declare
+         use Ada.Streams.Stream_IO;
+         File  : File_Type;
+         Bytes : constant Stream_Element_Array (1 .. Chunk'Length) :=
+           [others => Stream_Element (Character'Pos ('x'))];
+      begin
+         Create (File, Out_File, Big_Path);
+         for I in 1 .. Rounds loop
+            Write (File, Bytes);
+         end loop;
+         Close (File);
+      end;
+
+      Web.Server.Stop;
+      Web.Server.Configure (Web.Config.Default_Config);
+      Web.Server.Post_Stream ("/big-up", Echo_Size'Access);
+      Web.Server.Get ("/big-down", Serve_Big'Access);
+      Worker.Start (Port);
+
+      declare
+         Http : constant GNAT.Sockets.Socket_Type := Connect (Port);
+      begin
+         Send_All
+           (Http,
+            "POST /big-up HTTP/1.1" & CRLF
+            & "Host: 127.0.0.1" & CRLF
+            & "Content-Type: application/octet-stream" & CRLF
+            & "Content-Length:" & Natural'Image (Big_Size) & CRLF
+            & "Connection: close" & CRLF & CRLF);
+         for I in 1 .. Rounds loop
+            Send_All (Http, Chunk);
+         end loop;
+         declare
+            Response : constant String := Read_All (Http);
+         begin
+            GNAT.Sockets.Close_Socket (Http);
+            Assert (Ada.Strings.Fixed.Index (Response, "got 5000000") > 0,
+                    "a 5 MB upload streamed without buffering (all bytes received)");
+         end;
+      end;
+
+      declare
+         Http : constant GNAT.Sockets.Socket_Type := Connect (Port);
+      begin
+         Send_All
+           (Http,
+            "GET /big-down HTTP/1.1" & CRLF
+            & "Host: 127.0.0.1" & CRLF
+            & "Connection: close" & CRLF & CRLF);
+         declare
+            Response : constant String := Read_All (Http);
+         begin
+            GNAT.Sockets.Close_Socket (Http);
+            Assert (Ada.Strings.Fixed.Index (Response, "HTTP/1.1 200") > 0,
+                    "big download returns 200");
+            Assert (Response'Length >= Big_Size,
+                    "the full 5 MB body streamed back from disk");
+         end;
+      end;
+
+      Web.Server.Stop;
+   end Test_Big_File;
+
    package Caller is new AUnit.Test_Caller (Fixture);
    procedure Add_Tests (Suite : AUnit.Test_Suites.Access_Test_Suite) is
    begin
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("streaming upload live socket", Test_Stream_Upload'Access));
+      AUnit.Test_Suites.Add_Test
+        (Suite, Caller.Create ("5 MB upload and download live socket", Test_Big_File'Access));
    end Add_Tests;
 
 end Web_Stream_Tests;

@@ -1,4 +1,3 @@
-with Web.Request;
 with Web.Response;
 with Web.Http_Body;
 
@@ -37,14 +36,6 @@ package App.Attachments is
 
    --  A snapshot of the current attachments, oldest first.
    procedure List (Items : out Entry_Array; Count : out Natural);
-
-   --  Ingest the first file part of a multipart request, commit it, and add it
-   --  to the catalog. Ok is False when the request carried no usable file or the
-   --  commit failed. Actor is audit/authorization context.
-   procedure Upload_From
-     (Request : Web.Request.Request_Type;
-      Actor   : String;
-      Ok      : out Boolean);
 
    --  Stream a multipart upload straight into storage (no whole-file buffering),
    --  commit it, and add it to the catalog. Boundary comes from the request's

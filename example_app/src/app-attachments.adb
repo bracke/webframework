@@ -1,8 +1,5 @@
 with Ada.Streams;           use Ada.Streams;
-with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Directories;
-
-with Web.Multipart;
 
 with Webfiles.Raw_Identifiers;
 with Webfiles.Identifiers;
@@ -203,67 +200,6 @@ package body App.Attachments is
    begin
       Store.Snapshot (Items, Count);
    end List;
-
-   procedure Upload_From
-     (Request : Web.Request.Request_Type;
-      Actor   : String;
-      Ok      : out Boolean)
-   is
-      pragma Unreferenced (Actor);
-      Body_Text : constant String := Web.Request.Request_Body (Request);
-      Content_T : constant String := Web.Request.Header (Request, "Content-Type");
-      Boundary  : constant String := Web.Multipart.Boundary_Of (Content_T);
-      Parts     : Web.Multipart.Part_Array (1 .. 32);
-      Count     : Natural;
-      Status    : Web.Multipart.Parse_Status;
-      Filename  : Unbounded_String;
-      File_Size : Webfiles.Byte_Count := 0;
-      use type Web.Multipart.Parse_Status;
-      use type Web.Multipart.Part_Kind;
-   begin
-      Ok := False;
-      if Boundary = "" then
-         return;
-      end if;
-      --  Read the first file part's name and size for the catalog; the bridge
-      --  re-parses to stream the bytes.
-      Web.Multipart.Parse (Body_Text, Boundary, Parts, Count, Status);
-      if Status /= Web.Multipart.Ok then
-         return;
-      end if;
-      for I in 1 .. Count loop
-         if Parts (I).Kind = Web.Multipart.File_Part then
-            Filename := Parts (I).Filename;
-            if Parts (I).Last >= Parts (I).First then
-               File_Size := Webfiles.Byte_Count (Parts (I).Last - Parts (I).First + 1);
-            end if;
-            exit;
-         end if;
-      end loop;
-
-      declare
-         Found     : Boolean;
-         Staged    : Life.Staged_Results.Result;
-         Committed : Life.Committed_Results.Result;
-         Added     : Boolean;
-         Display   : constant String :=
-           (if Length (Filename) = 0 then "attachment" else To_String (Filename));
-      begin
-         Webfiles_Webframework.Ingest_First_File
-           (Service => Service_Instance, Scope => Demo_Scope,
-            Request => Request, Max_Size => Max_Upload,
-            Operation => Fresh_Operation, Found => Found, Result => Staged);
-         if not Found or else not Life.Staged_Results.Is_Ok (Staged) then
-            return;
-         end if;
-         Life.Commit (Service_Instance, Staged.Value, Committed);
-         if not Life.Committed_Results.Is_Ok (Committed) then
-            return;
-         end if;
-         Store.Add (Display, File_Size, Committed.Value, Added);
-         Ok := Added;
-      end;
-   end Upload_From;
 
    procedure Stream_Upload
      (Body_R   : in out Web.Http_Body.Reader;
