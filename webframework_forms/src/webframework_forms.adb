@@ -1,4 +1,5 @@
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Strings.Fixed;
 with Ada.Streams;            use Ada.Streams;
 
 with Web.Cookie;
@@ -72,6 +73,41 @@ package body Webframework_Forms is
    begin
       Forms.Urlencoded.Decode (D, To_Bytes (Body_S), Into, Limits, Status);
    end Read_Urlencoded;
+
+   function Content_Type (Request : Web.Request.Request_Type) return String is
+     (Web.Request.Header (Request, "Content-Type"));
+
+   function Is_Urlencoded (Content_Type : String) return Boolean is
+     (Ada.Strings.Fixed.Index
+        (Content_Type, "application/x-www-form-urlencoded") > 0);
+
+   function Is_Multipart (Content_Type : String) return Boolean is
+     (Ada.Strings.Fixed.Index (Content_Type, "multipart/form-data") > 0);
+
+   procedure Read_Body
+     (Request : Web.Request.Request_Type;
+      Into    : in out Forms.Submission.Data;
+      Status  : out Body_Status;
+      Limits  : Forms.Limits.Limits := Forms.Limits.Default_Limits)
+   is
+   begin
+      if Is_Urlencoded (Content_Type (Request)) then
+         declare
+            S : Forms.Urlencoded.Decode_Status;
+            use all type Forms.Urlencoded.Decode_Status;
+         begin
+            Read_Urlencoded (Request, Into, S, Limits => Limits);
+            Status :=
+              (case S is
+                  when Decode_Ok             => Body_Ok,
+                  when Decode_Body_Too_Large => Body_Too_Large,
+                  when Decode_Capacity       => Body_Capacity,
+                  when others                => Body_Malformed);
+         end;
+      else
+         Status := Body_Unsupported_Media;
+      end if;
+   end Read_Body;
 
    procedure New_Token (Tok : out Forms.CSRF.Token; Ok : out Boolean) is
    begin

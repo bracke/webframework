@@ -8,7 +8,6 @@ with Navigation.Breadcrumbs;
 with Forms.Form;
 with Forms.Fields;
 with Forms.Submission;
-with Forms.Urlencoded;
 with Forms.Binding;
 with Forms.CSRF;
 
@@ -24,8 +23,6 @@ package body Site is
    package NR renames Navigation.Routes;
    package NM renames Navigation.Menu;
    package NB renames Navigation.Breadcrumbs;
-
-   use type Forms.Urlencoded.Decode_Status;
 
    --  Built once by Setup, then read-only (immutable after Finalize) so the
    --  handlers share them safely.
@@ -172,13 +169,17 @@ package body Site is
      (Request : Web.Request.Request_Type) return Web.Response.Response_Type
    is
       Sub    : Forms.Submission.Data (16, 4096);
-      St     : Forms.Urlencoded.Decode_Status;
+      St     : WF.Body_Status;
       Report : Representation.Diagnostics.Diagnostic_Set;
       Ok     : Boolean;
       Sid    : constant String := Session_Of (Request);
+      use type WF.Body_Status;
    begin
-      WF.Read_Urlencoded (Request, Sub, St);
-      if St /= Forms.Urlencoded.Decode_Ok then
+      --  Decode by Content-Type: a non-form body is refused, not mis-decoded.
+      WF.Read_Body (Request, Sub, St);
+      if St = WF.Body_Unsupported_Media then
+         return Web.Response.Create (415, "unsupported media type");
+      elsif St /= WF.Body_Ok then
          return Web.Response.Bad_Request;
       end if;
 

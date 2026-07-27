@@ -7,10 +7,15 @@ webframework core depends on none of forms' crates.
 
 With this bridge a handler can:
 
-- **Decode a request body into a submission** — `Read_Urlencoded (Request, Into,
-  Status)` turns an `application/x-www-form-urlencoded` body into a
-  `Forms.Submission.Data` ready for `Forms.Binding.Bind`. String request data is
-  converted to `Representation.Byte_Array` (forms' currency) at the boundary.
+- **Decode a request body into a submission** — `Read_Body (Request, Into,
+  Status)` dispatches on `Content-Type`: an `application/x-www-form-urlencoded`
+  body is decoded into a `Forms.Submission.Data`; any other type yields
+  `Body_Unsupported_Media`, so a JSON or unexpected body is refused rather than
+  mis-decoded. (`Read_Urlencoded` remains for the direct case.) String request
+  data is converted to `Representation.Byte_Array` at the boundary.
+  Note: webframework's server rejects `multipart/form-data` bodies at parse time,
+  so multipart never reaches a handler; `forms` has a decoder ready, but wiring
+  it needs a webframework-core change, not a bridge one.
 - **Enforce CSRF.** Two mechanisms:
   - *Session-bound (preferred)* — `Session_Token (Key, Session_Id)` is an
     HMAC-SHA256 synchronizer token; `Verify_Session_Csrf (Sub, Key, Session_Id)`

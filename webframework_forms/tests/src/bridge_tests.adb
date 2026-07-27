@@ -86,6 +86,53 @@ package body Bridge_Tests is
       end;
    end Test_Csrf_Roundtrip;
 
+   --  A POST with an explicit Content-Type.
+   function Post_CT (Body_S : String; CT : String)
+                     return Web.Request.Request_Type
+   is
+      Len : constant String :=
+        Ada.Strings.Fixed.Trim (Integer'Image (Body_S'Length), Ada.Strings.Left);
+   begin
+      return Web.Server.Parse_Request
+        ("POST / HTTP/1.1" & CRLF & "Host: x" & CRLF
+         & "Content-Type: " & CT & CRLF
+         & "Content-Length: " & Len & CRLF & CRLF & Body_S);
+   end Post_CT;
+
+   procedure Test_Content_Type_Dispatch (T : in out Fixture) is
+      pragma Unreferenced (T);
+      use type WF.Body_Status;
+   begin
+      --  urlencoded via Read_Body decodes.
+      declare
+         Sub : Forms.Submission.Data (8, 512);
+         St  : WF.Body_Status;
+      begin
+         WF.Read_Body (Post_CT ("name=Ada", "application/x-www-form-urlencoded"),
+                       Sub, St);
+         Assert (St = WF.Body_Ok, "urlencoded dispatched + decoded");
+         Assert (WF.To_String (Forms.Submission.Value_Of (Sub, WF.To_Bytes ("name")))
+                 = "Ada", "urlencoded field");
+      end;
+
+      --  A non-form body is refused, never mis-decoded as a form.
+      declare
+         Sub : Forms.Submission.Data (8, 512);
+         St  : WF.Body_Status;
+      begin
+         WF.Read_Body (Post_CT ("{""name"":""Ada""}", "application/json"),
+                       Sub, St);
+         Assert (St = WF.Body_Unsupported_Media,
+                 "a JSON body is refused (not mis-decoded as a form)");
+      end;
+
+      --  Predicates classify the media type.
+      Assert (WF.Is_Urlencoded ("application/x-www-form-urlencoded; charset=utf-8")
+              and then WF.Is_Multipart ("multipart/form-data; boundary=z")
+              and then not WF.Is_Urlencoded ("application/json"),
+              "content-type predicates");
+   end Test_Content_Type_Dispatch;
+
    procedure Test_Session_Csrf (T : in out Fixture) is
       pragma Unreferenced (T);
       Key   : constant WF.Byte_Array := WF.To_Bytes ("server-signing-key-v1");
@@ -199,6 +246,9 @@ package body Bridge_Tests is
    procedure Add_Tests (Suite : AUnit.Test_Suites.Access_Test_Suite) is
    begin
       Suite.Add_Test (Caller.Create ("Bridge: decode", Test_Decode'Access));
+      Suite.Add_Test
+        (Caller.Create ("Bridge: content-type dispatch + multipart",
+         Test_Content_Type_Dispatch'Access));
       Suite.Add_Test
         (Caller.Create ("Bridge: CSRF round-trip", Test_Csrf_Roundtrip'Access));
       Suite.Add_Test

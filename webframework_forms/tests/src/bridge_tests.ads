@@ -6,6 +6,7 @@ package Bridge_Tests is
    type Fixture is new AUnit.Test_Fixtures.Test_Fixture with null record;
 
    procedure Test_Decode (T : in out Fixture);
+   procedure Test_Content_Type_Dispatch (T : in out Fixture);
    procedure Test_Csrf_Roundtrip (T : in out Fixture);
    procedure Test_Session_Csrf (T : in out Fixture);
    procedure Test_Bind_Diagnostics (T : in out Fixture);

@@ -40,6 +40,36 @@ package Webframework_Forms is
       Value_Capacity : Positive := 4096;
       Limits         : Forms.Limits.Limits := Forms.Limits.Default_Limits);
 
+   --  The request's Content-Type header ("" if absent).
+   function Content_Type (Request : Web.Request.Request_Type) return String;
+
+   function Is_Urlencoded (Content_Type : String) return Boolean;
+   function Is_Multipart  (Content_Type : String) return Boolean;
+
+   --  A media-type-agnostic body decode result.
+   type Body_Status is
+     (Body_Ok,
+      Body_Unsupported_Media,  --  Content-Type is not a supported form encoding
+      Body_Too_Large,
+      Body_Capacity,
+      Body_Malformed);
+
+   --  Decode the request body according to its Content-Type. Only
+   --  application/x-www-form-urlencoded is decoded; every other type (JSON,
+   --  multipart, none) yields Body_Unsupported_Media -- so an unexpected body is
+   --  refused, never mis-decoded as a form.
+   --
+   --  Note: webframework's server currently rejects multipart/form-data request
+   --  bodies at parse time (Web.Errors.Bad_Request_Error), so a multipart body
+   --  never reaches a handler. `forms` has a multipart decoder ready; wiring it
+   --  is a webframework-core change (streaming multipart intake), not a bridge
+   --  one, so this bridge does not pretend to support it.
+   procedure Read_Body
+     (Request : Web.Request.Request_Type;
+      Into    : in out Forms.Submission.Data;
+      Status  : out Body_Status;
+      Limits  : Forms.Limits.Limits := Forms.Limits.Default_Limits);
+
    ----------------------------------------------------------------------
    --  CSRF (double-submit cookie): the server binds a fresh token into both a
    --  cookie and a hidden form field when rendering, then verifies on submit
