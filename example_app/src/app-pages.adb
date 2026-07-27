@@ -106,6 +106,10 @@ package body App.Pages is
       use Standard.Templates.Values;
       View : Value := Object;
       Page : Unbounded_String;
+      --  Bind the CSRF token to the SAME session the response cookie will
+      --  carry: resolve the session once, so a first (cookieless) visit does
+      --  not mint one session for the token and another for the cookie.
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
       --  Access is decided by the route guard before this runs; the manual
       --  session check is gone.
@@ -114,7 +118,7 @@ package body App.Pages is
       Standard.Templates.Values.Set
         (View, "csrf_token",
          Standard.Templates.Values.String_Item
-           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
+           (App.Csrf.Token (Session_Id)));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
@@ -139,7 +143,7 @@ package body App.Pages is
               Home_Content));
 
       --  Ensure cookie-backed session response is used for /, so websocket state is consistent.
-      return App.Runtime.Html_Response (Request, To_String (Page));
+      return App.Runtime.Html_Response (Session_Id, To_String (Page));
       exception
          when Error : others =>
             --  Keep route stable and return explicit HTTP 500 on any rendering failure.
@@ -242,6 +246,9 @@ package body App.Pages is
    function Login (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
       Context : Standard.Templates.Values.Value := Standard.Templates.Values.Object;
       Page    : Unbounded_String;
+      --  One session for both the embedded token and the response cookie, so a
+      --  first (cookieless) visit does not fail its own CSRF check on submit.
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
       --  Build the full HTML page through templates and inject the login form.
       Standard.Templates.Values.Set
@@ -249,7 +256,7 @@ package body App.Pages is
       Standard.Templates.Values.Set
         (Context, "csrf_token",
          Standard.Templates.Values.String_Item
-           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
+           (App.Csrf.Token (Session_Id)));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", Context));
       Page := To_Unbounded_String
         (App.Templates.Replace_Marker
@@ -258,7 +265,7 @@ package body App.Pages is
             App.Templates.Render ("login.html", Standard.Templates.Values.Object)));
 
       --  Return HTML response with session cookie
-      return App.Runtime.Html_Response (Request, To_String (Page));
+      return App.Runtime.Html_Response (Session_Id, To_String (Page));
       exception
          when Error : others =>
             Web.Logging.Error
@@ -406,6 +413,8 @@ package body App.Pages is
       Page : Unbounded_String;
       Projects_Data : App.Projects.Project_Vectors.Vector;
       Total_Rows : Natural := 0;
+      --  One session for both the embedded token and the response cookie.
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
       --  Fail closed: if tables could not produce a ready plan, do not list.
       if not Plan.Ready then
@@ -426,7 +435,7 @@ package body App.Pages is
       Standard.Templates.Values.Set
         (View, "csrf_token",
          Standard.Templates.Values.String_Item
-           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
+           (App.Csrf.Token (Session_Id)));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
@@ -463,7 +472,7 @@ package body App.Pages is
             Web.Assets.Clients.Js_Url));
 
       --  Ensure cookie-backed session response is used for /projects
-      return App.Runtime.Html_Response (Request, To_String (Page));
+      return App.Runtime.Html_Response (Session_Id, To_String (Page));
       exception
          when Error : others =>
             --  Keep route stable and return explicit HTTP 500 on any rendering failure.
@@ -480,6 +489,8 @@ package body App.Pages is
       View : Value := Object;
       Page : Unbounded_String;
       Todo_Content : Unbounded_String;
+      --  One session for both the embedded token and the response cookie.
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
       --  Access is decided by the route guard before this runs.
       --  Build the full HTML page through templates
@@ -487,7 +498,7 @@ package body App.Pages is
       Standard.Templates.Values.Set
         (View, "csrf_token",
          Standard.Templates.Values.String_Item
-           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
+           (App.Csrf.Token (Session_Id)));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
@@ -526,7 +537,7 @@ package body App.Pages is
             Web.Assets.Clients.Js_Url));
 
       --  Ensure cookie-backed session response is used for /todo
-      return App.Runtime.Html_Response (Request, To_String (Page));
+      return App.Runtime.Html_Response (Session_Id, To_String (Page));
       exception
          when Error : others =>
             --  Keep route stable and return explicit HTTP 500 on any rendering failure.
