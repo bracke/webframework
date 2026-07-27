@@ -28,6 +28,8 @@ package Web.Application is
    --  Convenience aliases for the server handler types.
    subtype Route_Handler_Access is Web.Server.Route_Handler;
 
+   subtype Stream_Handler_Access is Web.Server.Stream_Handler;
+
    subtype WebSocket_Handler_Access is Web.Server.WebSocket_Handler;
 
    --  Register an action handler.
@@ -195,6 +197,13 @@ package Web.Application is
    --  @param Handler Route handler.
    --  @return No return value.
    procedure Post (Path : String; Handler : Route_Handler_Access);
+
+   --  Register a streaming POST route (e.g. a large upload). The handler pulls
+   --  the body from a reader instead of receiving it buffered; guards run first.
+   procedure Post_Stream
+     (Path    : String;
+      Handler : Stream_Handler_Access;
+      Guard   : Web.Guard.Guard_Access := null);
 
    --  Install a global guard that runs before every request (see
    --  Web.Server.Use_Guard). This is where an application resolves the request

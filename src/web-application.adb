@@ -115,6 +115,14 @@ package body Web.Application is
       Web.Server.Post (Path, Handler);
    end Post;
 
+   procedure Post_Stream
+     (Path    : String;
+      Handler : Stream_Handler_Access;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Web.Server.Post_Stream (Path, Handler, Guard);
+   end Post_Stream;
+
    procedure Use_Guard (Guard : Web.Guard.Guard_Access) is
    begin
       Web.Server.Use_Guard (Guard);
