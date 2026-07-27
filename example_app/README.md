@@ -35,9 +35,14 @@ runs guards. All the meaning lives in the app packages below.
   administrator returning on a remembered (low-assurance) cookie may view but
   must re-authenticate to manage — enforced on the HTTP manage routes and on the
   live privileged action alike.
-- **Authorization-aware data.** The `/projects` listing is planned through
-  `tables`: the authorization data scope (Alire-tracked projects only) survives
-  into the query, and the sensitive `functions` column is masked for viewers.
+- **Authorization-aware data.** The `/projects` listing runs through the `tables`
+  library and the `tables_authorization` bridge: `App.Authz` asks the
+  authorization engine for a query plan, so the authorization data scope
+  (Alire-tracked projects only) is enforced in the query — out-of-scope rows are
+  never fetched — and the sensitive `functions` column is masked for viewers. The
+  plan is fail-closed. (This is the standalone `tables` *query-planning* library;
+  the projects rows themselves are persisted through the `database` crate's own
+  `Database.Tables` — a different layer.)
 - **Decode → validate.** The form POSTs decode through the `forms` library:
   `App.Project_Binding` and login both use `Forms.Urlencoded` → `Forms.Submission`
   (percent-decoded, order-independent field lookup), with the project booleans and
