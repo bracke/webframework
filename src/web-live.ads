@@ -17,6 +17,16 @@ package Web.Live is
 
    type State_Process is access procedure (State : in out App_State);
 
+   --  A visitor carries per-call data into the (serialized) state update
+   --  without a shared global: the concrete visitor's own fields hold the
+   --  inputs, so two concurrent updates never clobber one another. Prefer this
+   --  over State_Process whenever the update depends on request-specific data
+   --  (a State_Process access value can only reach such data through a global,
+   --  which races under concurrent requests).
+   type State_Visitor is abstract tagged null record;
+   procedure Apply
+     (Self : in out State_Visitor; State : in out App_State) is abstract;
+
    --  Find or create a session for a request.
    --
    --  This is side-effecting: for a request that carries no (valid) session
@@ -90,6 +100,14 @@ package Web.Live is
    --  @param Process Callback executed with mutable state.
    --  @return No return value.
    procedure With_State (Id : String; Process : State_Process);
+
+   --  Serialize access to session state, running a visitor that carries its
+   --  own per-call data (see State_Visitor). Use this instead of the
+   --  State_Process overload when the update depends on request-specific data.
+   --  @param Id Session id.
+   --  @param Visitor Visitor whose Apply runs with mutable state.
+   --  @return No return value.
+   procedure With_State (Id : String; Visitor : in out State_Visitor'Class);
 
    --  Set the inactivity timeout used by cleanup.
    --  @param Seconds Timeout in seconds; zero expires all sessions on cleanup.

@@ -104,6 +104,16 @@ package Web.Application is
    --  @return No return value.
    procedure With_State (Id : String; Process : Live.State_Process);
 
+   --  Serialize access to a session state value, running a visitor that carries
+   --  its own per-call data (see Live.State_Visitor) -- use this instead of the
+   --  State_Process overload when the update depends on request-specific data,
+   --  so concurrent requests never share a mutable global.
+   --  @param Id Session identifier.
+   --  @param Visitor Visitor whose Apply runs with mutable state.
+   --  @return No return value.
+   procedure With_State
+     (Id : String; Visitor : in out Live.State_Visitor'Class);
+
    --  Return number of active sessions.
    --  @return Count of sessions tracked by this application.
    function Session_Count return Natural;

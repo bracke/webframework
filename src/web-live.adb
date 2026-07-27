@@ -105,6 +105,7 @@ package body Web.Live is
         (Id    : String;
          Found : out Boolean);
       procedure Process (Id : String; Handler : State_Process);
+      procedure Process (Id : String; Visitor : in out State_Visitor'Class);
       procedure Dispatch_Event
         (Id      : String;
          Event   : Web.Events.Event;
@@ -294,6 +295,20 @@ package body Web.Live is
          Copy := Session_Maps.Element (Position);
          Copy.Last_Seen := Ada.Calendar.Clock;
          Handler (Copy.State);
+         Sessions.Replace_Element (Position, Copy);
+      end Process;
+
+      procedure Process (Id : String; Visitor : in out State_Visitor'Class) is
+         Copy : Session_Record;
+         Position : constant Session_Maps.Cursor := Sessions.Find (Id);
+      begin
+         if not Session_Maps.Has_Element (Position) then
+            return;
+         end if;
+
+         Copy := Session_Maps.Element (Position);
+         Copy.Last_Seen := Ada.Calendar.Clock;
+         Apply (Visitor, Copy.State);
          Sessions.Replace_Element (Position, Copy);
       end Process;
 
@@ -935,6 +950,18 @@ package body Web.Live is
       Index_Value := Shard_Index (Id);
       Stores (Index_Value).Ensure (Id);
       Stores (Index_Value).Process (Id, Process);
+   end With_State;
+
+   procedure With_State (Id : String; Visitor : in out State_Visitor'Class) is
+      Index_Value : Positive;
+   begin
+      if not Web.Security.Is_Valid_Session_Id (Id) then
+         raise Web.Errors.Security_Error with "invalid session id";
+      end if;
+
+      Index_Value := Shard_Index (Id);
+      Stores (Index_Value).Ensure (Id);
+      Stores (Index_Value).Process (Id, Visitor);
    end With_State;
 
    procedure Set_Session_Timeout (Seconds : Natural) is

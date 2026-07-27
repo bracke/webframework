@@ -42,17 +42,31 @@ package body App.Http_Support is
       return Web.Response.Text ("ok principal=" & Web.Context.Principal (Context));
    end Stub;
 
-   --  Pending auth applied to a session by With_State.
-   Pending_Principal : Unbounded_String;
-   Pending_Clearance : Natural := 0;
-   Pending_Token     : Unbounded_String;
-
-   procedure Apply_Auth (State : in out App.State.App_State) is
+   --  Visitors carry their per-call data in their own fields (see
+   --  Web.Live.State_Visitor), so the harness shares no mutable global that
+   --  concurrent updates could race on.
+   type Auth_Applier is new App.Runtime.Live.State_Visitor with record
+      Principal : Unbounded_String;
+      Clearance : Natural := 0;
+      Token     : Unbounded_String;
+   end record;
+   overriding procedure Apply
+     (Self : in out Auth_Applier; State : in out App.State.App_State) is
    begin
       App.State.Set_Authenticated
-        (State, To_String (Pending_Principal), "user",
-         Pending_Clearance, To_String (Pending_Token));
-   end Apply_Auth;
+        (State, To_String (Self.Principal), "user",
+         Self.Clearance, To_String (Self.Token));
+   end Apply;
+
+   --  Read the identity-session token back out of a session's state.
+   type Token_Reader is new App.Runtime.Live.State_Visitor with record
+      Token : Unbounded_String;
+   end record;
+   overriding procedure Apply
+     (Self : in out Token_Reader; State : in out App.State.App_State) is
+   begin
+      Self.Token := To_Unbounded_String (App.State.Get_Session_Token (State));
+   end Apply;
 
    --  Log a user in: create a framework session, authenticate through the
    --  identity repository, open an identity session, and store the auth on the
@@ -65,10 +79,15 @@ package body App.Http_Support is
       if Principal = "" then
          return "";
       end if;
-      Pending_Principal := To_Unbounded_String (Principal);
-      Pending_Clearance := App.Auth.Clearance_Of (Principal);
-      Pending_Token := To_Unbounded_String (App.Auth.Create_Session (Principal));
-      App.Runtime.With_State (Sid, Apply_Auth'Access);
+      declare
+         Applier : Auth_Applier :=
+           (App.Runtime.Live.State_Visitor with
+            Principal => To_Unbounded_String (Principal),
+            Clearance => App.Auth.Clearance_Of (Principal),
+            Token     => To_Unbounded_String (App.Auth.Create_Session (Principal)));
+      begin
+         App.Runtime.With_State (Sid, Applier);
+      end;
       return Sid;
    end Setup_Login;
 
@@ -78,12 +97,14 @@ package body App.Http_Support is
    function Setup_Remembered (Principal : String) return String is
       Seed : constant Web.Request.Request_Type := Web.Request.Create ("GET", "/");
       Sid  : constant String := App.Runtime.Find_Or_Create_Session (Seed);
+      Applier : Auth_Applier :=
+        (App.Runtime.Live.State_Visitor with
+         Principal => To_Unbounded_String (Principal),
+         Clearance => App.Auth.Clearance_Of (Principal),
+         Token     =>
+           To_Unbounded_String (App.Auth.Create_Remembered_Session (Principal)));
    begin
-      Pending_Principal := To_Unbounded_String (Principal);
-      Pending_Clearance := App.Auth.Clearance_Of (Principal);
-      Pending_Token :=
-        To_Unbounded_String (App.Auth.Create_Remembered_Session (Principal));
-      App.Runtime.With_State (Sid, Apply_Auth'Access);
+      App.Runtime.With_State (Sid, Applier);
       return Sid;
    end Setup_Remembered;
 
@@ -220,12 +241,13 @@ package body App.Http_Support is
 
       --  Session revocation takes effect on the very next request.
       declare
-         Sid   : constant String := Setup_Login ("admin", "admin123");
-         Token : constant String := To_String (Pending_Token);
+         Sid    : constant String := Setup_Login ("admin", "admin123");
+         Reader : Token_Reader;
       begin
+         App.Runtime.With_State (Sid, Reader);
          Check (Status_Of ("GET", "/secure", Sid) = 200,
                 "http: a live session is admitted");
-         App.Auth.Revoke_Session (Token);
+         App.Auth.Revoke_Session (To_String (Reader.Token));
          Check (Status_Of ("GET", "/secure", Sid) = 303,
                 "http: a revoked identity session is anonymous at once");
       end;

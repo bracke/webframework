@@ -64,6 +64,12 @@ package body Web.Application is
       Live.With_State (Id, Process);
    end With_State;
 
+   procedure With_State
+     (Id : String; Visitor : in out Live.State_Visitor'Class) is
+   begin
+      Live.With_State (Id, Visitor);
+   end With_State;
+
    function Session_Count return Natural is
    begin
       return Live.Session_Count;
