@@ -181,6 +181,21 @@ package body Bridge_Tests is
                  "Diagnostics_Text renders the failure");
          Assert (Web.Response.Status (WF.Error_Response (Report)) = 400,
                  "Error_Response is 400");
+         --  JSON rendering for API clients.
+         declare
+            J    : constant String := WF.Diagnostics_JSON (Report);
+            Resp : constant Web.Response.Response_Type :=
+              WF.Error_Response_JSON (Report);
+         begin
+            Assert (J (J'First) = '[' and then J (J'Last) = ']'
+                    and then Ada.Strings.Fixed.Index (J, """id"":") > 0,
+                    "Diagnostics_JSON is a JSON array of error objects");
+            Assert (Web.Response.Status (Resp) = 400
+                    and then Ada.Strings.Fixed.Index
+                               (Web.Response.Header (Resp, "Content-Type"),
+                                "application/json") > 0,
+                    "Error_Response_JSON is 400 application/json");
+         end;
       end;
    end Test_Bind_Diagnostics;
 

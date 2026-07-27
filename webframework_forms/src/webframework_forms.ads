@@ -147,6 +147,16 @@ package Webframework_Forms is
      (Report : Representation.Diagnostics.Diagnostic_Set;
       Status : Positive := 400) return Web.Response.Response_Type;
 
+   --  The diagnostics as a JSON array of {"id","path","message"} objects, for
+   --  API clients. All string values are JSON-escaped.
+   function Diagnostics_JSON
+     (Report : Representation.Diagnostics.Diagnostic_Set) return String;
+
+   --  An application/json response carrying Diagnostics_JSON (400 by default).
+   function Error_Response_JSON
+     (Report : Representation.Diagnostics.Diagnostic_Set;
+      Status : Positive := 400) return Web.Response.Response_Type;
+
    --  The value to re-display for a field when re-rendering a form after a
    --  failed submission (Forms.Binding.Sticky_Value). Returns "" for a
    --  redacted (sensitive) field. NOT HTML-escaped — escape before embedding

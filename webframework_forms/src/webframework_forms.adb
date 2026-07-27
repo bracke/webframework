@@ -201,6 +201,65 @@ package body Webframework_Forms is
      (Web.Response.Create
         (Status, Diagnostics_Text (Report), "text/plain; charset=utf-8"));
 
+   --  JSON string escaping ("\ and control chars).
+   function JSON_Escape (S : String) return String is
+      Out_S : Unbounded_String;
+   begin
+      for C of S loop
+         case C is
+            when '"'  => Append (Out_S, "\""");
+            when '\'  => Append (Out_S, "\\");
+            when Character'Val (8)  => Append (Out_S, "\b");
+            when Character'Val (9)  => Append (Out_S, "\t");
+            when Character'Val (10) => Append (Out_S, "\n");
+            when Character'Val (12) => Append (Out_S, "\f");
+            when Character'Val (13) => Append (Out_S, "\r");
+            when others =>
+               if Character'Pos (C) < 32 then
+                  declare
+                     Hex : constant String := "0123456789abcdef";
+                     V   : constant Natural := Character'Pos (C);
+                  begin
+                     Append (Out_S, "\u00");
+                     Append (Out_S, Hex (V / 16 + 1));
+                     Append (Out_S, Hex (V mod 16 + 1));
+                  end;
+               else
+                  Append (Out_S, C);
+               end if;
+         end case;
+      end loop;
+      return To_String (Out_S);
+   end JSON_Escape;
+
+   function Diagnostics_JSON
+     (Report : Representation.Diagnostics.Diagnostic_Set) return String
+   is
+      Out_S : Unbounded_String := To_Unbounded_String ("[");
+   begin
+      for I in 1 .. Natural (RD.Count (Report)) loop
+         declare
+            Item : constant RD.Diagnostic := RD.Element (Report, I);
+         begin
+            if I > 1 then
+               Append (Out_S, ",");
+            end if;
+            Append (Out_S,
+              "{""id"":""" & JSON_Escape (RD.Error_Identifier (Item))
+              & """,""path"":""" & JSON_Escape (RD.Path_Render (Item))
+              & """,""message"":""" & JSON_Escape (RD.Message (Item)) & """}");
+         end;
+      end loop;
+      Append (Out_S, "]");
+      return To_String (Out_S);
+   end Diagnostics_JSON;
+
+   function Error_Response_JSON
+     (Report : Representation.Diagnostics.Diagnostic_Set;
+      Status : Positive := 400) return Web.Response.Response_Type is
+     (Web.Response.Create
+        (Status, Diagnostics_JSON (Report), "application/json; charset=utf-8"));
+
    function Sticky
      (Def       : Forms.Form.Definition;
       Sub       : Forms.Submission.Data;
