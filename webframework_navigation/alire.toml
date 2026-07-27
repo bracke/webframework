@@ -1,0 +1,51 @@
+name = "webframework_navigation"
+description = "Bridge from the navigation library to the webframework HTTP handler seam"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework_navigation"
+tags = ["webframework", "navigation", "bridge"]
+
+project-files = ["webframework_navigation.gpr"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+navigation = "*"
+
+[[depends-on]]
+webframework = "*"
+
+[[actions]]
+type = "test"
+command = ["sh", "-c", "cd tests && alr build && ./bin/test_bridge"]
+
+[build-profiles]
+"*" = "development"
+
+[[pins]]
+navigation = { path = "../../navigation" }
+
+[[pins]]
+webframework = { path = ".." }
+
+# navigation's transitive path pin (root-only in Alire, so repeat it here).
+[[pins]]
+representation = { path = "../../representation" }
+
+# webframework's transitive path pins, likewise repeated.
+[[pins]]
+cryptolib = { path = "../../cryptolib" }
+
+[[pins]]
+ssh_lib = { path = "../../sshlib" }
+
+[[pins]]
+zlib = { path = "../../zlib" }
+
+[[pins]]
+hostkit = { path = "../../hostkit" }
