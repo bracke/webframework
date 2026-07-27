@@ -18,6 +18,7 @@ project Webframework is
       "Web.Events",
       "Web.Guard",
       "Web.Html",
+      "Web.Http_Body",
       "Web.Live",
       "Web.Logging",
       "Web.Multipart",
