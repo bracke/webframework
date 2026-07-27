@@ -42,7 +42,11 @@ procedure Example_App is
       Allowed_Host    : Unbounded_String;
       Help_Only       : Boolean := False;
       Session_Timeout : Natural := 3_600;
-      Max_Request_Size : Natural := 10_485_760;  --  10 MiB: headroom for uploads
+      Max_Request_Size : Natural := 1_048_576;
+      --  1 MiB. The server buffers a whole request in a worker-task-stack copy
+      --  (web-server.adb Read_Request), so this bounds upload size; raising it
+      --  beyond the worker stack overflows it. Larger uploads need a framework
+      --  change (stream the body instead of buffering it), not just a bigger cap.
       Max_Connections : Natural := 1_024;
       Compression_Enabled : Boolean := True;
       Compression_Min_Size : Natural := 256;
