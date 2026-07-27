@@ -86,6 +86,18 @@ forms = "*"
 [[pins]]
 forms = { path = "../../forms" }
 
+[[depends-on]]
+navigation = "*"
+
+[[pins]]
+navigation = { path = "../../navigation" }
+
+[[depends-on]]
+webframework_navigation = "*"
+
+[[pins]]
+webframework_navigation = { path = "../webframework_navigation" }
+
 # Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib,
 # zlib, hostkit and representation through webframework, database, and forms, so
 # it must pin them itself.

@@ -12,6 +12,7 @@ with Web.Assets.Clients;
 with App.Runtime;
 with App.State;
 with App.Csrf;
+with App.Nav;
 with App.Templates;
 with Templates.Values;
 with Web.Html;
@@ -21,26 +22,35 @@ with Web.Logging;
 package body App.Pages is
    use Ada.Strings.Unbounded;
 
-   --  Generate navigation bar HTML with current path highlighted
-   --  The active item is rendered as a span (not clickable) instead of a link
-   function Generate_Nav_Bar (Current_Path : String) return String is
-      Home_Active : constant Boolean := Current_Path = "/";
-      Projects_Active : constant Boolean := Current_Path = "/projects";
-      Todo_Active : constant Boolean := Current_Path = "/todo";
+   --  The viewer clearance carried on the request context ("clearance" fact),
+   --  or 0 if none. Drives the navigation visibility filter.
+   function Clearance_Of (Context : Web.Context.Request_Context) return Natural is
+   begin
+      if Web.Context.Has_Attribute (Context, "clearance") then
+         return Natural'Value (Web.Context.Attribute (Context, "clearance"));
+      end if;
+      return 0;
+   exception
+      when others =>
+         return 0;
+   end Clearance_Of;
+
+   --  The navigation bar: the menu (Home / Projects / To-Do) comes from the
+   --  navigation library via App.Nav -- the active page highlighted from the
+   --  path, items filtered by Clearance -- wrapped with a logout control (the
+   --  logout POST carries the session-bound CSRF token).
+   function Generate_Nav_Bar
+     (Current_Path : String; Clearance : Natural) return String
+   is
    begin
       return
-        "<header><nav>" &
-        (if Home_Active then "<span class=""nav-home active"">Home</span>"
-         else "<a href=""/"" class=""nav-home"">Home</a>") &
-        (if Projects_Active then "<span class=""nav-projects active"">Projects</span>"
-         else "<a href=""/projects"" class=""nav-projects"">Projects</a>") &
-        (if Todo_Active then "<span class=""nav-todo active"">Todos</span>"
-         else "<a href=""/todo"" class=""nav-todo"">Todos</a>") &
-        "<a href=""#"" class=""nav-logout"" onclick=""logout();return false;"">Logout</a>" &
-        "</nav></header>" &
+        "<header><nav>" & App.Nav.Menu_Html (Current_Path, Clearance) &
+        "<a href=""#"" class=""nav-logout"" onclick=""logout();return false;"">"
+        & "Logout</a></nav></header>" &
         "<script>" &
-        "function logout(){fetch(" &
-        "'/api/logout',{method:'POST',credentials:'include'})" &
+        "function logout(){fetch('/api/logout',{method:'POST'," &
+        "headers:{'Content-Type':'application/x-www-form-urlencoded'}," &
+        "body:window.wfCsrfBody('')})" &
         ".then(r=>{if(r.ok){window.location.href='/login'}})" &
         ".catch(e=>console.error('Logout failed:',e))}</script>";
    end Generate_Nav_Bar;
@@ -90,7 +100,6 @@ package body App.Pages is
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use Standard.Templates.Values;
-      pragma Unreferenced (Context);
       View : Value := Object;
       Page : Unbounded_String;
    begin
@@ -107,7 +116,8 @@ package body App.Pages is
       --  Add navigation bar for authenticated pages
       declare
          Current_Path : constant String := Web.Request.Path (Request);
-         Nav_Bar : constant String := Generate_Nav_Bar (Current_Path);
+         Nav_Bar : constant String :=
+           Generate_Nav_Bar (Current_Path, Clearance_Of (Context));
       begin
          --  Insert nav bar before the main content
          Page := To_Unbounded_String
@@ -442,7 +452,8 @@ package body App.Pages is
       --  Add navigation bar for authenticated pages
       declare
          Current_Path : constant String := Web.Request.Path (Request);
-         Nav_Bar : constant String := Generate_Nav_Bar (Current_Path);
+         Nav_Bar : constant String :=
+           Generate_Nav_Bar (Current_Path, Clearance_Of (Context));
       begin
          --  Insert nav bar before the main content
          Page := To_Unbounded_String
@@ -486,7 +497,6 @@ package body App.Pages is
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type is
       use Standard.Templates.Values;
-      pragma Unreferenced (Context);
       View : Value := Object;
       Page : Unbounded_String;
       Todo_Content : Unbounded_String;
@@ -503,7 +513,8 @@ package body App.Pages is
       --  Add navigation bar for authenticated pages
       declare
          Current_Path : constant String := Web.Request.Path (Request);
-         Nav_Bar : constant String := Generate_Nav_Bar (Current_Path);
+         Nav_Bar : constant String :=
+           Generate_Nav_Bar (Current_Path, Clearance_Of (Context));
       begin
          --  Insert nav bar before the main content
          Page := To_Unbounded_String

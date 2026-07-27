@@ -9,6 +9,7 @@ with Web.Server;
 
 with App.Pages;
 with App.Csrf;
+with App.Nav;
 with App.Projects;
 with App.Runtime;
 with App.State;
@@ -184,6 +185,25 @@ package body App.Http_Support is
          App.Auth.Revoke_Session (Token);
          Check (Status_Of ("GET", "/secure", Sid) = 303,
                 "http: a revoked identity session is anonymous at once");
+      end;
+
+      --  Navigation library: the anonymous->login redirect is built by route
+      --  name (reverse URL), and the nav menu highlights the active page and is
+      --  filtered by clearance (fail-closed for anonymous).
+      declare
+         To_Login  : constant Web.Response.Response_Type := App.Nav.Redirect ("login");
+         Menu_Auth : constant String := App.Nav.Menu_Html ("/projects", 100);
+         Menu_Anon : constant String := App.Nav.Menu_Html ("/", 0);
+      begin
+         Check (Web.Response.Status (To_Login) = 303
+                and then Web.Response.Header (To_Login, "Location") = "/login",
+                "nav: reverse-URL redirect targets the login route");
+         Check (Ada.Strings.Fixed.Index (Menu_Auth, "href=""/projects""") > 0,
+                "nav: menu links items by reverse URL");
+         Check (Ada.Strings.Fixed.Index (Menu_Auth, "class=""active""") > 0,
+                "nav: menu highlights the active page from the path");
+         Check (Menu_Anon = "",
+                "nav: menu is empty for anonymous (fail-closed visibility)");
       end;
 
       --  Add-project reject path: the handler decodes the urlencoded body via

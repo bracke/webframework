@@ -57,6 +57,14 @@ runs guards. All the meaning lives in the app packages below.
   verifies it before acting — a request without a valid token gets `403`. Because
   the token is bound to the session, one issued to another session cannot be
   replayed. `app_http_tests` asserts both the accepted and the `403` paths.
+- **Navigation.** `App.Nav` (over the `navigation` library + `webframework_
+  navigation` bridge) holds one named route table and one menu. Redirects target
+  a **route name**, not a hand-typed path (the anonymous → login redirect is
+  reverse-URL built). The nav bar is rendered from the menu: the active page is
+  highlighted from the request path, and items are filtered by the viewer's
+  clearance — navigation's fail-closed **visibility seam wired to authorization**
+  (an anonymous caller sees an empty menu). `app_http_tests` checks the redirect,
+  the reverse-URL links, the active marker, and the empty-for-anonymous menu.
 - **Per-action live authorization.** `profile.save` over the WebSocket is gated
   by a dispatcher action guard; a viewer's attempt is rejected before the
   handler runs — presentation and execution are authorized separately.

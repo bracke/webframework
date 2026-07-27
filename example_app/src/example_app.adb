@@ -11,6 +11,7 @@ with App.Auth;
 with App.Auth_Handlers;
 with App.Authz;
 with App.Guards;
+with App.Nav;
 with App.Projects;
 with App.Counter;
 with App.Database;

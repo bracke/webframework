@@ -5,18 +5,17 @@ with Identity.Assurance.Levels;
 with App.Runtime;
 with App.Auth;
 with App.Authz;
+with App.Nav;
+pragma Elaborate_All (App.Nav);
+--  App.Nav's routes must be built before this body instantiates the guard,
+--  which captures the anonymous->login reverse-URL redirect at elaboration.
 
 package body App.Guards is
 
-   --  A 303 redirect to the login page, used when an anonymous caller hits a
-   --  protected route.
+   --  A 303 redirect to the login page (by route name), used when an anonymous
+   --  caller hits a protected route.
    function Login_Redirect return Web.Response.Response_Type is
-      Result : Web.Response.Response_Type :=
-        Web.Response.Create (303, "", "text/plain; charset=utf-8");
-   begin
-      Web.Response.Set_Header (Result, "Location", "/login");
-      return Result;
-   end Login_Redirect;
+     (App.Nav.Redirect ("login"));
 
    --  The authorization guard: anonymous -> /login, denied -> 403, allowed ->
    --  proceed. The decision itself comes from App.Authz through the bridge.
