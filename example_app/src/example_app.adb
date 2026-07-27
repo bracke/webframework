@@ -445,7 +445,9 @@ begin
    App.Runtime.Get
      ("/attachments", App.Pages.Attachments'Access,
       App.Guards.Require_App_Access'Access);
-   App.Runtime.Post
+   --  Streaming upload: the body is never buffered, so an arbitrarily large file
+   --  is written straight to storage. Guarded like the other attachment routes.
+   App.Runtime.Post_Stream
      ("/attachments/upload", App.Pages.Upload_Attachment'Access,
       App.Guards.Require_App_Access'Access);
    App.Runtime.Get

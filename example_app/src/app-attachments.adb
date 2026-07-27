@@ -13,9 +13,12 @@ with Webfiles.Service.Deletion;
 with Webfiles.References;
 with Webfiles.Void_Results;
 
+with Webfiles.Filenames;
+
 with Webfiles_Storage_Local;
 with Webfiles_Repository_Memory;
 with Webfiles_Webframework;
+with Webfiles_Webframework.Streaming;
 with Webfiles_Runtime.System_Clock;
 with Webfiles_Runtime.Csprng_Ids;
 
@@ -36,7 +39,10 @@ package body App.Attachments is
    Service_Instance : Svc.Instance;
    Started          : Boolean := False;
 
-   Max_Upload : constant Webfiles.Byte_Count := 8 * 1024 * 1024;
+   --  The streaming lane is not bounded by the server's request-size cap (the
+   --  body is never buffered), so uploads can be much larger; the session
+   --  enforces this ceiling.
+   Max_Upload : constant Webfiles.Byte_Count := 64 * 1024 * 1024;
 
    function Sixteen (V : Stream_Element) return Stream_Element_Array is
      ([1 .. 16 => V]);
@@ -258,6 +264,47 @@ package body App.Attachments is
          Ok := Added;
       end;
    end Upload_From;
+
+   procedure Stream_Upload
+     (Body_R   : in out Web.Http_Body.Reader;
+      Boundary : String;
+      Ok       : out Boolean)
+   is
+      Found     : Boolean;
+      Filename  : Webfiles.Filenames.Display_Filename;
+      Size      : Webfiles.Byte_Count;
+      Staged    : Life.Staged_Results.Result;
+      Committed : Life.Committed_Results.Result;
+      Added     : Boolean;
+   begin
+      Ok := False;
+      Webfiles_Webframework.Streaming.Stream_First_File
+        (Service   => Service_Instance,
+         Scope     => Demo_Scope,
+         Body_R    => Body_R,
+         Boundary  => Boundary,
+         Max_Size  => Max_Upload,
+         Operation => Fresh_Operation,
+         Found     => Found,
+         Filename  => Filename,
+         Size      => Size,
+         Result    => Staged);
+      if not Found or else not Life.Staged_Results.Is_Ok (Staged) then
+         return;
+      end if;
+      Life.Commit (Service_Instance, Staged.Value, Committed);
+      if not Life.Committed_Results.Is_Ok (Committed) then
+         return;
+      end if;
+      declare
+         Name : constant String := Webfiles.Filenames.Display.Octets (Filename);
+      begin
+         Store.Add
+           ((if Name = "" then "attachment" else Name),
+            Size, Committed.Value, Added);
+         Ok := Added;
+      end;
+   end Stream_Upload;
 
    function Download (Number : Doc_Number) return Web.Response.Response_Type is
       Found     : Boolean;

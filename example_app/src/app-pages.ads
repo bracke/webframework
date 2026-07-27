@@ -1,6 +1,7 @@
 with Web.Request;
 with Web.Response;
 with Web.Context;
+with Web.Http_Body;
 
 --  Page rendering API for HTTP routes in the example application.
 package App.Pages is
@@ -103,11 +104,13 @@ package App.Pages is
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type;
 
-   --  Multipart upload handler: CSRF-checked, ingests + commits the file, then
-   --  redirects back to the attachments page. Guarded.
+   --  Streaming multipart upload handler: the body is streamed straight into
+   --  storage (no buffering), so it is registered with Post_Stream. The CSRF
+   --  token travels in the query string (?csrf=...) so it is verified before the
+   --  body is read. Redirects back to the attachments page. Guarded.
    function Upload_Attachment
      (Request : Web.Request.Request_Type;
-      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+      Body_R  : in out Web.Http_Body.Reader) return Web.Response.Response_Type;
 
    --  Stream a stored attachment (query parameter doc=N). Guarded.
    function Download_Attachment

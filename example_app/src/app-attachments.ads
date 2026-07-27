@@ -1,5 +1,6 @@
 with Web.Request;
 with Web.Response;
+with Web.Http_Body;
 
 with Webfiles;
 
@@ -44,6 +45,15 @@ package App.Attachments is
      (Request : Web.Request.Request_Type;
       Actor   : String;
       Ok      : out Boolean);
+
+   --  Stream a multipart upload straight into storage (no whole-file buffering),
+   --  commit it, and add it to the catalog. Boundary comes from the request's
+   --  Content-Type. Ok is False when no usable file was found or the commit
+   --  failed. This is the large-upload path.
+   procedure Stream_Upload
+     (Body_R   : in out Web.Http_Body.Reader;
+      Boundary : String;
+      Ok       : out Boolean);
 
    --  Stream a stored attachment as an HTTP attachment, or a not-found response.
    function Download (Number : Doc_Number) return Web.Response.Response_Type;

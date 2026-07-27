@@ -725,10 +725,11 @@ package body App.Pages is
       P ("<div class=""panel""><h1>Attachments</h1>");
       P ("<p>Upload a file &mdash; it is staged, integrity-hashed, committed to "
          & "durable storage, and served back on demand.</p>");
-      P ("<form method=""post"" action=""/attachments/upload"" "
-         & "enctype=""multipart/form-data"">");
-      P ("<input type=""hidden"" name=""" & App.Csrf.Field & """ value=""");
-      P (Web.Html.Escape_Attribute (Token) & """>");
+      --  The body is streamed, so the CSRF token rides in the query string
+      --  (verified before the body is read), not as a form field.
+      P ("<form method=""post"" action=""/attachments/upload?csrf="
+         & Web.Html.Escape_Attribute (Token)
+         & """ enctype=""multipart/form-data"">");
       P ("<input type=""file"" name=""document"" required> ");
       P ("<button type=""submit"">Upload</button></form>");
       if Count = 0 then
@@ -805,44 +806,25 @@ package body App.Pages is
 
    function Upload_Attachment
      (Request : Web.Request.Request_Type;
-      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+      Body_R  : in out Web.Http_Body.Reader) return Web.Response.Response_Type
    is
-      pragma Unreferenced (Context);
       Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
-      Body_Text  : constant String := Web.Request.Request_Body (Request);
       Content_T  : constant String := Web.Request.Header (Request, "Content-Type");
       Boundary   : constant String := Web.Multipart.Boundary_Of (Content_T);
-      Parts      : Web.Multipart.Part_Array (1 .. 32);
-      Count      : Natural;
-      Status     : Web.Multipart.Parse_Status;
-      Csrf_Value : Unbounded_String;
+      Csrf_Token : constant String :=
+        Param_Value (Web.Request.Query_String (Request), "csrf");
       Uploaded   : Boolean;
-      use type Web.Multipart.Parse_Status;
-      use type Web.Multipart.Part_Kind;
    begin
+      --  The body is streamed, so the CSRF token travels in the query and is
+      --  checked before a single byte is read into storage.
+      if not App.Csrf.Verify_Token (Session_Id, Csrf_Token) then
+         return Web.Response.Forbidden ("invalid csrf token");
+      end if;
       if Boundary = "" then
          return Web.Response.Bad_Request ("expected multipart/form-data");
       end if;
-      Web.Multipart.Parse (Body_Text, Boundary, Parts, Count, Status);
-      if Status /= Web.Multipart.Ok then
-         return Web.Response.Bad_Request ("malformed upload");
-      end if;
-      for I in 1 .. Count loop
-         if Parts (I).Kind = Web.Multipart.Field_Part
-           and then To_String (Parts (I).Name) = App.Csrf.Field
-           and then Parts (I).Last >= Parts (I).First
-         then
-            Csrf_Value :=
-              To_Unbounded_String (Body_Text (Parts (I).First .. Parts (I).Last));
-         end if;
-      end loop;
 
-      if not App.Csrf.Verify_Token (Session_Id, To_String (Csrf_Value)) then
-         return Web.Response.Forbidden ("invalid csrf token");
-      end if;
-
-      App.Attachments.Upload_From
-        (Request, Actor => "example-user", Ok => Uploaded);
+      App.Attachments.Stream_Upload (Body_R, Boundary, Uploaded);
       if not Uploaded then
          Web.Logging.Error (Log_Tag (Request) & "attachment was not accepted");
       end if;

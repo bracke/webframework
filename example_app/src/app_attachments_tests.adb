@@ -1,9 +1,11 @@
 with Ada.Command_Line;
 with Ada.Text_IO;
+with Ada.Streams; use Ada.Streams;
 
 with Web.Request;
 with Web.Response;
 with Web.Context;
+with Web.Http_Body;
 
 with App.Attachments;
 with App.Pages;
@@ -39,29 +41,43 @@ procedure App_Attachments_Tests is
       end if;
    end Check;
 
-   function Upload_Body (Token, Filename, Content : String) return String is
+   --  A multipart body carrying just the file part (the CSRF token rides in the
+   --  query, not the body, for the streaming lane).
+   function File_Body (Filename, Content : String) return String is
      ("--" & Boundary & CRLF
-      & "Content-Disposition: form-data; name=""" & App.Csrf.Field & """" & CRLF
-      & CRLF & Token & CRLF
-      & "--" & Boundary & CRLF
       & "Content-Disposition: form-data; name=""document""; filename="""
       & Filename & """" & CRLF
       & "Content-Type: text/plain" & CRLF & CRLF
       & Content & CRLF
       & "--" & Boundary & "--" & CRLF);
 
-   function Multipart_Upload
-     (Sid, Token, Filename, Content : String) return Web.Request.Request_Type
+   function To_SEA (S : String) return Stream_Element_Array is
+      R : Stream_Element_Array (1 .. S'Length);
+   begin
+      for I in S'Range loop
+         R (Stream_Element_Offset (I - S'First + 1)) :=
+           Stream_Element (Character'Pos (S (I)));
+      end loop;
+      return R;
+   end To_SEA;
+
+   --  Drive the streaming upload handler with a memory-mode body reader.
+   function Do_Upload
+     (Sid, Csrf, Filename, Content : String) return Web.Response.Response_Type
    is
+      Body_Text : constant String := File_Body (Filename, Content);
       Req : Web.Request.Request_Type :=
-        Web.Request.Create ("POST", "/attachments/upload", "",
-                            Upload_Body (Token, Filename, Content));
+        Web.Request.Create ("POST", "/attachments/upload", "csrf=" & Csrf, "");
+      Reader : Web.Http_Body.Reader;
    begin
       Web.Request.Set_Header
         (Req, "Content-Type", "multipart/form-data; boundary=" & Boundary);
       Web.Request.Set_Header (Req, "Cookie", "wf_session=" & Sid);
-      return Req;
-   end Multipart_Upload;
+      Web.Http_Body.Start
+        (Reader, Conn => null, Leftover => To_SEA (Body_Text),
+         Content_Length => Body_Text'Length);
+      return App.Pages.Upload_Attachment (Req, Reader);
+   end Do_Upload;
 
    Ctx    : constant Web.Context.Request_Context := Web.Context.New_Context;
    Status : App.Attachments.Init_Status;
@@ -80,9 +96,8 @@ begin
       Token : constant String := App.Csrf.Token (Sid);
       Resp  : Web.Response.Response_Type;
    begin
-      --  Upload with a valid token.
-      Resp := App.Pages.Upload_Attachment
-        (Multipart_Upload (Sid, Token, "notes.txt", "hello attachment"), Ctx);
+      --  Upload with a valid token (streamed into storage).
+      Resp := Do_Upload (Sid, Token, "notes.txt", "hello attachment");
       Check (Web.Response.Status (Resp) = 303, "upload commits and redirects");
 
       --  It appears in the catalog.
@@ -108,9 +123,8 @@ begin
                 "download returns the stored bytes (durable round-trip)");
       end;
 
-      --  A wrong CSRF token is refused.
-      Resp := App.Pages.Upload_Attachment
-        (Multipart_Upload (Sid, "deadbeef", "evil.txt", "nope"), Ctx);
+      --  A wrong CSRF token is refused before any body is read.
+      Resp := Do_Upload (Sid, "deadbeef", "evil.txt", "nope");
       Check (Web.Response.Status (Resp) = 403, "upload with a bad csrf is 403");
 
       --  Delete, then the catalog is empty again.
