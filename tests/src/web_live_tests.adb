@@ -329,10 +329,10 @@ package body Web_Live_Tests is
       Assert
         (Ada.Strings.Fixed.Index (Test_Live.Session_Cookie_Header (Session), "; Secure") > 0,
          "secure cookie attribute emitted");
-      Response := Test_Live.Html_Response (Web.Request.Create ("GET", "/"), "<p>ok</p>");
+      Response := Test_Live.Html_Response (Session, "<p>ok</p>");
       Assert
         (Ada.Strings.Fixed.Index (Web.Response.Header (Response, "Set-Cookie"), "wf_session=") = 1,
-         "request html response helper sets session cookie");
+         "html response helper sets session cookie for a resolved session");
 
       Config.Secure_Cookies := False;
       Config.Session_Timeout := 3_600;

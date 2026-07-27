@@ -43,13 +43,6 @@ package body Web.Application is
       return Live.Html_Response (Session, Content);
    end Html_Response;
 
-   function Html_Response
-     (Request : Web.Request.Request_Type;
-      Content : String) return Web.Response.Response_Type is
-   begin
-      return Live.Html_Response (Request, Content);
-   end Html_Response;
-
    procedure Configure (Config : Web.Config.Config_Type) is
    begin
       Live.Configure (Config);

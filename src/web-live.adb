@@ -822,14 +822,6 @@ package body Web.Live is
       return Response;
    end Html_Response;
 
-   function Html_Response
-     (Request : Web.Request.Request_Type;
-      Content : String) return Web.Response.Response_Type
-   is
-   begin
-      return Html_Response (Find_Or_Create_Session (Request), Content);
-   end Html_Response;
-
    procedure Configure (Config : Web.Config.Config_Type) is
    begin
       if Config.Max_WebSocket_Message = 0 then

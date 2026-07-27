@@ -18,6 +18,14 @@ package Web.Live is
    type State_Process is access procedure (State : in out App_State);
 
    --  Find or create a session for a request.
+   --
+   --  This is side-effecting: for a request that carries no (valid) session
+   --  cookie it CREATES a fresh session and returns a new id, so two calls for
+   --  the same cookieless request return DIFFERENT ids. Resolve the session
+   --  ONCE per request into a local and reuse that id -- both to set the cookie
+   --  (Html_Response) and to derive anything bound to the session (e.g. a CSRF
+   --  token). Resolving twice would bind the token to one session and the
+   --  cookie to another.
    --  @param Request HTTP request.
    --  @return Session id.
    function Find_Or_Create_Session (Request : Web.Request.Request_Type) return String;
@@ -46,19 +54,14 @@ package Web.Live is
    --  @return Set-Cookie header value.
    function Session_Cookie_Header (Id : String) return String;
 
-   --  Build an HTML response that carries the session cookie.
+   --  Build an HTML response that carries the session cookie for an
+   --  already-resolved session. The caller resolves the session once (see
+   --  Find_Or_Create_Session) and passes that id, so the cookie and anything
+   --  else derived from the session always name the same session.
    --  @param Session Session id.
    --  @param Content HTML body.
    --  @return HTTP response.
    function Html_Response (Session : String; Content : String) return Web.Response.Response_Type;
-
-   --  Find or create a session and build an HTML response carrying its cookie.
-   --  @param Request HTTP request.
-   --  @param Content HTML body.
-   --  @return HTTP response.
-   function Html_Response
-     (Request : Web.Request.Request_Type;
-      Content : String) return Web.Response.Response_Type;
 
    --  Apply session settings from framework configuration.
    --  @param Config Framework configuration.

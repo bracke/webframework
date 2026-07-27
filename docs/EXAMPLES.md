@@ -53,11 +53,15 @@ Use `Find_Or_Create_Session` during full-page rendering and
 App.Runtime.Register ("counter.increment", App.Counter.Increment'Access);
 ```
 
-For the common full-page case, `Html_Response` can find or create the session
-and attach the cookie in one call:
+For the common full-page case, resolve the session once and pass its id to
+`Html_Response`, which attaches the cookie. Reuse that same id anywhere else the
+session is needed (for example a CSRF token) so the cookie and the token always
+name the same session:
 
 ```ada
-return App.Runtime.Html_Response (Request, Rendered_Page);
+Session : constant String := App.Runtime.Find_Or_Create_Session (Request);
+...
+return App.Runtime.Html_Response (Session, Rendered_Page);
 ```
 
 `App.Runtime` uses an internal dispatcher; apps register actions through it

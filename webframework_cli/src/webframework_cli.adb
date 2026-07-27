@@ -678,9 +678,9 @@ package body Webframework_Cli is
         & "--  App.Live controls session lookup/creation, websocket wiring, and" & LF
         & "--  handler dispatch against the active per-session state." & LF
         & "--" & LF
-        & "--  Rendered pages should call App.Runtime.Html_Response so session" & LF
-        & "--  cookies and state handoff are always consistent with framework" & LF
-        & "--  conventions." & LF
+        & "--  Rendered pages resolve the session once (Find_Or_Create_Session)" & LF
+        & "--  and pass its id to App.Runtime.Html_Response, so the cookie and any" & LF
+        & "--  session-bound token always name the same session." & LF
         & "--" & LF
         & "--  Websocket events are processed through this package, and the app" & LF
         & "--  only provides a typed state type plus the dispatch function." & LF
@@ -710,11 +710,14 @@ package body Webframework_Cli is
         & "--  Route handlers are intentionally defensive and return clear errors." & LF
         & "package body App.Pages is" & LF
         & "   --  Handle the default root route." & LF
-        & "   --  Uses App.Runtime.Html_Response so cookie/session behavior is automatic." & LF
+        & "   --  Resolve the session once, then pass its id to Html_Response so the" & LF
+        & "   --  cookie (and any session-bound token) stay consistent on a first visit." & LF
         & "   function Home (Request : Web.Request.Request_Type) return Web.Response.Response_Type is" & LF
+        & "      Session : constant String :=" & LF
+        & "        App.Runtime.Find_Or_Create_Session (Request);" & LF
         & "   begin" & LF
         & "      return App.Runtime.Html_Response" & LF
-        & "        (Request, ""<!doctype html><html><body><main id=""""app"""">Home</main></body></html>"");" & LF
+        & "        (Session, ""<!doctype html><html><body><main id=""""app"""">Home</main></body></html>"");" & LF
         & "   --  Defensive fallback: keep process alive if this route has a bug." & LF
         & "   exception" & LF
         & "      when Error : others =>" & LF
@@ -1026,8 +1029,15 @@ package body Webframework_Cli is
         & "   --  Render the page and convert any failures into HTTP 500." & LF
         & "   function " & Function_Name
         & " (Request : Web.Request.Request_Type) return Web.Response.Response_Type is" & LF
+        & "      --  Resolve the session once and reuse its id for the cookie (and"
+        & LF
+        & "      --  any session-bound token), so a first cookieless visit stays"
+        & LF
+        & "      --  consistent." & LF
+        & "      Session : constant String :="
+        & " App.Runtime.Find_Or_Create_Session (Request);" & LF
         & "   begin" & LF
-        & "      return App.Runtime.Html_Response (Request, ""<main id="""""
+        & "      return App.Runtime.Html_Response (Session, ""<main id="""""
         & To_File_Stem (Page_Name) & """"">" & Page_Name & "</main>"");" & LF
         & "   --  Preserve process availability when a template/markup error happens." & LF
         & "   exception" & LF

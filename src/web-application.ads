@@ -74,20 +74,15 @@ package Web.Application is
    --  @return Set-Cookie header value.
    function Session_Cookie_Header (Id : String) return String;
 
-   --  Build an HTML response with the session cookie attached.
+   --  Build an HTML response with the session cookie attached, for a session
+   --  the caller has already resolved (once) via Find_Or_Create_Session. Pass
+   --  that same id anywhere else the session is needed (e.g. a CSRF token) so
+   --  the cookie and the token always name the same session.
    --  @param Session Session identifier.
    --  @param Content HTML content.
    --  @return HTTP response.
    function Html_Response
      (Session : String; Content : String) return Web.Response.Response_Type;
-
-   --  Find or create a session and return an HTML response with cookie.
-   --  @param Request Parsed HTTP request.
-   --  @param Content HTML content.
-   --  @return HTTP response.
-   function Html_Response
-     (Request : Web.Request.Request_Type;
-      Content : String) return Web.Response.Response_Type;
 
    --  Configure session and websocket behavior.
    --  @param Config Framework configuration.
