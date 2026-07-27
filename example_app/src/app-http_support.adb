@@ -261,6 +261,9 @@ package body App.Http_Support is
          Login_No_Csrf : constant Web.Response.Response_Type :=
            App.Pages.Api_Login
              (Web.Request.Create ("POST", "/api/login", "", "username=x&password=y"));
+         Good_Login : constant Web.Response.Response_Type :=
+           App.Pages.Api_Login
+             (Csrf_Post ("/api/login", "username=admin&password=admin123", Sid));
       begin
          Check (Web.Response.Status (Zero_Id) = 400,
                 "http: delete with a non-positive id is rejected (400)");
@@ -270,6 +273,8 @@ package body App.Http_Support is
                 "http: login with a blank username is rejected (400)");
          Check (Web.Response.Status (Login_No_Csrf) = 403,
                 "http: login without a CSRF token is refused (403)");
+         Check (Web.Response.Status (Good_Login) = 200,
+                "http: valid login succeeds (credentials forms-decoded)");
       end;
 
       --  Add-project success round-trip: a valid body is decoded, validated and

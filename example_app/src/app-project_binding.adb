@@ -1,101 +1,75 @@
-with Web.Binding;
-with Web.Binding.Paths;
-with Web.Binding.Codecs.URL_Encoded;
-with Web.Binding.Sources;
-with Web.Binding.Streams.Memory;
-with Web.Binding.Policies;
-with Web.Binding.Decoders.Integer_Decoders;
+with Webframework_Forms;
+with Forms.Submission;
+with Forms.Urlencoded;
+with Forms.Values;
 
 package body App.Project_Binding is
 
-   package URL renames Web.Binding.Codecs.URL_Encoded;
-   package Src renames Web.Binding.Sources;
-   package Mem renames Web.Binding.Streams.Memory;
-   package BP renames Web.Binding.Paths;
-   use Web.Binding.Policies;
-   use type URL.Parse_Outcome;
-   use type Src.Resolution_State;
+   package WF renames Webframework_Forms;
 
-   package Int_Dec is new Web.Binding.Decoders.Integer_Decoders (Integer);
+   use type Forms.Urlencoded.Decode_Status;
+   use type Forms.Values.Coerce_Status;
 
-   --  Parse the request body as an urlencoded form. Ok is False on a codec
-   --  failure (too many fields / oversized).
-   procedure Parse_Body
-     (Request : Web.Request.Request_Type;
-      Form    : out URL.Form_Source;
-      Ok      : out Boolean)
+   --  A field's decoded string value ("" if absent).
+   function Field (Sub : Forms.Submission.Data; Name : String) return String is
+     (WF.To_String (Forms.Submission.Value_Of (Sub, WF.To_Bytes (Name))));
+
+   --  A checkbox/boolean field, coerced with the forms library's lenient HTML
+   --  semantics (1/true/on/yes -> True; absent/"" -> False).
+   function Bool_Field (Sub : Forms.Submission.Data; Name : String) return Boolean
    is
-      Body_Content : constant String := Web.Request.Request_Body (Request);
-      Stream       : Mem.Memory_Stream := Mem.Create (Body_Content);
-      Outcome      : URL.Parse_Outcome;
+      Result : Boolean;
+      Status : Forms.Values.Coerce_Status;
    begin
-      URL.Parse (Stream, Form, Outcome, URL.Default_Config);
-      Ok := Outcome = URL.Parsed;
-   end Parse_Body;
-
-   --  Resolve a single form field to its raw decoded value (empty when absent).
-   function Field (Form : URL.Form_Source; Name : String) return String is
-      Occ : constant Src.Occurrences := URL.Lookup (Form, Name);
-      Res : constant Src.Scalar_Resolution :=
-        Src.Resolve_Scalar
-          (Occ, Duplicates => Use_First, On_Empty => Allow_And_Decode);
-   begin
-      if Res.State = Src.Resolved_Value or else Res.State = Src.Resolved_Empty
-      then
-         return Src.Value (Occ, Res.Index);
-      else
-         return "";
-      end if;
-   end Field;
-
-   function Parse_Bool (Value : String) return Boolean is
-     (Value = "true" or else Value = "1" or else Value = "yes");
+      Forms.Values.To_Boolean
+        (Forms.Submission.Value_Of (Sub, WF.To_Bytes (Name)), Result, Status);
+      return Status = Forms.Values.Coerce_Ok and then Result;
+   end Bool_Field;
 
    function Bind (Request : Web.Request.Request_Type) return Project_Form is
-      Form   : URL.Form_Source;
-      Ok     : Boolean;
+      Sub    : Forms.Submission.Data (32, 16384);
+      Status : Forms.Urlencoded.Decode_Status;
       Result : Project_Form;
    begin
-      Parse_Body (Request, Form, Ok);
-      if not Ok then
+      WF.Read_Urlencoded (Request, Sub, Status);
+      if Status /= Forms.Urlencoded.Decode_Ok then
          Result.Decoded := False;
          return Result;
       end if;
 
-      Result.Name              := To_Unbounded_String (Field (Form, "name"));
-      Result.Status            := To_Unbounded_String (Field (Form, "status"));
-      Result.Project_Type      := To_Unbounded_String (Field (Form, "project_type"));
-      Result.Functions         := To_Unbounded_String (Field (Form, "functions"));
-      Result.Has_Project_Tools := Parse_Bool (Field (Form, "has_project_tools"));
-      Result.Has_GNAT          := Parse_Bool (Field (Form, "has_gnat"));
-      Result.Has_GitHub        := Parse_Bool (Field (Form, "has_github"));
-      Result.Has_Alire         := Parse_Bool (Field (Form, "has_alire"));
+      Result.Name              := To_Unbounded_String (Field (Sub, "name"));
+      Result.Status            := To_Unbounded_String (Field (Sub, "status"));
+      Result.Project_Type      := To_Unbounded_String (Field (Sub, "project_type"));
+      Result.Functions         := To_Unbounded_String (Field (Sub, "functions"));
+      Result.Has_Project_Tools := Bool_Field (Sub, "has_project_tools");
+      Result.Has_GNAT          := Bool_Field (Sub, "has_gnat");
+      Result.Has_GitHub        := Bool_Field (Sub, "has_github");
+      Result.Has_Alire         := Bool_Field (Sub, "has_alire");
       return Result;
    end Bind;
 
-   Id_Path : constant BP.Field_Path :=
-     BP.Append_Field (BP.Rooted (Web.Binding.URL_Encoded_Field), "id");
-
    function Bind_Delete (Request : Web.Request.Request_Type) return Delete_Form is
-      Form   : URL.Form_Source;
-      Ok     : Boolean;
+      Sub    : Forms.Submission.Data (8, 4096);
+      Status : Forms.Urlencoded.Decode_Status;
       Result : Delete_Form;
    begin
-      Parse_Body (Request, Form, Ok);
-      if not Ok then
+      WF.Read_Urlencoded (Request, Sub, Status);
+      if Status /= Forms.Urlencoded.Decode_Ok then
          Result.Decoded := False;
          return Result;
       end if;
 
       declare
-         Id_Text : constant String := Field (Form, "id");
-         Decoded : constant Int_Dec.Results.Result :=
-           Int_Dec.Decode (Id_Text, Id_Path, Web.Binding.URL_Encoded_Field);
+         Id_Bytes : constant WF.Byte_Array :=
+           Forms.Submission.Value_Of (Sub, WF.To_Bytes ("id"));
+         Value    : Long_Long_Integer;
+         Coerce   : Forms.Values.Coerce_Status;
       begin
-         if Id_Text = "" or else not Int_Dec.Results.Succeeded (Decoded) then
+         Forms.Values.To_Integer (Id_Bytes, Value, Coerce);
+         if Id_Bytes'Length = 0 or else Coerce /= Forms.Values.Coerce_Ok then
             Result.Decoded := False;
          else
-            Result.Id := Int_Dec.Results.Value_Of (Decoded);
+            Result.Id := Integer (Value);
          end if;
       end;
       return Result;

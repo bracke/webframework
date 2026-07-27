@@ -18,9 +18,13 @@ with Templates.Values;
 with Web.Html;
 with Web.Server;
 with Web.Logging;
+with Webframework_Forms;
+with Forms.Submission;
+with Forms.Urlencoded;
 
 package body App.Pages is
    use Ada.Strings.Unbounded;
+   use type Forms.Urlencoded.Decode_Status;
 
    --  The viewer clearance carried on the request context ("clearance" fact),
    --  or 0 if none. Drives the navigation visibility filter.
@@ -234,41 +238,6 @@ package body App.Pages is
    end Read_Token_Process;
 
    --  Parse form data from request content (application/x-www-form-urlencoded)
-   procedure Parse_Form_Data
-     (Content : String;
-      Username : out Unbounded_String;
-      Password : out Unbounded_String) is
-   begin
-      Username := To_Unbounded_String ("");
-      Password := To_Unbounded_String ("");
-
-      --  Simple parsing for username=value&password=value
-      declare
-         Username_Start : constant Natural := Ada.Strings.Fixed.Index (Content, "username=") + 9;
-         Username_End : Natural;
-         Password_Start : constant Natural := Ada.Strings.Fixed.Index (Content, "password=") + 9;
-      begin
-         if Username_Start > 9 and then Username_Start <= Content'Last then
-            Username_End := Ada.Strings.Fixed.Index (Content, "&", Username_Start);
-            if Username_End = 0 then
-               Username_End := Content'Last + 1;
-            end if;
-            Username := To_Unbounded_String (Content (Username_Start .. Username_End - 1));
-         end if;
-
-         if Password_Start > 9 and then Password_Start <= Content'Last then
-            declare
-               Password_End : Natural := Ada.Strings.Fixed.Index (Content, "&", Password_Start);
-            begin
-               if Password_End = 0 then
-                  Password_End := Content'Last + 1;
-               end if;
-               Password := To_Unbounded_String (Content (Password_Start .. Password_End - 1));
-            end;
-         end if;
-      end;
-   end Parse_Form_Data;
-
    --  Render the login page with the login form template.
    function Login (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
       Context : Standard.Templates.Values.Value := Standard.Templates.Values.Object;
@@ -299,10 +268,11 @@ package body App.Pages is
 
    --  Handle login API endpoint.
    function Api_Login (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
-      Body_Content : constant String := Web.Request.Request_Body (Request);
-      Username : Unbounded_String;
-      Password : Unbounded_String;
-      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+      Sub          : Forms.Submission.Data (8, 4096);
+      Body_Status  : Forms.Urlencoded.Decode_Status;
+      Username     : Unbounded_String;
+      Password     : Unbounded_String;
+      Session_Id   : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
       --  CSRF: the POST must carry a token valid for this (anonymous) session.
       if not App.Csrf.Verify (Request, Session_Id) then
@@ -311,8 +281,18 @@ package body App.Pages is
             "application/json; charset=utf-8");
       end if;
 
-      --  Parse username and password from form data
-      Parse_Form_Data (Body_Content, Username, Password);
+      --  Decode the urlencoded body into a submission with the forms library,
+      --  then read the fields by name (percent-decoded, order-independent).
+      Webframework_Forms.Read_Urlencoded (Request, Sub, Body_Status);
+      if Body_Status /= Forms.Urlencoded.Decode_Ok then
+         return Web.Response.Bad_Request ("Malformed form body");
+      end if;
+      Username := To_Unbounded_String
+        (Webframework_Forms.To_String
+           (Forms.Submission.Value_Of (Sub, Webframework_Forms.To_Bytes ("username"))));
+      Password := To_Unbounded_String
+        (Webframework_Forms.To_String
+           (Forms.Submission.Value_Of (Sub, Webframework_Forms.To_Bytes ("password"))));
 
       --  Input-format validation only: the username must be well-formed and the
       --  password present. The generic message discloses nothing about which

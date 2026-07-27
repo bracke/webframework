@@ -2,7 +2,8 @@ with Ada.Strings.Unbounded;
 with Web.Request;
 
 --  Decodes the add-project form body (application/x-www-form-urlencoded) into
---  typed fields using the Web.Binding subsystem -- the `decode` step of the
+--  typed fields using the forms library (decode -> submission, with the boolean
+--  and integer fields coerced via Forms.Values) -- the `decode` step of the
 --  decode -> validate pipeline. Extraction only; semantic checks live in
 --  App.Project_Validation. Decoded is False when the form body itself is
 --  malformed or exceeds the codec limits.

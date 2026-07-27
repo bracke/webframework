@@ -38,18 +38,20 @@ runs guards. All the meaning lives in the app packages below.
 - **Authorization-aware data.** The `/projects` listing is planned through
   `tables`: the authorization data scope (Alire-tracked projects only) survives
   into the query, and the sensitive `functions` column is masked for viewers.
-- **Decode → validate.** The add-project API decodes the `x-www-form-urlencoded`
-  body with `Web.Binding` (`App.Project_Binding`: the URL-encoded codec over the
-  buffered body, per-field scalar resolution), then `App.Project_Validation`
+- **Decode → validate.** The form POSTs decode through the `forms` library:
+  `App.Project_Binding` and login both use `Forms.Urlencoded` → `Forms.Submission`
+  (percent-decoded, order-independent field lookup), with the project booleans and
+  the delete `id` coerced via `Forms.Values`. `App.Project_Validation` then
   validates the typed fields with the standalone `validation` library (name
   required + bounded, status required, fields within the column widths). Invalid
   input returns an HTTP 400 with the structured issues as JSON; only valid input
   reaches the database. Validation is headless — it reports issues, and the
-  handler chooses the status code. The delete endpoint decodes its `id` as a
-  typed integer (`Web.Binding`) and validates it is positive; login validates the
-  username's input format only, staying within the credential boundary (it never
-  inspects the password or reveals account existence). Covered by `app_http_tests`
-  reject-path checks and `app_tests` unit checks.
+  handler chooses the status code. Login validates the username's input format
+  only, staying within the credential boundary (it never inspects the password or
+  reveals account existence). Covered by `app_http_tests` reject-path checks and
+  `app_tests` unit checks. (The read-only projects *listing* binds its query
+  parameters through the framework's native `Web.Binding` — query params are not a
+  form body.)
 - **Session-bound CSRF.** Every state-changing HTTP POST (login, logout, project
   add/delete) is protected by `App.Csrf` over the `webframework_forms` bridge:
   each page carries a synchronizer token (an HMAC of the session under a server
