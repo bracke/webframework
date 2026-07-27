@@ -11,3 +11,4 @@
 *.bexch
 b__*.adb
 b__*.ads
+/bin/
