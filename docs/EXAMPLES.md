@@ -60,8 +60,8 @@ and attach the cookie in one call:
 return App.Runtime.Html_Response (Request, Rendered_Page);
 ```
 
-`App.Runtime` uses an internal dispatcher, so direct registration through
-`App.Dispatcher` is no longer required in new apps.
+`App.Runtime` uses an internal dispatcher; apps register actions through it
+rather than through `App.Dispatcher` directly.
 
 Unknown actions are logged and return an empty patch list.
 
