@@ -69,3 +69,19 @@ cd bridge_tools && alr build
 
 A release is accepted only when the surface, the boundary audit, and every
 build/test/demo gate pass.
+
+## Whole-slice integration gate
+
+`stack_check` builds and tests the entire web-stack slice in dependency order —
+`representation → validation → forms → navigation → webframework → the bridges` —
+so a change in an upstream library that breaks a downstream (across the
+path-pinned sibling repos) is caught by one command:
+
+```sh
+cd stack_check && alr build
+./bin/stack_check
+```
+
+Each library runs through its own `alr test` action; webframework's AUnit suite
+and `check_bridges --release` run explicitly. Exit is non-zero if any component
+fails to build or test.

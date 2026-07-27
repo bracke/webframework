@@ -1,0 +1,23 @@
+name = "stack_check"
+description = "Build + test the web-stack slice in dependency order (integration gate)"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework"
+
+project-files = ["stack_check.gpr"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+project_tools = "*"
+
+[build-profiles]
+"*" = "development"
+
+[[pins]]
+project_tools = { path = "../../project_tools" }
