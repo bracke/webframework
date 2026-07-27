@@ -3,9 +3,7 @@ with AUnit.Test_Caller;
 
 with Web.Binding;
 with Web.Binding.Paths;
-with Web.Binding.Policies;
 with Web.Binding.Auth;
-with Web.Binding.Forms;
 with Web.Binding.Decoders.UUID_Decoders;
 
 package body Web_Binding_Auth_Tests is
@@ -14,20 +12,15 @@ package body Web_Binding_Auth_Tests is
    use AUnit.Assertions;
    use Web.Binding;
    use Web.Binding.Paths;
-   use Web.Binding.Policies;
 
    package Auth renames Web.Binding.Auth;
-   package Forms renames Web.Binding.Forms;
    package UUID renames Web.Binding.Decoders.UUID_Decoders;
    use type Auth.Auth_Scheme;
-   use type Forms.Submission_State;
 
    procedure Add_Tests (Suite : AUnit.Test_Suites.Access_Test_Suite) is
    begin
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("auth header", Test_Auth_Header'Access));
-      AUnit.Test_Suites.Add_Test
-        (Suite, Caller.Create ("auth login", Test_Login'Access));
       AUnit.Test_Suites.Add_Test
         (Suite, Caller.Create ("auth resource id", Test_Resource_Id'Access));
    end Add_Tests;
@@ -57,24 +50,6 @@ package body Web_Binding_Auth_Tests is
       Assert (not Auth.Decode_Basic (Auth.Parse ("Basic !!!")).Valid,
               "malformed basic base64 rejected");
    end Test_Auth_Header;
-
-   procedure Test_Login (Item : in out Fixture) is
-      pragma Unreferenced (Item);
-      F : Forms.Form;
-   begin
-      --  A login form: the password is a Secret_Value credential field.
-      Forms.Reset (F);
-      Forms.Begin_Submission (F);
-      Forms.Record_Field (F, "username", "alice", Public_Value);
-      Forms.Record_Field (F, "password", "hunter2", Secret_Value);
-      Forms.Finish_Decoding (F);
-
-      Assert (Forms.State (F) = Forms.Decoded, "login decoded");
-      Assert (Forms.Field_Value (F, "username") = "alice", "username retained");
-      --  The credential is never retained (no re-render, no logging).
-      Assert (Forms.Field_Value (F, "password") = "", "password redacted");
-      Assert (not Forms.Field_Retained (F, "password"), "password not retained");
-   end Test_Login;
 
    procedure Test_Resource_Id (Item : in out Fixture) is
       pragma Unreferenced (Item);

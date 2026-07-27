@@ -39,7 +39,7 @@ what is landed versus pending.
 | `Web.Binding.Contexts` | per-request `Binding_Context`, body-ownership state | 2, 9 |
 | `Web.Binding.Bodies` / `Codecs` / `Codecs.*` / `Registry` | body stream, media-type + immutable codec registry | 5, 6, 9 |
 | `Web.Binding.Multipart` (+ `.Binding`) / `Uploads` | streaming multipart, typed-field helpers + upload adapter | 10, 11 |
-| `Web.Binding.Forms` / `Validation` | integration adapters (siblings absent → contracts + doubles) | 12, 13 |
+| ~~`Web.Binding.Forms` / `Validation`~~ | **removed** — the `forms`/`validation` sibling libraries now own this, consumed via the `webframework_forms` bridge | — |
 | `Web.Binding.Requests` | typed-handler entry points + response classification | 15 |
 | `Web.Binding.Diagnostics` (+ `.Recording`) | structured, redaction-safe events + sink | 16+ |
 | `Web.Binding.Testing` | test helpers for decoder authors | all |
@@ -103,7 +103,8 @@ parsers + fuzz for url/JSON/multipart), BIND-004 (deterministic error order),
 BIND-005 (Id_Key), BIND-006 (exact paths, collection/nested/JSON tests),
 BIND-007 (duplicate policy resolution), BIND-008 (decoders are pure syntax),
 BIND-009 (upload streaming, never fully buffered), BIND-010 (upload abort on
-scope exit), BIND-011 (secret redaction, Forms + hardening), BIND-012 (frozen
+scope exit), BIND-011 (secret redaction in errors/logs — hardening; retained-form
+redaction now lives in the forms library), BIND-012 (frozen
 registry + concurrent-use test), BIND-013 (builder, no reflection/layout),
 BIND-014 (decoder consumption discipline), BIND-015 (union ambiguity). The
 defensive boundary (`Web.Binding.Decoders.Guard`) converts any unexpected
@@ -370,28 +371,20 @@ and `docs/ai/BINDING.md` for the AI-oriented map.
   Memory` is the in-memory backend and test double (rolling checksum + injectable
   begin/write/finish faults). AUnit suite 106 → 110 (stream + checksum,
   per-upload / aggregate limits, injected sink failure, abort-on-scope-exit).
-- **Phase 12 — Forms integration: landed.** No Forms sibling exists, so
-  `Web.Binding.Forms` defines the adapter contract and a usable in-place form.
-  It tracks the submission lifecycle (Not_Submitted → Decoded / Decode_Failed →
-  Validated / Validation_Failed), retains submitted raw values for safe
-  re-rendering **subject to sensitivity** (Public retained; Private and Secret
-  never retained, so passwords / tokens / CSRF secrets stay blank — BIND-011),
-  and converts a bind result's structured errors into per-field errors (matched
-  by the path's leaf name) and non-field (form-level) errors. Forms consume the
-  binding output and never reparse. AUnit suite 110 → 112 (a full re-render:
-  valid and invalid field values retained, secret redacted, per-field vs
-  non-field errors; and the state transitions).
-- **Phase 13 — Validation integration: landed.** No Validation sibling exists,
-  so `Web.Binding.Validation` defines the seam: a merged `Presentation` that
-  combines a bind result's decoding errors with the validation layer's semantic
-  issues, preserving each entry's origin (From_Decoding / From_Validation) and
-  ordering decoding before validation. Decoding entries carry the stable
-  error-id key, leaf field name and rendered path; validation issues use the
-  same path form, so the two align. Binding hands validation a decoded typed
-  value and compatible paths; validation never touches the raw request and its
-  rules never live in binding descriptors. AUnit suite 112 → 114 (the marquee
-  case: decoding succeeds but a semantic rule fails; and a merged decode +
-  validation presentation preserving origin).
+- **Phase 12 — Forms integration: ~~landed~~ removed (superseded).**
+  `Web.Binding.Forms` was an in-place adapter written while no Forms sibling
+  existed — it tracked the submission lifecycle and retained values for
+  sensitivity-aware sticky re-render. The `forms` library now owns this
+  (field definitions, binding, sensitivity redaction, CSRF), consumed from a
+  handler through the **`webframework_forms`** bridge (decode → submission →
+  bind → diagnostics/sticky). `Web.Binding.Forms` has been deleted; see
+  `integration_demo`.
+- **Phase 13 — Validation integration: ~~landed~~ removed (superseded).**
+  `Web.Binding.Validation` was a merged decode+validation `Presentation` written
+  while no Validation sibling existed. The `validation` library now owns semantic
+  validation (its `Results`/`Issues`), and `Forms.Rules.Merge` folds a validation
+  result into the shared `Representation.Diagnostic_Set` the `webframework_forms`
+  bridge renders. `Web.Binding.Validation` has been deleted.
 - **Phase 14 — Identity and Authorization adapters: landed.** `Web.Binding.Auth`
   decodes the Authorization header *syntax* only — scheme (Basic / Bearer /
   Digest / Other) + raw credentials, and for Basic the base64 userid:password

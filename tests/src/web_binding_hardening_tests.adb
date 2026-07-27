@@ -4,8 +4,6 @@ with AUnit.Test_Caller;
 with Web.Binding;
 with Web.Binding.Paths;
 with Web.Binding.Errors;
-with Web.Binding.Policies;
-with Web.Binding.Forms;
 with Web.Binding.Decoders.Integer_Decoders;
 with Web.Binding.Decoders.Guard;
 with Web.Binding.Media_Types;
@@ -160,19 +158,14 @@ package body Web_Binding_Hardening_Tests is
 
    procedure Test_Redaction (Item : in out Fixture) is
       pragma Unreferenced (Item);
-      use Web.Binding.Policies;
-      F : Web.Binding.Forms.Form;
       E : constant Decoding_Error :=
         Make_Error (Decode_Invalid_Integer,
                     Append_Field (Rooted (Structured_Body), "token"),
                     Structured_Body);
    begin
-      Web.Binding.Forms.Reset (F);
-      Web.Binding.Forms.Begin_Submission (F);
-      Web.Binding.Forms.Record_Field (F, "token", "SECRETVALUE", Secret_Value);
-      Assert (Web.Binding.Forms.Field_Value (F, "token") = "",
-              "secret field value not retained");
       --  A decoding error carries only the path and id, never the raw value.
+      --  (Form-field sensitivity redaction is now covered by the forms library
+      --  and the webframework_forms bridge.)
       Assert (Param_Strings.To_String (E.Parameters.Expected_Type) /= "SECRETVALUE"
                 and then Param_Strings.To_String (E.Parameters.Actual_Kind)
                            /= "SECRETVALUE",

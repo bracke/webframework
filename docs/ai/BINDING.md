@@ -22,9 +22,11 @@ validation, auth, storage, or rendering. Full guide: `../BINDING.md`.
   `Web.Binding.Codecs.URL_Encoded` / `.JSON` (+ `.JSON.Binding`) / `Multipart`,
   `Web.Binding.Media_Types`, `Web.Binding.Codecs.Registry`, `Web.Binding.Uploads`
   (+ `.Memory`).
-- Integration: `Web.Binding.Forms`, `Web.Binding.Validation`, `Web.Binding.Auth`,
-  `Web.Binding.Contexts`, `Web.Binding.Requests` (Classify + Dispatch),
-  `Web.Binding.Diagnostics` (+ `.Recording`) — redaction-safe event sink.
+- Integration: `Web.Binding.Auth`, `Web.Binding.Contexts`,
+  `Web.Binding.Requests` (Classify + Dispatch), `Web.Binding.Diagnostics`
+  (+ `.Recording`) — redaction-safe event sink. (Forms/Validation integration
+  now lives in the `forms`/`validation` libraries + the `webframework_forms`
+  bridge; the former `Web.Binding.Forms`/`Validation` adapters were removed.)
 
 ## Instantiation patterns
 

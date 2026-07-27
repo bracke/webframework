@@ -4,8 +4,9 @@ with Web.Request;
 --  parameters into a typed record. Demonstrates the source -> decoder ->
 --  record-binder pipeline. The listing is read-only, so binding is fail-soft:
 --  a malformed value falls back to the seeded default rather than erroring the
---  request (a form endpoint would surface the errors through Web.Binding.Forms
---  and a typed handler instead).
+--  request (a form endpoint would instead define its fields with the forms
+--  library and surface bind/validation errors through the webframework_forms
+--  bridge -- see integration_demo).
 package App.Query_Binding is
 
    type Page_Number is range 1 .. 100_000;

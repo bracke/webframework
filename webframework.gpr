@@ -76,8 +76,6 @@ project Webframework is
       "Web.Binding.Multipart.Binding",
       "Web.Binding.Uploads",
       "Web.Binding.Uploads.Memory",
-      "Web.Binding.Forms",
-      "Web.Binding.Validation",
       "Web.Binding.Auth",
       "Web.Binding.Contexts",
       "Web.Binding.Requests",

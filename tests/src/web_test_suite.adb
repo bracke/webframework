@@ -11,8 +11,6 @@ with Web_Binding_Union_Tests;
 with Web_Binding_Media_Tests;
 with Web_Binding_Multipart_Tests;
 with Web_Binding_Upload_Tests;
-with Web_Binding_Form_Tests;
-with Web_Binding_Validation_Tests;
 with Web_Binding_Auth_Tests;
 with Web_Binding_Handler_Tests;
 with Web_Binding_Hardening_Tests;
@@ -48,8 +46,6 @@ package body Web_Test_Suite is
       Web_Binding_Media_Tests.Add_Tests (Result);
       Web_Binding_Multipart_Tests.Add_Tests (Result);
       Web_Binding_Upload_Tests.Add_Tests (Result);
-      Web_Binding_Form_Tests.Add_Tests (Result);
-      Web_Binding_Validation_Tests.Add_Tests (Result);
       Web_Binding_Auth_Tests.Add_Tests (Result);
       Web_Binding_Handler_Tests.Add_Tests (Result);
       Web_Binding_Hardening_Tests.Add_Tests (Result);
