@@ -11,11 +11,13 @@ with Webframework_Forms;
 
 with Site;
 
---  Drives the Site handlers with synthetic requests (via the Parse_Request test
---  seam -- no socket) to demonstrate the full loop end to end: a GET issues a
---  CSRF cookie and renders the chrome + form; a valid POST verifies CSRF,
---  validates, and redirects; an invalid POST re-renders sticky with errors; a
---  POST without the cookie is refused.
+--  Registers the Site handlers with the framework and drives them through the
+--  real router (Web.Server.Dispatch) with synthetic requests (via the
+--  Parse_Request test seam -- no socket), demonstrating the full loop end to
+--  end: a GET establishes a session + a session-bound CSRF token and renders the
+--  chrome + form; a valid POST verifies CSRF, validates, and redirects; an
+--  invalid POST re-renders sticky with errors; a CSRF token replayed under
+--  another session is refused; and a POST with no session is refused.
 procedure Demo is
 
    CRLF : constant String := (Character'Val (13), Character'Val (10));
@@ -40,7 +42,6 @@ procedure Demo is
          & "Content-Length: " & Len & CRLF & CRLF & Body_S);
    end Post;
 
-   --  Pull the csrf_token value out of a Set-Cookie header.
    --  Value of the named cookie in a Set-Cookie header ("" if absent).
    function Cookie_Value (Header : String; Name : String) return String is
       Key : constant String := Name & "=";
@@ -81,12 +82,17 @@ procedure Demo is
 begin
    Site.Setup;
 
+   --  Register the handlers with the framework and drive them through the real
+   --  router (Web.Server.Dispatch) -- not by calling the handlers directly.
+   Web.Server.Get ("/contact", Site.Contact_Get'Access);
+   Web.Server.Post ("/contact", Site.Contact_Post'Access);
+
    --  1. GET /contact -- render chrome + form, establish a session + a
    --  session-bound CSRF token.
    Put_Line ("GET /contact");
    declare
       Resp : constant Web.Response.Response_Type :=
-        Site.Contact_Get (Get ("/contact"));
+        Web.Server.Dispatch (Get ("/contact"));
       Body_S : constant String := Web.Response.Content_Body (Resp);
       Cookie : constant String := Web.Response.Header (Resp, "Set-Cookie");
       Sid    : constant String := Cookie_Value (Cookie, "sid");
@@ -106,7 +112,7 @@ begin
          Body_S : constant String :=
            "name=Ada+Lovelace&email=ada%40example.com&" & Csrf_Field & "=" & Csrf;
          Resp : constant Web.Response.Response_Type :=
-           Site.Contact_Post (Post (Body_S, Cookie => "sid=" & Sid));
+           Web.Server.Dispatch (Post (Body_S, Cookie => "sid=" & Sid));
       begin
          Show ("303 redirect", Web.Response.Status (Resp) = 303);
          Show ("Location is the reverse URL for 'thanks'",
@@ -120,7 +126,7 @@ begin
          Body_S : constant String :=
            "name=Ada+Lovelace&" & Csrf_Field & "=" & Csrf;
          Resp : constant Web.Response.Response_Type :=
-           Site.Contact_Post (Post (Body_S, Cookie => "sid=" & Sid));
+           Web.Server.Dispatch (Post (Body_S, Cookie => "sid=" & Sid));
          Page : constant String := Web.Response.Content_Body (Resp);
       begin
          Show ("400 with a re-rendered form", Web.Response.Status (Resp) = 400);
@@ -136,7 +142,7 @@ begin
          Body_S : constant String :=
            "name=Ada&email=ada%40example.com&" & Csrf_Field & "=" & Csrf;
          Resp : constant Web.Response.Response_Type :=
-           Site.Contact_Post (Post (Body_S, Cookie => "sid=attacker-session"));
+           Web.Server.Dispatch (Post (Body_S, Cookie => "sid=attacker-session"));
       begin
          Show ("403 Forbidden (token not valid for this session)",
                Web.Response.Status (Resp) = 403);
@@ -149,7 +155,7 @@ begin
          Body_S : constant String :=
            "name=Ada&email=ada%40example.com&" & Csrf_Field & "=" & Csrf;
          Resp : constant Web.Response.Response_Type :=
-           Site.Contact_Post (Post (Body_S));   --  no session cookie
+           Web.Server.Dispatch (Post (Body_S));   --  no session cookie
       begin
          Show ("403 Forbidden", Web.Response.Status (Resp) = 403);
       end;
