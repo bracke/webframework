@@ -34,3 +34,7 @@ Everything is fail-closed and nothing raises, consistent with both libraries.
 alr build
 cd tests && alr build && ./bin/test_bridge
 ```
+
+The named invariants (BRIDGE-*), the dependency boundary, and the release gate
+for all bridges are documented in [`docs/BRIDGES.md`](../docs/BRIDGES.md) and
+enforced by `bridge_tools/check_bridges`.

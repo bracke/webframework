@@ -155,6 +155,63 @@ begin
       end;
    end;
 
+   --  Hardening: malformed bodies decode to a value error (no crash), and
+   --  hostile cookies fail CSRF closed.
+   declare
+      Tok : Forms.CSRF.Token;
+      Ok  : Boolean;
+   begin
+      --  A malformed percent-escape decodes to an error status, not a crash.
+      declare
+         Req : constant Web.Request.Request_Type :=
+           Web.Server.Parse_Request (Post ("name=%ZZ&x=%A"));
+         Sub : Forms.Submission.Data (8, 512);
+         St  : Forms.Urlencoded.Decode_Status;
+      begin
+         WF.Read_Urlencoded (Req, Sub, St);
+         Check (St /= Forms.Urlencoded.Decode_Ok,
+                "malformed percent-escape is a value error, not a crash");
+      end;
+
+      --  Adversarial cookies into Verify_Csrf all fail closed.
+      WF.New_Token (Tok, Ok);
+      declare
+         Hex : constant String := WF.Token_Hex (Tok);
+         Sub : Forms.Submission.Data (4, 8192);
+         Added : Boolean;
+         Big   : constant String (1 .. 5000) := (others => 'a');
+
+         function Req_With (Cookie : String) return Web.Request.Request_Type is
+           (Web.Server.Parse_Request (Post ("x=1", Cookie => Cookie)));
+      begin
+         Forms.Submission.Add
+           (Sub, Forms.CSRF.Default_Field, WF.To_Bytes (Hex), Added);
+
+         Check (not WF.Verify_Csrf (Req_With ("csrf_token=nothex!!"), Sub),
+                "malformed-hex cookie fails closed");
+         Check (not WF.Verify_Csrf (Req_With ("csrf_token="), Sub),
+                "empty cookie value fails closed");
+         Check (not WF.Verify_Csrf (Req_With ("csrf_token=" & Big), Sub),
+                "oversized cookie fails closed (no crash)");
+         Check (not WF.Verify_Csrf (Req_With ("other=1; another=2"), Sub),
+                "cookie present but no csrf_token fails closed");
+         Check (not WF.Verify_Csrf (Req_With ("csrf_token=" & Hex & "00"), Sub),
+                "wrong-length token fails closed");
+
+         --  Submission field present but empty also fails closed.
+         declare
+            Empty_Sub : Forms.Submission.Data (4, 64);
+            A2 : Boolean;
+         begin
+            Forms.Submission.Add
+              (Empty_Sub, Forms.CSRF.Default_Field, WF.To_Bytes (""), A2);
+            Check (not WF.Verify_Csrf
+                     (Req_With ("csrf_token=" & Hex), Empty_Sub),
+                   "empty submitted CSRF field fails closed");
+         end;
+      end;
+   end;
+
    New_Line;
    if Failures = 0 then
       Put_Line ("all bridge tests passed");
