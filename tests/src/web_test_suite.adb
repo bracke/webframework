@@ -18,6 +18,7 @@ with Web_Binding_Diag_Tests;
 with Web_Binding_Extra_Tests;
 with Web_Core_Tests;
 with Web_E2E_Tests;
+with Web_Stream_Tests;
 with Web_Live_Tests;
 with Web_Protocol_Tests;
 with Web_Runtime_Tests;
@@ -54,6 +55,7 @@ package body Web_Test_Suite is
       Web_Binding_Diag_Tests.Add_Tests (Result);
       Web_Binding_Extra_Tests.Add_Tests (Result);
       Web_E2E_Tests.Add_Tests (Result);
+      Web_Stream_Tests.Add_Tests (Result);
       return Result;
    end Suite;
 end Web_Test_Suite;
