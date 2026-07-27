@@ -16,6 +16,7 @@ with App.State;
 with App.Auth;
 with App.Authz;
 with App.Guards;
+with App.Templates;
 
 package body App.Http_Support is
 
@@ -204,6 +205,61 @@ package body App.Http_Support is
                 "nav: menu highlights the active page from the path");
          Check (Menu_Anon = "",
                 "nav: menu is empty for anonymous (fail-closed visibility)");
+      end;
+
+      --  Authorization-aware projects listing (tables + tables_authorization):
+      --  the plan masks the sensitive functions column for a viewer but not an
+      --  admin, applies the Alire data scope, and is fail-closed for an
+      --  unauthorized caller.
+      declare
+         Admin_Plan  : constant App.Authz.Listing_Plan :=
+           App.Authz.Plan_Projects_Listing ("d.principal.admin", 100);
+         Viewer_Plan : constant App.Authz.Listing_Plan :=
+           App.Authz.Plan_Projects_Listing ("d.principal.viewer", 10);
+         Anon_Plan   : constant App.Authz.Listing_Plan :=
+           App.Authz.Plan_Projects_Listing ("", 0);
+      begin
+         Check (Admin_Plan.Ready and then not Admin_Plan.Mask_Functions,
+                "tables: admin sees the functions column (not masked)");
+         Check (Viewer_Plan.Ready and then Viewer_Plan.Mask_Functions,
+                "tables: a viewer's functions column is masked");
+         Check (Admin_Plan.Scope_Applied and then Admin_Plan.Restrict_To_Alire
+                and then Viewer_Plan.Restrict_To_Alire,
+                "tables: the Alire data scope is applied to the listing");
+         Check (not Anon_Plan.Ready,
+                "tables: an unauthorized principal is fail-closed (no plan)");
+      end;
+
+      --  The plan's decision is actually honored in the rendered table: with
+      --  Mask_Functions the sensitive value is withheld from the output; without
+      --  it the same value is shown. (Rendered from templates/projects.html,
+      --  resolved relative to the example_app working directory.)
+      declare
+         use App.Projects;
+         Secret : constant String := "ZZ-functions-secret";
+         Rows   : Project_Vectors.Vector;
+         Row    : Project_Record;
+      begin
+         Row.Id := 1;
+         Row.Name (1 .. 4)         := "Demo";
+         Row.Status (1 .. 6)       := "active";
+         Row.Project_Type (1 .. 3) := "lib";
+         Row.Functions (1 .. Secret'Length) := Secret;
+         Rows.Append (Row);
+
+         declare
+            Masked : constant String := App.Templates.Render_Projects_Table
+              (Rows, Scope_Applied => True, Mask_Functions => True,
+               Authorized_Columns => 4, Total_Rows => 1);
+            Shown  : constant String := App.Templates.Render_Projects_Table
+              (Rows, Scope_Applied => True, Mask_Functions => False,
+               Authorized_Columns => 5, Total_Rows => 1);
+         begin
+            Check (Ada.Strings.Fixed.Index (Masked, Secret) = 0,
+                   "tables: the functions value is withheld from a masked render");
+            Check (Ada.Strings.Fixed.Index (Shown, Secret) > 0,
+                   "tables: the functions value is shown in an unmasked render");
+         end;
       end;
 
       --  Add-project reject path: the handler decodes the urlencoded body via
