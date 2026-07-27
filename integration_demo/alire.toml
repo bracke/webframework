@@ -1,0 +1,63 @@
+name = "integration_demo"
+description = "End-to-end demo: navigation + forms wired into webframework handlers"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework"
+
+project-files = ["integration_demo.gpr"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+webframework = "*"
+
+[[depends-on]]
+webframework_navigation = "*"
+
+[[depends-on]]
+webframework_forms = "*"
+
+[[actions]]
+type = "test"
+command = ["sh", "-c", "alr build && ./bin/demo"]
+
+[build-profiles]
+"*" = "development"
+
+[[pins]]
+webframework = { path = ".." }
+
+[[pins]]
+webframework_navigation = { path = "../webframework_navigation" }
+
+[[pins]]
+webframework_forms = { path = "../webframework_forms" }
+
+[[pins]]
+navigation = { path = "../../navigation" }
+
+[[pins]]
+forms = { path = "../../forms" }
+
+[[pins]]
+representation = { path = "../../representation" }
+
+[[pins]]
+validation = { path = "../../validation" }
+
+[[pins]]
+cryptolib = { path = "../../cryptolib" }
+
+[[pins]]
+ssh_lib = { path = "../../sshlib" }
+
+[[pins]]
+zlib = { path = "../../zlib" }
+
+[[pins]]
+hostkit = { path = "../../hostkit" }
