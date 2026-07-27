@@ -28,7 +28,9 @@ With this bridge a handler can:
 
 - **Turn diagnostics into a response** — after `Forms.Binding.Bind` (and any
   `Forms.Rules.Merge` of validation results) fills a `Diagnostic_Set`,
-  `Diagnostics_Text` renders it and `Error_Response` wraps it in a `400`.
+  `Diagnostics_Text` / `Error_Response` render it as plain text, and
+  `Diagnostics_JSON` / `Error_Response_JSON` as a JSON array for API clients
+  (both default to `400`).
 - **Re-render sticky values** — `Sticky (Def, Sub, Name)` returns the value to
   re-display for a field after a failed submission, "" for a redacted
   (sensitive) field. (Escape it before embedding in markup.)

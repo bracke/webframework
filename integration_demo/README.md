@@ -10,18 +10,22 @@ then defines two handlers:
 
 - **GET /contact** — renders the page chrome with `Render_Menu` (the active item
   highlighted, resolved from the request path) and `Render_Breadcrumbs`, plus a
-  contact form carrying a CSRF token issued into both a `Set-Cookie` header and a
-  hidden field.
-- **POST /contact** — verifies CSRF against the cookie, decodes the urlencoded
-  body into a submission, binds it against the form definition, and either
+  contact form. It establishes a session (a `sid` cookie) and embeds a
+  **session-bound CSRF token** (`Session_Token` — an HMAC of the session under a
+  server key) in a hidden field.
+- **POST /contact** — verifies the CSRF token against the request's session
+  (`Verify_Session_Csrf`), decodes the body by `Content-Type` (`Read_Body`;
+  a non-form body is refused), binds it against the form definition, and either
   re-renders the form **sticky** with the diagnostics (`400`) on failure or
   **redirects by route name** to `thanks` (`303`) on success.
 
-`src/demo.adb` drives these handlers with synthetic requests (via the
-`Web.Server.Parse_Request` test seam — no socket) and self-checks the whole loop:
-the CSRF cookie issued on GET is carried into a valid POST (→ `303 /thanks`), a
-missing field re-renders sticky with an error (`400`), and a POST with no CSRF
-cookie is refused (`403`).
+`src/demo.adb` registers the handlers and drives them through the real router
+(`Web.Server.Dispatch`) with synthetic requests (via the `Parse_Request` test
+seam — no socket), and self-checks the whole loop: the session + CSRF token from
+GET carry into a valid POST (→ `303 /thanks`); a missing field re-renders sticky
+with an error (`400`); a valid CSRF token replayed under a **different session**
+is refused (`403` — what session binding buys over double-submit); and a POST with
+no session is refused (`403`).
 
 ```sh
 alr build && ./bin/demo
