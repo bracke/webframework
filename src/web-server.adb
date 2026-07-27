@@ -91,6 +91,26 @@ package body Web.Server is
    Guarded_Routes : Guarded_Route_Maps.Map;
    Socket_Guards : Socket_Guard_Maps.Map;
 
+   --  A streaming POST route together with its guards.
+   type Stream_Route is record
+      Handler : Stream_Handler;
+      Guards  : Guard_Vectors.Vector;
+   end record;
+
+   package Stream_Route_Maps is new Ada.Containers.Indefinite_Hashed_Maps
+     (Key_Type        => String,
+      Element_Type    => Stream_Route,
+      Hash            => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
+
+   Stream_Routes : Stream_Route_Maps.Map;
+
+   --  Heap buffer for an in-flight request (head + any body bytes). Hoisted to
+   --  package level so the streaming lane can hand ownership to a body reader.
+   type Request_Buffer_Access is access String;
+   procedure Free is
+     new Ada.Unchecked_Deallocation (String, Request_Buffer_Access);
+
    protected Error_Pages is
       procedure Register (Status : Positive; Handler : Error_Handler);
       procedure Clear (Status : Positive);
@@ -1156,6 +1176,36 @@ package body Web.Server is
       end if;
    end Post;
 
+   procedure Post_Stream
+     (Path    : String;
+      Handler : Stream_Handler;
+      Guard   : Web.Guard.Guard_Access := null)
+   is
+      Value    : Stream_Route;
+      Position : Stream_Route_Maps.Cursor;
+      Inserted : Boolean;
+   begin
+      Require_Registration_Path (Path, "route");
+      if Handler = null then
+         raise Web.Errors.Security_Error with "route handler is null";
+      end if;
+
+      Value.Handler := Handler;
+      if Guard /= null then
+         Value.Guards.Append (Guard);
+      end if;
+
+      Stream_Route_Maps.Insert
+        (Container => Stream_Routes,
+         Key       => "POST " & Path,
+         New_Item  => Value,
+         Position  => Position,
+         Inserted  => Inserted);
+      if not Inserted then
+         raise Web.Errors.Security_Error with "duplicate route path";
+      end if;
+   end Post_Stream;
+
    procedure Use_Guard (Guard : Web.Guard.Guard_Access) is
    begin
       if Guard = null then
@@ -1398,7 +1448,10 @@ package body Web.Server is
    end Starts_Case_Insensitive;
    pragma Inline (Starts_Case_Insensitive);
 
-   function Parse_Request (Data : String) return Web.Request.Request_Type is
+   function Parse_Request
+     (Data : String; Allow_Missing_Body : Boolean := False)
+      return Web.Request.Request_Type
+   is
       Line_End : constant Natural := Index (Data, CRLF);
       Space_1  : Natural;
       Space_2  : Natural;
@@ -1553,6 +1606,7 @@ package body Web.Server is
       end if;
 
       if Has_Header_Content_Length
+        and then not Allow_Missing_Body
         and then (if Body_First <= Body_Last then Body_Last - Body_First + 1 else 0)
          /= Declared_Length
       then
@@ -1920,52 +1974,65 @@ package body Web.Server is
       end if;
    end Require_Allowed_Request;
 
-   function Read_Request (Conn : in out Web.Connection.Connection_Type) return String is
-      use type Ada.Streams.Stream_Element_Offset;
+   --  Convert a String slice to bytes (to hand the leftover body to a reader).
+   function To_Bytes (S : String) return Ada.Streams.Stream_Element_Array is
+      R : Ada.Streams.Stream_Element_Array (1 .. S'Length);
+   begin
+      for I in S'Range loop
+         R (Ada.Streams.Stream_Element_Offset (I - S'First + 1)) :=
+           Ada.Streams.Stream_Element (Character'Pos (S (I)));
+      end loop;
+      return R;
+   end To_Bytes;
 
-      Buffer         : Ada.Streams.Stream_Element_Array (1 .. 4096);
-      Last           : Ada.Streams.Stream_Element_Offset;
-      Max_Size       : constant Natural := Server_Config.Max_Request_Size;
-      type Request_Buffer_Access is access String;
-      procedure Free is new Ada.Unchecked_Deallocation (String, Request_Buffer_Access);
-      Data           : Request_Buffer_Access := new String (1 .. Max_Size);
-      Data_Length    : Natural := 0;
-      Header_End     : Natural;
-      Content_Length : Natural := 0;
-      Expected_Size  : Natural := 0;
-      Header_Parsed  : Boolean := False;
+   --  Read from Conn until the header terminator (CRLF CRLF). On return Data
+   --  holds the head plus any body bytes already read (Data_Length of them),
+   --  Header_End is the 1-based index of that terminator, and Content_Length is
+   --  the declared body length. Raises Bad_Request on a closed, oversized, or
+   --  unsupported head. The caller owns Data and must Free it.
+   procedure Read_Head
+     (Conn           : in out Web.Connection.Connection_Type;
+      Data           : out Request_Buffer_Access;
+      Data_Length    : out Natural;
+      Header_End     : out Natural;
+      Content_Length : out Natural)
+   is
+      use type Ada.Streams.Stream_Element_Offset;
+      Buffer   : Ada.Streams.Stream_Element_Array (1 .. 4096);
+      Last     : Ada.Streams.Stream_Element_Offset;
+      Max_Size : constant Natural := Server_Config.Max_Request_Size;
+      Local    : Request_Buffer_Access := new String (1 .. Max_Size);
+      Length   : Natural := 0;
+      Found    : Natural := 0;
 
       function Find_Header_End return Natural is
       begin
-         if Data_Length < 4 then
+         if Length < 4 then
             return 0;
          end if;
-
-         for Index_Value in 1 .. Data_Length - 3 loop
-            if Data (Index_Value) = Character'Val (13)
-              and then Data (Index_Value + 1) = Character'Val (10)
-              and then Data (Index_Value + 2) = Character'Val (13)
-              and then Data (Index_Value + 3) = Character'Val (10)
+         for Index_Value in 1 .. Length - 3 loop
+            if Local (Index_Value) = Character'Val (13)
+              and then Local (Index_Value + 1) = Character'Val (10)
+              and then Local (Index_Value + 2) = Character'Val (13)
+              and then Local (Index_Value + 3) = Character'Val (10)
             then
                return Index_Value;
             end if;
          end loop;
-
          return 0;
       end Find_Header_End;
 
       procedure Append_Buffer is
          Count : constant Natural := Natural (Last - Buffer'First + 1);
       begin
-         if Data_Length + Count > Max_Size then
+         if Length + Count > Max_Size then
             raise Web.Errors.Bad_Request_Error with "request too large";
          end if;
-
          for Offset in 0 .. Count - 1 loop
-            Data (Data_Length + Offset + 1) :=
+            Local (Length + Offset + 1) :=
               Character'Val (Buffer (Buffer'First + Ada.Streams.Stream_Element_Offset (Offset)));
          end loop;
-         Data_Length := Data_Length + Count;
+         Length := Length + Count;
       end Append_Buffer;
    begin
       loop
@@ -1973,52 +2040,63 @@ package body Web.Server is
          if Last < Buffer'First then
             raise Web.Errors.Bad_Request_Error with "client closed before request";
          end if;
-
          Append_Buffer;
-
-         if not Header_Parsed then
-            Header_End := Find_Header_End;
-            if Header_End > 0 then
-               declare
-                  Raw : constant String := Data (1 .. Data_Length);
-               begin
-                  Reject_Unsupported_HTTP (Raw);
-                  Content_Length := Header_Content_Length (Raw);
-                  Expected_Size := Header_End + 3 + Content_Length;
-                  Header_Parsed := True;
-               end;
-            end if;
-         end if;
-
-         if Header_Parsed then
-            if Data_Length >= Expected_Size then
-               declare
-                  Raw : constant String := Data (1 .. Data_Length);
-               begin
-                  if Raw'Length > Expected_Size then
-                     declare
-                        Remainder : constant String := Raw (Expected_Size + 1 .. Raw'Last);
-                     begin
-                        if Index (Remainder, CRLF & CRLF) > 0 then
-                           raise Web.Errors.Bad_Request_Error with "http pipelining is not supported";
-                        end if;
-                     end;
-                  end if;
-                  declare
-                     Result : constant String := Raw (Raw'First .. Expected_Size);
-                  begin
-                     Free (Data);
-                     return Result;
-                  end;
-               end;
-            end if;
-         end if;
+         Found := Find_Header_End;
+         exit when Found > 0;
       end loop;
+
+      Reject_Unsupported_HTTP (Local (1 .. Length));
+      Content_Length := Header_Content_Length (Local (1 .. Length));
+      Data           := Local;
+      Data_Length    := Length;
+      Header_End      := Found;
    exception
       when others =>
-         Free (Data);
+         Free (Local);
          raise;
-   end Read_Request;
+   end Read_Head;
+
+   --  Continue reading into Data until Expected_Size bytes (head + declared
+   --  body) are present. Rejects pipelined extra bytes. Used by the buffered
+   --  (non-streaming) path.
+   procedure Complete_Body
+     (Conn          : in out Web.Connection.Connection_Type;
+      Data          : Request_Buffer_Access;
+      Data_Length   : in out Natural;
+      Expected_Size : Natural)
+   is
+      use type Ada.Streams.Stream_Element_Offset;
+      Buffer   : Ada.Streams.Stream_Element_Array (1 .. 4096);
+      Last     : Ada.Streams.Stream_Element_Offset;
+      Max_Size : constant Natural := Server_Config.Max_Request_Size;
+
+      procedure Append_Buffer is
+         Count : constant Natural := Natural (Last - Buffer'First + 1);
+      begin
+         if Data_Length + Count > Max_Size then
+            raise Web.Errors.Bad_Request_Error with "request too large";
+         end if;
+         for Offset in 0 .. Count - 1 loop
+            Data (Data_Length + Offset + 1) :=
+              Character'Val (Buffer (Buffer'First + Ada.Streams.Stream_Element_Offset (Offset)));
+         end loop;
+         Data_Length := Data_Length + Count;
+      end Append_Buffer;
+   begin
+      while Data_Length < Expected_Size loop
+         Web.Connection.Receive (Conn, Buffer, Last);
+         if Last < Buffer'First then
+            raise Web.Errors.Bad_Request_Error with "client closed before request";
+         end if;
+         Append_Buffer;
+      end loop;
+
+      if Data_Length > Expected_Size
+        and then Index (Data (Expected_Size + 1 .. Data_Length), CRLF & CRLF) > 0
+      then
+         raise Web.Errors.Bad_Request_Error with "http pipelining is not supported";
+      end if;
+   end Complete_Body;
 
    function WebSocket_Handshake (Request : Web.Request.Request_Type) return String is
       Accept_Value : constant String :=
@@ -2036,7 +2114,7 @@ package body Web.Server is
      (Socket  : GNAT.Sockets.Socket_Type;
       Use_TLS : Boolean) is
       Close_When_Done : constant Boolean := True;
-      Conn : Web.Connection.Connection_Type;
+      Conn : aliased Web.Connection.Connection_Type;
    begin
       if Use_TLS then
          Web.Connection.Open_TLS
@@ -2056,7 +2134,6 @@ package body Web.Server is
          Request_Method : Unbounded_String := To_Unbounded_String ("-");
          Request_Path : Unbounded_String := To_Unbounded_String ("-");
          Client_Ip : Unbounded_String := To_Unbounded_String (Peer);
-         Raw : Unbounded_String := Null_Unbounded_String;
          Request : Web.Request.Request_Type := Web.Request.Create ("GET", "/");
          Path   : Unbounded_String := Null_Unbounded_String;
 
@@ -2081,81 +2158,147 @@ package body Web.Server is
          end Finalize_Request;
       begin
          Request_Ids.Next (Request_Id);
-         Raw := To_Unbounded_String (Read_Request (Conn));
-         Request := Parse_Request (To_String (Raw));
-         Request_Method := To_Unbounded_String (Web.Request.Method (Request));
-         Request_Path := To_Unbounded_String (Web.Request.Path (Request));
-         if Server_Config.Use_X_Forwarded_For
-           and then Web.Request.Has_Header (Request, "x-forwarded-for")
-         then
-            declare
-               Raw_Header : constant String :=
-                 Web.Request.Header (Request, "x-forwarded-for");
-               Separator : constant Natural := Index (Raw_Header, ",");
-               Candidate : constant String :=
-                 Trim
-                   ((if Separator = 0
-                     then Raw_Header
-                     else Raw_Header (Raw_Header'First .. Separator - 1)),
-                    Ada.Strings.Both);
+         declare
+            Data           : Request_Buffer_Access;
+            Data_Length    : Natural := 0;
+            Header_End     : Natural := 0;
+            Content_Length : Natural := 0;
+            Head_Len       : Natural := 0;
+            Streamed       : Boolean := False;
+         begin
+            --  Read the head first, then decide: a streaming route consumes the
+            --  body incrementally; every other request buffers it as before.
+            Read_Head (Conn, Data, Data_Length, Header_End, Content_Length);
             begin
-               if Candidate'Length > 0 then
-                  Client_Ip := To_Unbounded_String (Candidate);
-               end if;
+               Head_Len := Header_End + 3;
+               Request := Parse_Request
+                 (Data (1 .. Head_Len), Allow_Missing_Body => True);
+               Request_Method := To_Unbounded_String (Web.Request.Method (Request));
+               Request_Path   := To_Unbounded_String (Web.Request.Path (Request));
+
+               declare
+                  Stream_Key : constant String :=
+                    To_String (Request_Method) & " " & To_String (Request_Path);
+                  SCursor : constant Stream_Route_Maps.Cursor :=
+                    Stream_Routes.Find (Stream_Key);
+               begin
+                  if Stream_Route_Maps.Has_Element (SCursor) then
+                     Streamed := True;
+                     Require_Allowed_Request (Request);
+                     declare
+                        SR : constant Stream_Route :=
+                          Stream_Route_Maps.Element (SCursor);
+                        Ctx : Web.Context.Request_Context :=
+                          Web.Context.New_Context;
+                        Halted        : Boolean;
+                        Halt_Response : Web.Response.Response_Type;
+                        Reader        : Web.Http_Body.Reader;
+                        Response      : Web.Response.Response_Type;
+                     begin
+                        --  Global + route guards run before the body is read, so
+                        --  an unauthenticated upload never reaches storage.
+                        Apply_Guards (Request, Ctx, SR.Guards, Halted, Halt_Response);
+                        if Halted then
+                           Response := Halt_Response;
+                        else
+                           Web.Http_Body.Start
+                             (Reader,
+                              Conn'Unchecked_Access,
+                              To_Bytes (Data (Head_Len + 1 .. Data_Length)),
+                              Content_Length);
+                           Response := SR.Handler (Request, Reader);
+                        end if;
+                        Request_Status := Web.Response.Status (Response);
+                        Send_Response (Conn, Request, Response);
+                     end;
+                  else
+                     Complete_Body
+                       (Conn, Data, Data_Length, Head_Len + Content_Length);
+                     Request :=
+                       Parse_Request (Data (1 .. Head_Len + Content_Length));
+                  end if;
+               end;
+            exception
+               when others =>
+                  Free (Data);
+                  raise;
             end;
-         end if;
-         Path := Request_Path;
+            Free (Data);
 
-         Require_Allowed_Request (Request);
-
-         if Web.WebSocket.Is_Upgrade (Request) then
-            declare
-               Cursor : constant Socket_Maps.Cursor := Sockets.Find (To_String (Path));
-            begin
-               if Socket_Maps.Has_Element (Cursor) then
-                  --  Gate the upgrade through the same guards as HTTP routes: a
-                  --  halting guard rejects the handshake with its response
-                  --  instead of upgrading, so the live channel is not opened
-                  --  for a caller the guards refuse.
+            if not Streamed then
+               if Server_Config.Use_X_Forwarded_For
+                 and then Web.Request.Has_Header (Request, "x-forwarded-for")
+               then
                   declare
-                     Ctx : Web.Context.Request_Context := Web.Context.New_Context;
-                     Halted : Boolean;
-                     Halt_Response : Web.Response.Response_Type;
-                     WS_Guards : Guard_Vectors.Vector;
-                     Guard_Cursor : constant Socket_Guard_Maps.Cursor :=
-                       Socket_Guards.Find (To_String (Path));
+                     Raw_Header : constant String :=
+                       Web.Request.Header (Request, "x-forwarded-for");
+                     Separator : constant Natural := Index (Raw_Header, ",");
+                     Candidate : constant String :=
+                       Trim
+                         ((if Separator = 0
+                           then Raw_Header
+                           else Raw_Header (Raw_Header'First .. Separator - 1)),
+                          Ada.Strings.Both);
                   begin
-                     if Socket_Guard_Maps.Has_Element (Guard_Cursor) then
-                        WS_Guards := Socket_Guard_Maps.Element (Guard_Cursor);
+                     if Candidate'Length > 0 then
+                        Client_Ip := To_Unbounded_String (Candidate);
                      end if;
-                     Apply_Guards (Request, Ctx, WS_Guards, Halted, Halt_Response);
-                     if Halted then
-                        Request_Status := Web.Response.Status (Halt_Response);
-                        Send_Response (Conn, Request, Halt_Response);
+                  end;
+               end if;
+               Path := Request_Path;
+
+               Require_Allowed_Request (Request);
+
+               if Web.WebSocket.Is_Upgrade (Request) then
+                  declare
+                     Cursor : constant Socket_Maps.Cursor := Sockets.Find (To_String (Path));
+                  begin
+                     if Socket_Maps.Has_Element (Cursor) then
+                        --  Gate the upgrade through the same guards as HTTP routes: a
+                        --  halting guard rejects the handshake with its response
+                        --  instead of upgrading, so the live channel is not opened
+                        --  for a caller the guards refuse.
+                        declare
+                           Ctx : Web.Context.Request_Context := Web.Context.New_Context;
+                           Halted : Boolean;
+                           Halt_Response : Web.Response.Response_Type;
+                           WS_Guards : Guard_Vectors.Vector;
+                           Guard_Cursor : constant Socket_Guard_Maps.Cursor :=
+                             Socket_Guards.Find (To_String (Path));
+                        begin
+                           if Socket_Guard_Maps.Has_Element (Guard_Cursor) then
+                              WS_Guards := Socket_Guard_Maps.Element (Guard_Cursor);
+                           end if;
+                           Apply_Guards (Request, Ctx, WS_Guards, Halted, Halt_Response);
+                           if Halted then
+                              Request_Status := Web.Response.Status (Halt_Response);
+                              Send_Response (Conn, Request, Halt_Response);
+                           else
+                              Request_Status := 101;
+                              Web.Connection.Send_All (Conn, WebSocket_Handshake (Request));
+                              Socket_Maps.Element (Cursor) (Conn, Request);
+                           end if;
+                        end;
                      else
-                        Request_Status := 101;
-                        Web.Connection.Send_All (Conn, WebSocket_Handshake (Request));
-                        Socket_Maps.Element (Cursor) (Conn, Request);
+                        declare
+                           Response : constant Web.Response.Response_Type :=
+                             Build_Error_Response (Request, 404, "websocket endpoint not found");
+                        begin
+                           Request_Status := Web.Response.Status (Response);
+                           Send_Response (Conn, Request, Response);
+                        end;
                      end if;
                   end;
                else
                   declare
-                     Response : constant Web.Response.Response_Type :=
-                       Build_Error_Response (Request, 404, "websocket endpoint not found");
+                     Response : constant Web.Response.Response_Type := Dispatch (Request);
                   begin
                      Request_Status := Web.Response.Status (Response);
                      Send_Response (Conn, Request, Response);
                   end;
                end if;
-            end;
-         else
-            declare
-               Response : constant Web.Response.Response_Type := Dispatch (Request);
-            begin
-               Request_Status := Web.Response.Status (Response);
-               Send_Response (Conn, Request, Response);
-            end;
-         end if;
+            end if;
+         end;
 
          Finalize_Request;
       exception

@@ -1,6 +1,7 @@
 with Web.Config;
 with Web.Connection;
 with Web.Guard;
+with Web.Http_Body;
 with Web.Request;
 with Web.Response;
 with Web.TLS;
@@ -8,6 +9,16 @@ with Web.TLS;
 package Web.Server is
    type Route_Handler is access function
      (Request : Web.Request.Request_Type) return Web.Response.Response_Type;
+
+   --  A streaming POST handler. The request carries only the headers (the body
+   --  is not buffered); the handler pulls the body incrementally from Body_R,
+   --  typically into a webuploads session, so an arbitrarily large upload uses
+   --  bounded memory. Any body-authenticating token (e.g. CSRF) must therefore
+   --  travel in the request line/headers, not the body, since it is checked
+   --  before the body is read.
+   type Stream_Handler is access function
+     (Request : Web.Request.Request_Type;
+      Body_R  : in out Web.Http_Body.Reader) return Web.Response.Response_Type;
 
    --  Error page handler signature.
    --  @param Request Parsed request that caused the error.
@@ -34,6 +45,14 @@ package Web.Server is
    --  @param Handler Route handler.
    --  @return No return value.
    procedure Post (Path : String; Handler : Route_Handler);
+
+   --  Register a streaming POST route (e.g. a large-file upload). The body is
+   --  not buffered: the handler pulls it from the reader. Global guards and the
+   --  optional route Guard run before the handler, exactly as for other routes.
+   procedure Post_Stream
+     (Path    : String;
+      Handler : Stream_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
 
    --  Register a global guard that runs before every dispatched GET/POST
    --  request, ahead of any route guard. Guards run in registration order and
@@ -100,8 +119,13 @@ package Web.Server is
 
    --  Parse a minimal HTTP/1.1 request from text.
    --  @param Data HTTP request bytes.
+   --  @param Allow_Missing_Body When True, a Content-Length header need not match
+   --    the body present in Data (used to parse just the head before the body is
+   --    streamed). Defaults to False -- the full-message check.
    --  @return Parsed request.
-   function Parse_Request (Data : String) return Web.Request.Request_Type;
+   function Parse_Request
+     (Data : String; Allow_Missing_Body : Boolean := False)
+      return Web.Request.Request_Type;
 
    --  Dispatch a parsed request without socket upgrade handling.
    --  @param Request Parsed request.
