@@ -17,11 +17,15 @@ With this bridge a handler can:
   (Request, Sub)` checks the submitted field against the request's cookie,
   constant-time and fail-closed.
 
+- **Turn diagnostics into a response** — after `Forms.Binding.Bind` (and any
+  `Forms.Rules.Merge` of validation results) fills a `Diagnostic_Set`,
+  `Diagnostics_Text` renders it and `Error_Response` wraps it in a `400`.
+- **Re-render sticky values** — `Sticky (Def, Sub, Name)` returns the value to
+  re-display for a field after a failed submission, "" for a redacted
+  (sensitive) field. (Escape it before embedding in markup.)
+
 Everything is fail-closed and nothing raises. `To_Bytes`/`To_String` convert
 between webframework strings and forms byte arrays.
-
-A later phase adds a bind helper and a diagnostics → response mapping (sticky
-re-render).
 
 ## Build & test
 

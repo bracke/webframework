@@ -5,10 +5,16 @@ with Ada.Strings.Fixed;
 
 with Web.Request;
 with Web.Server;
+with Web.Response;
 
 with Forms.Submission;
 with Forms.Urlencoded;
 with Forms.CSRF;
+with Forms.Form;
+with Forms.Fields;
+with Forms.Binding;
+
+with Representation.Diagnostics;
 
 with Webframework_Forms;
 
@@ -105,6 +111,47 @@ begin
                    and then Ada.Strings.Fixed.Index (SC, "SameSite=Strict") > 0,
                    "Set_Cookie is HttpOnly + SameSite=Strict");
          end;
+      end;
+   end;
+
+   --  Bind -> diagnostics -> sticky: a required field that is missing fails to
+   --  bind and produces a diagnostic; a submitted value re-renders (sticky).
+   declare
+      Def   : Forms.Form.Definition (4);
+      Added : Boolean;
+   begin
+      Forms.Form.Start (Def);
+      Forms.Form.Add_Field
+        (Def,
+         Forms.Fields.Make (WF.To_Bytes ("name"),
+                            Presence => Forms.Fields.Required),
+         Added);
+      Forms.Form.Finalize (Def);
+
+      --  Missing required field -> not Ok, with a diagnostic.
+      declare
+         Empty  : Forms.Submission.Data (4, 256);
+         Report : Representation.Diagnostics.Diagnostic_Set;
+         Ok     : Boolean;
+      begin
+         Representation.Diagnostics.Clear (Report);
+         Forms.Binding.Bind (Def, Empty, Report, Ok);
+         Check (not Ok, "missing required field does not bind");
+         Check (WF.Diagnostics_Text (Report)'Length > 0,
+                "Diagnostics_Text renders the failure");
+         Check (Web.Response.Status (WF.Error_Response (Report)) = 400,
+                "Error_Response is 400 with the diagnostics body");
+      end;
+
+      --  Sticky re-render echoes the submitted value verbatim (caller escapes).
+      declare
+         Sub   : Forms.Submission.Data (4, 256);
+         AddOk : Boolean;
+      begin
+         Forms.Submission.Add
+           (Sub, WF.To_Bytes ("name"), WF.To_Bytes ("Ada<b>"), AddOk);
+         Check (WF.Sticky (Def, Sub, WF.To_Bytes ("name")) = "Ada<b>",
+                "Sticky returns the submitted value for re-render");
       end;
    end;
 

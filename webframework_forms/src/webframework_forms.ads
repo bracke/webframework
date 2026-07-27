@@ -1,7 +1,10 @@
 with Web.Request;
+with Web.Response;
 
 with Representation;
+with Representation.Diagnostics;
 with Forms.Submission;
+with Forms.Form;
 with Forms.Urlencoded;
 with Forms.CSRF;
 with Forms.Limits;
@@ -67,5 +70,33 @@ package Webframework_Forms is
       Sub     : Forms.Submission.Data;
       Field   : Byte_Array := Forms.CSRF.Default_Field;
       Name    : String := Default_Cookie) return Boolean;
+
+   ----------------------------------------------------------------------
+   --  Diagnostics and sticky re-render. After Forms.Binding.Bind (and any
+   --  Forms.Rules.Merge of validation results) populates a shared
+   --  Diagnostic_Set, these turn it into a response or feed a re-render.
+   ----------------------------------------------------------------------
+
+   --  The diagnostics as plain text, one line per entry
+   --  ("error_id at path: message").
+   function Diagnostics_Text
+     (Report : Representation.Diagnostics.Diagnostic_Set) return String;
+
+   --  A response carrying Diagnostics_Text (400 Bad Request by default). Use
+   --  when a submission fails to bind/validate and you are not re-rendering the
+   --  form itself.
+   function Error_Response
+     (Report : Representation.Diagnostics.Diagnostic_Set;
+      Status : Positive := 400) return Web.Response.Response_Type;
+
+   --  The value to re-display for a field when re-rendering a form after a
+   --  failed submission (Forms.Binding.Sticky_Value). Returns "" for a
+   --  redacted (sensitive) field. NOT HTML-escaped — escape before embedding
+   --  in markup.
+   function Sticky
+     (Def       : Forms.Form.Definition;
+      Sub       : Forms.Submission.Data;
+      Name      : Byte_Array;
+      Max_Bytes : Positive := 4096) return String;
 
 end Webframework_Forms;
