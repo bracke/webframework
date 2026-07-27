@@ -3,8 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{csrf_token}}">
   <title>{{title}}</title>
   <link rel="stylesheet" href="/static/style.css">
+  <script>
+    // Session-bound CSRF token, echoed in every state-changing POST body.
+    window.wfCsrf = function () {
+      var m = document.querySelector('meta[name="csrf-token"]');
+      return m ? m.getAttribute('content') : '';
+    };
+    window.wfCsrfBody = function (b) {
+      return (b ? b + '&' : '') + 'csrf_token=' + encodeURIComponent(window.wfCsrf());
+    };
+  </script>
 </head>
 <body data-wf-ws="/ws">
   <main>

@@ -189,7 +189,7 @@ function addProject(event) {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: params.toString(),
+    body: window.wfCsrfBody(params.toString()),
     credentials: 'include'
   })
   .then(response => {
@@ -222,7 +222,7 @@ function deleteProject(projectId) {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: params.toString(),
+    body: window.wfCsrfBody(params.toString()),
     credentials: 'include'
   })
   .then(response => {

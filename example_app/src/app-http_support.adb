@@ -8,6 +8,7 @@ with Web.Context;
 with Web.Server;
 
 with App.Pages;
+with App.Csrf;
 with App.Projects;
 with App.Runtime;
 with App.State;
@@ -97,6 +98,25 @@ package body App.Http_Support is
       return Web.Response.Status (Web.Server.Dispatch (Req));
    end Status_Of;
 
+   --  A POST request carrying session Sid and a valid CSRF token for it, so a
+   --  handler's CSRF check passes and the request reaches the handler logic.
+   function Csrf_Post
+     (Path : String; Data : String; Sid : String) return Web.Request.Request_Type
+   is
+      Full : constant String :=
+        (if Data = "" then "" else Data & "&")
+        & App.Csrf.Field & "=" & App.Csrf.Token (Sid);
+      Req  : Web.Request.Request_Type :=
+        Web.Request.Create ("POST", Path, "", Full);
+   begin
+      Web.Request.Set_Header (Req, "Cookie", "wf_session=" & Sid);
+      return Req;
+   end Csrf_Post;
+
+   --  A fresh (anonymous) session id, for minting CSRF tokens in tests.
+   function New_Session return String is
+     (App.Runtime.Find_Or_Create_Session (Web.Request.Create ("GET", "/")));
+
    procedure Run (Failures : out Natural) is
    begin
       App.Auth.Initialize;
@@ -172,22 +192,25 @@ package body App.Http_Support is
       --  needed; the reject paths never touch the database.)
       declare
          Ctx : constant Web.Context.Request_Context := Web.Context.New_Context;
-
-         function Add_Project_Response
-           (Body_Value : String) return Web.Response.Response_Type is
-           (App.Pages.Api_Add_Project
-              (Web.Request.Create
-                 ("POST", "/api/projects/add", "", Body_Value), Ctx));
+         Sid : constant String := New_Session;
 
          function Body_Has (Response : Web.Response.Response_Type; Text : String)
            return Boolean is
            (Ada.Strings.Fixed.Index
               (Web.Response.Content_Body (Response), Text) > 0);
 
+         --  With a valid CSRF token: the request reaches decode + validation.
          No_Name    : constant Web.Response.Response_Type :=
-           Add_Project_Response ("status=active");
-         Empty_Body : constant Web.Response.Response_Type :=
-           Add_Project_Response ("");
+           App.Pages.Api_Add_Project
+             (Csrf_Post ("/api/projects/add", "status=active", Sid), Ctx);
+         Token_Only : constant Web.Response.Response_Type :=
+           App.Pages.Api_Add_Project
+             (Csrf_Post ("/api/projects/add", "", Sid), Ctx);
+         --  Without a CSRF token: refused before validation.
+         No_Csrf    : constant Web.Response.Response_Type :=
+           App.Pages.Api_Add_Project
+             (Web.Request.Create
+                ("POST", "/api/projects/add", "", "name=X&status=active"), Ctx);
       begin
          Check (Web.Response.Status (No_Name) = 400,
                 "http: add-project with no name is rejected (400)");
@@ -195,25 +218,29 @@ package body App.Http_Support is
                 "http: 400 body carries the structured issue id");
          Check (Body_Has (No_Name, "$.name"),
                 "http: 400 body carries the field path");
-         Check (Web.Response.Status (Empty_Body) = 400,
-                "http: add-project with an empty body is rejected (400)");
+         Check (Web.Response.Status (Token_Only) = 400,
+                "http: add-project with no fields is rejected (400)");
+         Check (Web.Response.Status (No_Csrf) = 403,
+                "http: add-project without a CSRF token is refused (403)");
       end;
 
       --  Delete and login reject paths: a non-positive / non-integer id and a
       --  blank username are rejected with 400 before any state change.
       declare
          Ctx : constant Web.Context.Request_Context := Web.Context.New_Context;
+         Sid : constant String := New_Session;
          Zero_Id : constant Web.Response.Response_Type :=
            App.Pages.Api_Delete_Project
-             (Web.Request.Create ("POST", "/api/projects/delete", "", "id=0"),
-              Ctx);
+             (Csrf_Post ("/api/projects/delete", "id=0", Sid), Ctx);
          Bad_Id : constant Web.Response.Response_Type :=
            App.Pages.Api_Delete_Project
-             (Web.Request.Create ("POST", "/api/projects/delete", "", "id=abc"),
-              Ctx);
+             (Csrf_Post ("/api/projects/delete", "id=abc", Sid), Ctx);
          Blank_User : constant Web.Response.Response_Type :=
            App.Pages.Api_Login
-             (Web.Request.Create ("POST", "/api/login", "", "username=&password=x"));
+             (Csrf_Post ("/api/login", "username=&password=x", Sid));
+         Login_No_Csrf : constant Web.Response.Response_Type :=
+           App.Pages.Api_Login
+             (Web.Request.Create ("POST", "/api/login", "", "username=x&password=y"));
       begin
          Check (Web.Response.Status (Zero_Id) = 400,
                 "http: delete with a non-positive id is rejected (400)");
@@ -221,6 +248,8 @@ package body App.Http_Support is
                 "http: delete with a non-integer id is rejected (400)");
          Check (Web.Response.Status (Blank_User) = 400,
                 "http: login with a blank username is rejected (400)");
+         Check (Web.Response.Status (Login_No_Csrf) = 403,
+                "http: login without a CSRF token is refused (403)");
       end;
 
       --  Add-project success round-trip: a valid body is decoded, validated and
@@ -232,6 +261,7 @@ package body App.Http_Support is
       --  recovery fix (a replayed committed deletion must stay deleted).
       declare
          Ctx : constant Web.Context.Request_Context := Web.Context.New_Context;
+         Sid : constant String := New_Session;
          Probe : constant String := "RoundTripProbe";
 
          function Trim (S : String) return String is
@@ -249,9 +279,9 @@ package body App.Http_Support is
 
          Add_Resp : constant Web.Response.Response_Type :=
            App.Pages.Api_Add_Project
-             (Web.Request.Create
-                ("POST", "/api/projects/add", "",
-                 "name=" & Probe & "&status=active"), Ctx);
+             (Csrf_Post
+                ("/api/projects/add", "name=" & Probe & "&status=active", Sid),
+              Ctx);
          New_Id : Natural;
       begin
          App.Projects.Initialize;
@@ -264,9 +294,9 @@ package body App.Http_Support is
             declare
                Del_Resp : constant Web.Response.Response_Type :=
                  App.Pages.Api_Delete_Project
-                   (Web.Request.Create
-                      ("POST", "/api/projects/delete", "",
-                       "id=" & Trim (New_Id'Image)), Ctx);
+                   (Csrf_Post
+                      ("/api/projects/delete", "id=" & Trim (New_Id'Image), Sid),
+                    Ctx);
             begin
                Check (Web.Response.Status (Del_Resp) = 200,
                       "http: deleting the added project succeeds (200)");

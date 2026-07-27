@@ -11,6 +11,7 @@ with Validation.Results;
 with Web.Assets.Clients;
 with App.Runtime;
 with App.State;
+with App.Csrf;
 with App.Templates;
 with Templates.Values;
 with Web.Html;
@@ -97,6 +98,10 @@ package body App.Pages is
       --  session check is gone.
       --  Build the full HTML page through templates and inject the composed body fragment.
       Set (View, "title", String_Item ("Ada Webframework Example"));
+      Standard.Templates.Values.Set
+        (View, "csrf_token",
+         Standard.Templates.Values.String_Item
+           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
@@ -262,6 +267,10 @@ package body App.Pages is
       --  Build the full HTML page through templates and inject the login form.
       Standard.Templates.Values.Set
         (Context, "title", Standard.Templates.Values.String_Item ("Login - Ada Webframework Example"));
+      Standard.Templates.Values.Set
+        (Context, "csrf_token",
+         Standard.Templates.Values.String_Item
+           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", Context));
       Page := To_Unbounded_String
         (App.Templates.Replace_Marker
@@ -285,6 +294,13 @@ package body App.Pages is
       Password : Unbounded_String;
       Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
    begin
+      --  CSRF: the POST must carry a token valid for this (anonymous) session.
+      if not App.Csrf.Verify (Request, Session_Id) then
+         return Web.Response.Create
+           (403, "{""error"": ""invalid csrf token""}",
+            "application/json; charset=utf-8");
+      end if;
+
       --  Parse username and password from form data
       Parse_Form_Data (Body_Content, Username, Password);
 
@@ -342,6 +358,15 @@ package body App.Pages is
    function Api_Logout (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
       Session_Id : constant String := App.Runtime.Require_Session (Request);
    begin
+      --  CSRF: a logout with a live session must carry a valid token.
+      if Session_Id'Length > 0
+        and then not App.Csrf.Verify (Request, Session_Id)
+      then
+         return Web.Response.Create
+           (403, "{""error"": ""invalid csrf token""}",
+            "application/json; charset=utf-8");
+      end if;
+
       if Session_Id'Length > 0 then
          --  Revoke the identity session (so its token can never be replayed),
          --  clear the auth fields, then invalidate the framework session.
@@ -408,6 +433,10 @@ package body App.Pages is
          else Natural (Projects_Data.Length));
 
       Set (View, "title", String_Item ("Projects - Ada Webframework Example"));
+      Standard.Templates.Values.Set
+        (View, "csrf_token",
+         Standard.Templates.Values.String_Item
+           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
@@ -465,6 +494,10 @@ package body App.Pages is
       --  Access is decided by the route guard before this runs.
       --  Build the full HTML page through templates
       Set (View, "title", String_Item ("Todos - Ada Webframework Example"));
+      Standard.Templates.Values.Set
+        (View, "csrf_token",
+         Standard.Templates.Values.String_Item
+           (App.Csrf.Token (App.Runtime.Find_Or_Create_Session (Request))));
       Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
 
       --  Add navigation bar for authenticated pages
@@ -530,6 +563,15 @@ package body App.Pages is
       Check : constant Validation.Results.Result :=
         App.Project_Validation.Validate (Input);
    begin
+      --  CSRF: reject a mutation whose token is not valid for this session.
+      if not App.Csrf.Verify
+        (Request, App.Runtime.Find_Or_Create_Session (Request))
+      then
+         return Web.Response.Create
+           (403, "{""status"":""error"",""message"":""invalid csrf token""}",
+            "application/json; charset=utf-8");
+      end if;
+
       --  A malformed / oversized form body never reaches validation.
       if not Form.Decoded then
          return Web.Response.Create
@@ -577,6 +619,15 @@ package body App.Pages is
       Check : constant Validation.Results.Result :=
         App.Project_Validation.Validate_Delete ((Id => Form.Id));
    begin
+      --  CSRF: reject a mutation whose token is not valid for this session.
+      if not App.Csrf.Verify
+        (Request, App.Runtime.Find_Or_Create_Session (Request))
+      then
+         return Web.Response.Create
+           (403, "{""status"":""error"",""message"":""invalid csrf token""}",
+            "application/json; charset=utf-8");
+      end if;
+
       --  A missing / non-integer id never reaches validation.
       if not Form.Decoded then
          return Web.Response.Create

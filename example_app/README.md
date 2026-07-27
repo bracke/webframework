@@ -50,6 +50,13 @@ runs guards. All the meaning lives in the app packages below.
   username's input format only, staying within the credential boundary (it never
   inspects the password or reveals account existence). Covered by `app_http_tests`
   reject-path checks and `app_tests` unit checks.
+- **Session-bound CSRF.** Every state-changing HTTP POST (login, logout, project
+  add/delete) is protected by `App.Csrf` over the `webframework_forms` bridge:
+  each page carries a synchronizer token (an HMAC of the session under a server
+  key) in a `<meta>` tag, the page JS echoes it in the POST body, and the handler
+  verifies it before acting — a request without a valid token gets `403`. Because
+  the token is bound to the session, one issued to another session cannot be
+  replayed. `app_http_tests` asserts both the accepted and the `403` paths.
 - **Per-action live authorization.** `profile.save` over the WebSocket is gated
   by a dispatcher action guard; a viewer's attempt is rejected before the
   handler runs — presentation and execution are authorized separately.
