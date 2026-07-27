@@ -672,40 +672,6 @@ package body Web.Server is
         and then Web.Security.Is_Safe_Decoded_Path (Value (Value'First .. Query_Position - 1));
    end Is_Request_Target;
 
-   function Header_Text_Has_Token (Value : String; Token : String) return Boolean is
-      Lower_Value : constant String := Ada.Characters.Handling.To_Lower (Value);
-      Lower_Token : constant String := Ada.Characters.Handling.To_Lower (Token);
-      Start_Pos   : Natural := Lower_Value'First;
-      Comma_Pos   : Natural;
-   begin
-      if Lower_Value'Length = 0 then
-         return False;
-      end if;
-
-      loop
-         Comma_Pos := Index (Lower_Value (Start_Pos .. Lower_Value'Last), ",");
-         declare
-            Last_Pos : constant Natural :=
-              (if Comma_Pos = 0 then Lower_Value'Last else Comma_Pos - 1);
-            Item     : constant String := Trim (Lower_Value (Start_Pos .. Last_Pos), Ada.Strings.Both);
-            Param_Pos : constant Natural := Index (Item, ";");
-            Name_Text : constant String :=
-              (if Param_Pos = 0
-               then Item
-               else Trim (Item (Item'First .. Param_Pos - 1), Ada.Strings.Both));
-         begin
-            if Name_Text = Lower_Token then
-               return True;
-            end if;
-         end;
-
-         exit when Comma_Pos = 0;
-         Start_Pos := Comma_Pos + 1;
-      end loop;
-
-      return False;
-   end Header_Text_Has_Token;
-
    function Equals_Case_Insensitive (Left : String; Right : String) return Boolean is
    begin
       if Left'Length /= Right'Length then
@@ -1545,9 +1511,11 @@ package body Web.Server is
                   end if;
                   Has_Header_Host := True;
                when Web.Request.Content_Type_Header =>
-                  if Header_Text_Has_Token (Header_Text, "multipart/form-data") then
-                     raise Web.Errors.Bad_Request_Error with "multipart uploads are not supported";
-                  end if;
+                  --  multipart/form-data is accepted: the body (bounded by
+                  --  max_request_size) passes through to the handler, which
+                  --  parses it via Web.Multipart. The Content-Type header, with
+                  --  its boundary, is preserved for the parser.
+                  null;
                when Web.Request.Content_Length_Header =>
                   Has_Header_Content_Length := True;
                   if not Parse_Natural_Decimal (Header_Text, Declared_Length) then

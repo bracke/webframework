@@ -22,6 +22,7 @@ with Web_Live_Tests;
 with Web_Protocol_Tests;
 with Web_Runtime_Tests;
 with Web_Transport_Tests;
+with Web_Multipart_Tests;
 
 package body Web_Test_Suite is
    function Suite return AUnit.Test_Suites.Access_Test_Suite is
@@ -29,6 +30,7 @@ package body Web_Test_Suite is
         AUnit.Test_Suites.New_Suite;
    begin
       Web_Core_Tests.Add_Tests (Result);
+      Web_Multipart_Tests.Add_Tests (Result);
       Web_Protocol_Tests.Add_Tests (Result);
       Web_Transport_Tests.Add_Tests (Result);
       Web_Live_Tests.Add_Tests (Result);
