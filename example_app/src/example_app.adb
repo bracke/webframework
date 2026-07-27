@@ -19,6 +19,7 @@ with App.Database;
 with App.Runtime;
 with App.Pages;
 with App.Profile;
+with App.Shutdown;
 with App.State;
 with App.Todo;
 with Web.Config;
@@ -315,15 +316,47 @@ procedure Example_App is
          & " allowed_origin=" & Allowed_Origin (Settings));
       Log_Info ("app: CSRF signing key = " & App.Csrf.Key_Source);
 
-      if Settings.TLS_Enabled then
-         if Length (Settings.Certificate) = 0 or else Length (Settings.Private_Key) = 0 then
-            raise Constraint_Error with "--tls requires --cert and --key";
-         end if;
-
-         App.Runtime.Run_TLS (Host, Settings.Port, Config);
-      else
-         App.Runtime.Run (Host, Settings.Port);
+      if Settings.TLS_Enabled
+        and then (Length (Settings.Certificate) = 0
+                  or else Length (Settings.Private_Key) = 0)
+      then
+         raise Constraint_Error with "--tls requires --cert and --key";
       end if;
+
+      --  Serve in a task so the main task can wait for a shutdown signal, then
+      --  stop the accept loop and close persistence cleanly. (App.Runtime.Run
+      --  blocks until Stop, and Stop does socket I/O -- not safe from an
+      --  interrupt handler -- so the signal only opens a barrier and the stop
+      --  itself runs here, in the main task.)
+      declare
+         task Server;
+         task body Server is
+         begin
+            if Settings.TLS_Enabled then
+               App.Runtime.Run_TLS (Host, Settings.Port, Config);
+            else
+               App.Runtime.Run (Host, Settings.Port);
+            end if;
+         exception
+            when Error : others =>
+               Log_Error
+                 ("server task failed: "
+                  & Ada.Exceptions.Exception_Message (Error));
+         end Server;
+      begin
+         App.Shutdown.Await_Stop;
+         Log_Info ("shutdown signal received; stopping server...");
+         Ada.Text_IO.Flush;
+         App.Runtime.Stop;
+         --  Leaving this block waits for the Server task to finish returning
+         --  from Run before we touch the database.
+      end;
+
+      --  In-flight DB work drains through the same gate Close acquires, so the
+      --  carrier is flushed and its lock released rather than left stale.
+      App.Database.Close;
+      Log_Info ("shutdown complete");
+      Ada.Text_IO.Flush;
    end Run_Server;
 
    Settings : Settings_Type;
@@ -420,6 +453,17 @@ when Error : others =>
          end;
          delay 1.0; --  Give cleanup more time to complete (wake-up + close listener)
       end if;
+
+      --  Flush and release the database on the error path too (idempotent;
+      --  a no-op if it was never opened).
+      begin
+         App.Database.Close;
+      exception
+         when Error2 : others =>
+            Log_Error
+              ("error closing database: "
+               & Ada.Exceptions.Exception_Message (Error2));
+      end;
 
       --  Log the original error
       Log_Error ("error: example_app: " & Ada.Exceptions.Exception_Message (Error));
