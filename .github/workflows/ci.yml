@@ -14,31 +14,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: webframework
-      - name: Check out cryptolib sibling
-        uses: actions/checkout@v7
+      - name: Check out sibling crates (transitive pin closure)
+        uses: bracke/project_tools/.github/actions/checkout-ada-siblings@main
         with:
-          repository: ${{ github.repository_owner }}/cryptolib
-          path: cryptolib
-      - name: Check out sshlib sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/sshlib
-          path: sshlib
-      - name: Check out zlib sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/zlib
-          path: zlib
-      - name: Check out cryptolib-dependent hostkit sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/hostkit
-          path: hostkit
-      - name: Check out terminal_styles sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/terminal_styles
-          path: terminal_styles
+          root: webframework
       - name: Set up Alire
         uses: alire-project/setup-alire@v6
         with:
@@ -71,66 +50,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: webframework
-      - name: Check out webframework_authorization bridge
-        uses: actions/checkout@v7
+      - name: Check out sibling crates (transitive pin closure)
+        uses: bracke/project_tools/.github/actions/checkout-ada-siblings@main
         with:
-          repository: ${{ github.repository_owner }}/webframework_authorization
-          path: webframework_authorization
-      - name: Check out cryptolib sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/cryptolib
-          path: cryptolib
-      - name: Check out sshlib sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/sshlib
-          path: sshlib
-      - name: Check out zlib sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/zlib
-          path: zlib
-      - name: Check out hostkit sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/hostkit
-          path: hostkit
-      - name: Check out terminal_styles sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/terminal_styles
-          path: terminal_styles
-      - name: Check out template sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/template
-          path: template
-      - name: Check out database sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/database
-          path: database
-      - name: Check out identity sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/identity
-          path: identity
-      - name: Check out authorization sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/authorization
-          path: authorization
-      - name: Check out tables sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/tables
-          path: tables
-      - name: Check out tables_authorization sibling
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ github.repository_owner }}/tables_authorization
-          path: tables_authorization
+          root: webframework
       - name: Set up Alire
         uses: alire-project/setup-alire@v6
         with:
