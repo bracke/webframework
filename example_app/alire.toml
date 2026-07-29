@@ -9,7 +9,7 @@ licenses = "MIT"
 website = "https://github.com/bracke/webframework"
 tags = ["webframework", "example", "server-driven"]
 
-executables = ["example_app", "app_tests", "app_http_tests", "app_attachments_tests"]
+executables = ["example_app", "app_tests", "app_http_tests", "app_attachments_tests", "app_email_tests"]
 
 [[depends-on]]
 gnat_native = "=15.2.1"
@@ -124,15 +124,38 @@ webfiles_runtime = "*"
 [[pins]]
 webfiles_runtime = { path = "../../webfiles_runtime" }
 
+# Notifications + email delivery demo: the notifications engine, its
+# templates-backed renderer, the smtplib email provider adapter, and smtplib
+# itself. An email notification is driven end to end through these into a tiny
+# in-process SMTP catcher.
+[[depends-on]]
+notifications = "*"
+[[pins]]
+notifications = { path = "../../notifications" }
+[[depends-on]]
+notifications_email = "*"
+[[pins]]
+notifications_email = { path = "../../notifications/notifications_email" }
+[[depends-on]]
+notifications_templates = "*"
+[[pins]]
+notifications_templates = { path = "../../notifications/notifications_templates" }
+[[depends-on]]
+smtplib = "*"
+[[pins]]
+smtplib = { path = "../../smtplib" }
+
 # Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib,
 # zlib, hostkit and representation through webframework, database, and forms, so
-# it must pin them itself.
+# it must pin them itself. i18n is pulled in by notifications_templates (locale
+# formatting); cryptolib is pulled in by smtplib and already pinned above.
 [[pins]]
 representation = { path = "../../representation" }
 cryptolib = { path = "../../cryptolib" }
 ssh_lib = { path = "../../sshlib" }
 zlib = { path = "../../zlib" }
 hostkit = { path = "../../hostkit" }
+i18n = { path = "../../i18n" }
 
 # Build dependencies in the development profile (-Og) too, not the default
 # release (-O3), so this root and the parent share object files rather than

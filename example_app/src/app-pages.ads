@@ -122,4 +122,17 @@ package App.Pages is
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type;
 
+   --  Email-notification demo page: a send form plus the outcome of the last
+   --  send and the messages captured by the in-process SMTP catcher. Guarded.
+   function Email_Demo
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
+   --  Send one demo email (urlencoded to / subject / message), CSRF-checked:
+   --  drives a notification through notifications_email + smtplib to the
+   --  in-process catcher, then redirects back to the demo page. Guarded.
+   function Send_Email_Demo
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
 end App.Pages;

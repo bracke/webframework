@@ -5,6 +5,8 @@ with App.Auth;
 with App.Authz;
 with App.Projects;
 with App.Attachments;
+with App.Notifications;
+with App.Smtp_Catcher;
 with App.Project_Binding;
 with Web.Multipart;
 with App.Project_Validation;
@@ -887,5 +889,171 @@ package body App.Pages is
             & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Delete_Attachment;
+
+   ---------------------------------------------------------------------------
+   --  Email-notification demo
+   ---------------------------------------------------------------------------
+
+   --  The demo page body: a send form, the last send's outcome, and every
+   --  message the in-process SMTP catcher captured (raw RFC 5322 bytes).
+   function Email_Demo_Content (Session_Id : String) return String is
+      Token     : constant String := App.Csrf.Token (Session_Id);
+      Last      : constant App.Notifications.Send_Result := App.Notifications.Last_Send;
+      Body_Html : Unbounded_String;
+      procedure P (S : String) is
+      begin
+         Append (Body_Html, S);
+      end P;
+      use type App.Notifications.Send_Phase;
+   begin
+      P ("<div class=""panel""><h1>Email notification demo</h1>");
+      P ("<p>Send an email notification. It flows through the notifications "
+         & "engine &rarr; notifications_email &rarr; smtplib &rarr; a real "
+         & "socket &rarr; an in-process SMTP catcher on 127.0.0.1:"
+         & Web.Html.Escape_Text (Trim (Positive'Image (App.Smtp_Catcher.Port)))
+         & ", which captures the bytes on the wire and shows them below.</p>");
+
+      P ("<form method=""post"" action=""/email-demo/send"">");
+      P ("<input type=""hidden"" name=""" & App.Csrf.Field & """ value="""
+         & Web.Html.Escape_Attribute (Token) & """>");
+      P ("<p><label>To<br><input type=""email"" name=""to"" required "
+         & "value=""alice@example.com""></label></p>");
+      P ("<p><label>Subject<br><input type=""text"" name=""subject"" required "
+         & "value=""Hello from example_app""></label></p>");
+      P ("<p><label>Message<br><textarea name=""message"" rows=""4"" required>"
+         & "It works end to end.</textarea></label></p>");
+      P ("<button type=""submit"">Send email</button></form>");
+
+      --  Last send outcome.
+      if Last.Phase /= App.Notifications.Not_Started then
+         P ("<h2>Last send</h2><ul>");
+         P ("<li>phase: " & Web.Html.Escape_Text
+              (App.Notifications.Send_Phase'Image (Last.Phase)) & "</li>");
+         P ("<li>create result: "
+            & Web.Html.Escape_Text (To_String (Last.Create_Image)) & "</li>");
+         P ("<li>steps run: " & Trim (Natural'Image (Last.Steps_Run)) & "</li>");
+         if Last.Provider_Called then
+            P ("<li>provider result: "
+               & Web.Html.Escape_Text (To_String (Last.Provider_Class))
+               & " / "
+               & Web.Html.Escape_Text (To_String (Last.Provider_Certainty))
+               & "</li>");
+         end if;
+         P ("<li>reached catcher: "
+            & (if Last.Reached_Catcher then "yes" else "no") & "</li>");
+         P ("</ul>");
+      end if;
+
+      --  Captured mailbox.
+      declare
+         N : constant Natural := App.Smtp_Catcher.Count;
+      begin
+         P ("<h2>Captured messages (" & Trim (Natural'Image (N)) & ")</h2>");
+         if N = 0 then
+            P ("<p><em>Nothing captured yet.</em></p>");
+         else
+            for I in 1 .. N loop
+               declare
+                  Mail  : App.Smtp_Catcher.Captured_Mail;
+                  Found : Boolean;
+               begin
+                  App.Smtp_Catcher.Get (I, Mail, Found);
+                  if Found then
+                     P ("<div class=""panel"">");
+                     P ("<p><strong>envelope from:</strong> "
+                        & Web.Html.Escape_Text (To_String (Mail.Envelope_From))
+                        & " &nbsp; <strong>envelope to:</strong> "
+                        & Web.Html.Escape_Text (To_String (Mail.Envelope_To))
+                        & "</p>");
+                     P ("<pre>"
+                        & Web.Html.Escape_Text (To_String (Mail.Raw_Message))
+                        & "</pre>");
+                     P ("</div>");
+                  end if;
+               end;
+            end loop;
+         end if;
+      end;
+
+      P ("</div>");
+      return To_String (Body_Html);
+   end Email_Demo_Content;
+
+   function Email_Demo
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      use Standard.Templates.Values;
+      View       : Value := Object;
+      Page       : Unbounded_String;
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+   begin
+      Set (View, "title", String_Item ("Email Demo"));
+      Set (View, "csrf_token", String_Item (App.Csrf.Token (Session_Id)));
+      Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
+
+      declare
+         Current_Path : constant String := Web.Request.Path (Request);
+         Nav_Bar : constant String :=
+           Generate_Nav_Bar (Current_Path, Clearance_Of (Context));
+      begin
+         Page := To_Unbounded_String
+           (App.Templates.Replace_Marker
+              (To_String (Page), "<main>", Nav_Bar & "<main>"));
+      end;
+
+      Page := To_Unbounded_String
+        (App.Templates.Replace_Marker
+           (To_String (Page), "<!-- wf:body -->",
+            Email_Demo_Content (Session_Id)));
+      Page := To_Unbounded_String
+        (App.Templates.Replace_Asset_Urls
+           (To_String (Page), Web.Assets.Clients.Css_Url,
+            Web.Assets.Clients.Js_Url));
+
+      return App.Runtime.Html_Response (Session_Id, To_String (Page));
+   exception
+      when Error : others =>
+         Web.Logging.Error
+           ("email-demo route render failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Email_Demo;
+
+   function Send_Email_Demo
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      pragma Unreferenced (Context);
+      Session_Id  : constant String := App.Runtime.Find_Or_Create_Session (Request);
+      Sub         : Forms.Submission.Data (8, 8192);
+      Body_Status : Forms.Urlencoded.Decode_Status;
+      Result      : App.Notifications.Send_Result;
+   begin
+      if not App.Csrf.Verify (Request, Session_Id) then
+         return Web.Response.Forbidden ("invalid csrf token");
+      end if;
+      Webframework_Forms.Read_Urlencoded (Request, Sub, Body_Status);
+      if Body_Status /= Forms.Urlencoded.Decode_Ok then
+         return Web.Response.Bad_Request ("Malformed form body");
+      end if;
+      declare
+         To_Email : constant String := Webframework_Forms.To_String
+           (Forms.Submission.Value_Of (Sub, Webframework_Forms.To_Bytes ("to")));
+         Subject  : constant String := Webframework_Forms.To_String
+           (Forms.Submission.Value_Of (Sub, Webframework_Forms.To_Bytes ("subject")));
+         Message  : constant String := Webframework_Forms.To_String
+           (Forms.Submission.Value_Of (Sub, Webframework_Forms.To_Bytes ("message")));
+      begin
+         App.Notifications.Send (To_Email, Subject, Message, Result);
+      end;
+      return App.Nav.Redirect ("email_demo");
+   exception
+      when Error : others =>
+         Web.Logging.Error
+           (Log_Tag (Request) & "email-demo send failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Send_Email_Demo;
 
 end App.Pages;

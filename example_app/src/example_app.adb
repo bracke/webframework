@@ -14,6 +14,8 @@ with App.Guards;
 with App.Nav;
 with App.Projects;
 with App.Attachments;
+with App.Notifications;
+with App.Smtp_Catcher;
 with App.Counter;
 with App.Csrf;
 with App.Database;
@@ -357,6 +359,9 @@ procedure Example_App is
          --  from Run before we touch the database.
       end;
 
+      --  Stop the in-process SMTP catcher's accept loop and close its listener.
+      App.Smtp_Catcher.Stop;
+
       --  In-flight DB work drains through the same gate Close acquires, so the
       --  carrier is flushed and its lock released rather than left stale.
       App.Database.Close;
@@ -401,6 +406,30 @@ begin
          Web.Logging.Error
            ("attachments feature failed to initialize: "
             & App.Attachments.Init_Status'Image (Attach_Status));
+      end if;
+   end;
+   --  Email-notification demo: start the in-process SMTP catcher, then compose
+   --  the notifications engine that delivers to it via notifications_email +
+   --  smtplib. A failure here disables the feature but never aborts the app.
+   declare
+      Catcher_Status : App.Smtp_Catcher.Start_Status;
+      Notif_Status   : App.Notifications.Init_Status;
+      use type App.Smtp_Catcher.Start_Status;
+      use type App.Notifications.Init_Status;
+   begin
+      App.Smtp_Catcher.Start (Catcher_Status);
+      if Catcher_Status = App.Smtp_Catcher.Bind_Error then
+         Web.Logging.Error
+           ("SMTP catcher failed to bind 127.0.0.1:"
+            & Positive'Image (App.Smtp_Catcher.Port)
+            & " -- email demo disabled");
+      else
+         App.Notifications.Initialize (Notif_Status);
+         if Notif_Status /= App.Notifications.Ready then
+            Web.Logging.Error
+              ("email notifications feature failed to initialize: "
+               & App.Notifications.Init_Status'Image (Notif_Status));
+         end if;
       end if;
    end;
    --  Action-to-handler mapping for websocket events.
@@ -456,6 +485,13 @@ begin
    App.Runtime.Post
      ("/attachments/delete", App.Pages.Delete_Attachment'Access,
       App.Guards.Require_App_Access'Access);
+   --  Email-notification demo: the page plus its send endpoint (CSRF-checked).
+   App.Runtime.Get
+     ("/email-demo", App.Pages.Email_Demo'Access,
+      App.Guards.Require_App_Access'Access);
+   App.Runtime.Post
+     ("/email-demo/send", App.Pages.Send_Email_Demo'Access,
+      App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/health", App.Pages.Health'Access);
    App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
    --  The live channel requires authentication: guard the upgrade so an
@@ -487,6 +523,16 @@ when Error : others =>
          end;
          delay 1.0; --  Give cleanup more time to complete (wake-up + close listener)
       end if;
+
+      --  Stop the SMTP catcher on the error path too (idempotent).
+      begin
+         App.Smtp_Catcher.Stop;
+      exception
+         when Error2 : others =>
+            Log_Error
+              ("error stopping SMTP catcher: "
+               & Ada.Exceptions.Exception_Message (Error2));
+      end;
 
       --  Flush and release the database on the error path too (idempotent;
       --  a no-op if it was never opened).
