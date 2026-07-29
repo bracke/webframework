@@ -4,8 +4,7 @@ with AUnit.Test_Suites;
 --  Phase 14 tests for the identity/authorization adapters: Authorization-header
 --  syntax decoding (no verification) and a resource-identifier binding that
 --  authorization would consume elsewhere. (Form input with secret redaction is
---  now covered by the forms library and the webframework_forms bridge, which
---  replace the deprecated Web.Binding.Forms adapter.)
+--  covered by the forms library and the webframework_forms bridge.)
 package Web_Binding_Auth_Tests is
 
    type Fixture is new AUnit.Test_Fixtures.Test_Fixture with null record;
