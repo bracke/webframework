@@ -5,7 +5,7 @@ project Example_App is
    for Object_Dir use "obj/" & Example_App_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
    for Exec_Dir use "bin";
-   for Main use ("example_app.adb", "app_tests.adb", "app_http_tests.adb", "app_attachments_tests.adb");
+   for Main use ("example_app.adb", "app_tests.adb", "app_http_tests.adb", "app_attachments_tests.adb", "app_email_tests.adb");
 
    package Compiler is
       for Default_Switches ("Ada") use
