@@ -31,6 +31,7 @@ project Webframework is
       "Web.Static",
       "Web.TLS",
       "Web.WebSocket",
+      "Web.SSE",
       "Web.Assets",
       "Web.Assets.Clients",
       "Web.Binding",

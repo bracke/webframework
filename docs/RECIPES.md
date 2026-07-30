@@ -70,3 +70,35 @@ end Health;
 ```
 
 Log `Web.Server.Configuration_Report` at startup.
+
+## Server-Sent Events
+
+Push a one-way stream (progress, logs, live updates) to a browser `EventSource`.
+Register the route with `Server_Sent_Events`; the handler owns the connection and
+sends events until the client disconnects (a `Send` then reports `Ok => False`).
+It holds a worker for the stream's lifetime, like a WebSocket.
+
+```ada
+procedure Ticks
+  (Conn    : in out Web.Connection.Connection_Type;
+   Request : Web.Request.Request_Type)
+is
+   pragma Unreferenced (Request);
+   Ok : Boolean;
+begin
+   loop
+      Web.SSE.Send_Event (Conn, "hello", Event => "tick", Ok => Ok);
+      exit when not Ok;              --  client disconnected
+      Web.SSE.Send_Comment (Conn, "keep-alive", Ok);  --  optional heartbeat
+      exit when not Ok;
+      --  ... wait for the next update ...
+   end loop;
+end Ticks;
+
+--  at startup:
+Web.Server.Server_Sent_Events ("/events", Ticks'Access);
+```
+
+On the client: `new EventSource("/events")` and listen for the `tick` event.
+`Web.SSE` splits multi-line data into one `data:` line each and strips CR/LF from
+the event name/id, so caller data cannot forge SSE fields.
