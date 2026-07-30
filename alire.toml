@@ -7,6 +7,7 @@ maintainers = ["Bent Bracke <bent@bracke.dk>"]
 maintainers-logins = ["bracke"]
 licenses = "MIT"
 website = "https://github.com/bracke/webframework"
+long-description = "webframework is an Ada-first, server-driven web framework: the server owns routes, sessions, typed per-session state and browser events, and the browser is sent explicit DOM patches rather than running a framework of its own. HTTP/1.1 and WebSocket handling go directly through GNAT.Sockets, sessions are cookie-backed and held server-side, and there is no virtual DOM, no npm, no bundler and no transpiler anywhere in the stack."
 tags = ["web", "websocket", "http", "server-driven"]
 
 [[depends-on]]
