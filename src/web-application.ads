@@ -32,6 +32,8 @@ package Web.Application is
 
    subtype WebSocket_Handler_Access is Web.Server.WebSocket_Handler;
 
+   subtype SSE_Handler_Access is Web.Server.SSE_Handler;
+
    --  Register an action handler.
    --  @param Action Action string that client events must send.
    --  @param Handler Handler function that mutates session state.
@@ -247,6 +249,22 @@ package Web.Application is
    --  @param Guard Guard to install; must not be null.
    --  @return No return value.
    procedure Guard_WebSocket (Path : String; Guard : Web.Guard.Guard_Access);
+
+   --  Register a Server-Sent Events route through the façade (a GET that opens a
+   --  text/event-stream and pushes events).
+   --  @param Path Exact SSE path.
+   --  @param Handler SSE handler.
+   --  @return No return value.
+   procedure Server_Sent_Events (Path : String; Handler : SSE_Handler_Access);
+
+   --  Guard an SSE route: global guards and this guard run before the stream is
+   --  opened, and a halting guard returns its response instead. Register the
+   --  route with Server_Sent_Events first, then guard it here.
+   --  @param Path Exact SSE path.
+   --  @param Guard Guard to install; must not be null.
+   --  @return No return value.
+   procedure Guard_Server_Sent_Events
+     (Path : String; Guard : Web.Guard.Guard_Access);
 
    --  Register static assets through the façade for reduced import set.
    --  @param Url_Prefix URL path prefix.
