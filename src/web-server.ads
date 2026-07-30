@@ -1,5 +1,6 @@
 with Web.Config;
 with Web.Connection;
+with Web.CORS;
 with Web.Guard;
 with Web.Http_Body;
 with Web.Request;
@@ -185,6 +186,13 @@ package Web.Server is
    --  @param Config Framework configuration.
    --  @return No return value.
    procedure Configure (Config : Web.Config.Config_Type);
+
+   --  Install a CORS policy. Once set, the server adds the matching
+   --  Access-Control-* headers to every response (including the auto-answered
+   --  OPTIONS preflight) based on the request's Origin. Not set by default.
+   --  @param Policy The CORS policy (see Web.CORS.Make).
+   --  @return No return value.
+   procedure Set_CORS (Policy : Web.CORS.Policy);
 
    --  Return a stable health-check response for embedding applications.
    --  @return Plain text 200 response.

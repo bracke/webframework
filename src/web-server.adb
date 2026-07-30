@@ -114,6 +114,10 @@ package body Web.Server is
      (Index_Type => Positive, Element_Type => Pattern_Route);
    Pattern_Routes : Pattern_Route_Vectors.Vector;
 
+   --  The optional CORS policy applied to every outgoing response.
+   CORS_Configured : Boolean := False;
+   CORS_Policy      : Web.CORS.Policy;
+
    --  A streaming POST route together with its guards.
    type Stream_Route is record
       Handler : Stream_Handler;
@@ -2148,18 +2152,27 @@ package body Web.Server is
       Request  : Web.Request.Request_Type;
       Response : Web.Response.Response_Type)
    is
-      Prepared : constant Web.Response.Response_Type :=
-        Prepared_Response (Request, Response);
+      --  Add the configured CORS headers (if any) at the single egress point, so
+      --  every response -- routes, errors and the auto-OPTIONS -- is covered.
+      Outgoing : Web.Response.Response_Type := Response;
    begin
-      Web.Connection.Send_All (Conn, Web.Response.Serialize (Prepared));
-      if Web.Response.Is_File_Body (Prepared) then
-         Send_File_Body (Conn, Prepared);
+      if CORS_Configured then
+         Web.CORS.Apply (CORS_Policy, Request, Outgoing);
       end if;
+      declare
+         Prepared : constant Web.Response.Response_Type :=
+           Prepared_Response (Request, Outgoing);
+      begin
+         Web.Connection.Send_All (Conn, Web.Response.Serialize (Prepared));
+         if Web.Response.Is_File_Body (Prepared) then
+            Send_File_Body (Conn, Prepared);
+         end if;
+      end;
    exception
       when Error : others =>
          declare
             Fallback : constant Web.Response.Response_Type :=
-              Fallback_Response (Request, Response);
+              Fallback_Response (Request, Outgoing);
          begin
             Webframework_Logging.Warn ("response compression disabled: " & Ada.Exceptions.Exception_Message (Error));
             Web.Connection.Send_All (Conn, Web.Response.Serialize (Fallback));
@@ -2197,6 +2210,12 @@ package body Web.Server is
 
       Server_Config.Configure (Config);
    end Configure;
+
+   procedure Set_CORS (Policy : Web.CORS.Policy) is
+   begin
+      CORS_Policy := Policy;
+      CORS_Configured := True;
+   end Set_CORS;
 
    function Health_Response return Web.Response.Response_Type is
    begin
@@ -2318,8 +2337,15 @@ package body Web.Server is
    procedure Require_Allowed_Request (Request : Web.Request.Request_Type) is
       Allowed : constant String := Server_Config.Allowed_Host;
    begin
+      --  A cross-origin request fails the same-origin gate; permit it when a
+      --  configured CORS policy explicitly allows its Origin (the point of CORS).
+      --  The route's own CSRF/auth still gates any mutation.
       if Allowed'Length > 0
         and then not Web.Security.Require_Allowed_Origin (Request, Allowed)
+        and then not
+          (CORS_Configured
+           and then Web.CORS.Allows_Origin
+                      (CORS_Policy, Web.Request.Header (Request, "origin")))
       then
          raise Web.Errors.Security_Error with "request host/origin is not allowed";
       end if;

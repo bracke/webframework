@@ -42,6 +42,9 @@ application state.
 
 ## Server-Sent Events
 
+- `Web.CORS`: a CORS `Policy` (`Make`) and `Apply`; install it with
+  `Web.Server.Set_CORS` and the server adds `Access-Control-*` headers to every
+  response and lets CORS-allowed origins past its same-origin gate.
 - `Web.SSE`: the `text/event-stream` format — `Response_Headers` (the stream's
   HTTP head) and `Format_Event`/`Format_Comment`/`Format_Retry` (pure wire-text
   builders) plus `Send_Event`/`Send_Comment`/`Send_Retry` that write to a

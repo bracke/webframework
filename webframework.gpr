@@ -32,6 +32,7 @@ project Webframework is
       "Web.TLS",
       "Web.WebSocket",
       "Web.SSE",
+      "Web.CORS",
       "Web.Assets",
       "Web.Assets.Clients",
       "Web.Binding",

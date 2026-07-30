@@ -27,6 +27,7 @@ with App.Shutdown;
 with App.State;
 with App.Todo;
 with Web.Config;
+with Web.CORS;
 with Webframework_Logging;
 with Web.Html;
 
@@ -501,6 +502,11 @@ begin
    App.Runtime.Register_Error_Handler (500, App.Pages.Error_Server'Access);
    --  Resolve the request principal once, before every route, so guards and
    --  handlers can read it from the request context.
+   --  Cross-Origin Resource Sharing. Illustrative: allow any origin so a browser
+   --  on another site can read the public endpoints. A real deployment would list
+   --  its own front-end origins (and set Credentials => True to share cookies).
+   App.Runtime.Set_CORS (Web.CORS.Make (Origins => "*"));
+
    App.Runtime.Use_Guard (App.Guards.Resolve_Principal'Access);
    --  HTTP + websocket + static route wiring. Public routes (/login, /health,
    --  /api/login, /static) carry no guard; every other route is guard-protected
