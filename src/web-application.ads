@@ -1,6 +1,7 @@
 with GNAT.Sockets;
 with Web.Connection;
 with Web.Config;
+with Web.CORS;
 with Web.Dispatcher;
 with Web.Guard;
 with Web.Live;
@@ -92,6 +93,12 @@ package Web.Application is
    --  @param Config Framework configuration.
    --  @return No return value.
    procedure Configure (Config : Web.Config.Config_Type);
+
+   --  Install a CORS policy applied to every response (see Web.CORS.Make and
+   --  Web.Server.Set_CORS).
+   --  @param Policy The CORS policy.
+   --  @return No return value.
+   procedure Set_CORS (Policy : Web.CORS.Policy);
 
    --  Set the session cookie secure flag.
    --  @param Enabled True to include `Secure` on session cookies.

@@ -124,5 +124,25 @@ Web.Server.Delete ("/users/:id", Delete_User'Access, Require_Auth'Access);
 ```
 
 `OPTIONS` is answered automatically with an `Allow` header, and a request to a
-known path under an unregistered method returns `405` with `Allow`. (CORS
-response headers are still the app's to add.)
+known path under an unregistered method returns `405` with `Allow`..
+
+## CORS
+
+Allow cross-origin browser calls. Install a policy once; the server adds the
+matching Access-Control-* headers to every response (including the auto-answered
+OPTIONS preflight), and lets a request from an allowed origin past its
+same-origin gate so a preflight or a cross-origin write is not rejected first.
+The route's own CSRF/auth still gates any mutation.
+
+```ada
+--  Allow two front-end origins to call the API, with cookies.
+Web.Server.Set_CORS
+  (Web.CORS.Make
+     (Origins     => "https://app.example, https://admin.example",
+      Credentials => True,
+      Max_Age     => 600));
+```
+
+Use `Origins => "*"` for any origin (not combinable with `Credentials => True`,
+per the spec -- the matched origin is echoed instead). A request with no `Origin`
+(same-origin) is left untouched.

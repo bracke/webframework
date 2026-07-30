@@ -49,6 +49,11 @@ package body Web.Application is
       Web.Server.Configure (Config);
    end Configure;
 
+   procedure Set_CORS (Policy : Web.CORS.Policy) is
+   begin
+      Web.Server.Set_CORS (Policy);
+   end Set_CORS;
+
    procedure Set_Secure_Cookies (Enabled : Boolean) is
    begin
       Live.Set_Secure_Cookies (Enabled);

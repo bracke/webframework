@@ -26,6 +26,7 @@ with Web_Transport_Tests;
 with Web_Multipart_Tests;
 with Web_SSE_Tests;
 with Web_Routing_Tests;
+with Web_CORS_Tests;
 
 package body Web_Test_Suite is
    function Suite return AUnit.Test_Suites.Access_Test_Suite is
@@ -60,6 +61,7 @@ package body Web_Test_Suite is
       Web_Stream_Tests.Add_Tests (Result);
       Web_SSE_Tests.Add_Tests (Result);
       Web_Routing_Tests.Add_Tests (Result);
+      Web_CORS_Tests.Add_Tests (Result);
       return Result;
    end Suite;
 end Web_Test_Suite;
