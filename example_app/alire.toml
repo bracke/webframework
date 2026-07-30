@@ -179,5 +179,8 @@ config_runtime = "*"
 [[pins]]
 config_runtime = { path = "../../config/config_runtime" }
 
+[[pins]]
+cache = { path = "../../cache" }
+
 [build-profiles]
 "*" = "development"
