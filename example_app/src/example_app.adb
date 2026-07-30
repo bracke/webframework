@@ -29,6 +29,13 @@ with Web.Config;
 with Webframework_Logging;
 with Web.Html;
 
+with Ada.Environment_Variables;
+with Interfaces;
+with Config.Store;
+with Config.Reader;
+with Config_Runtime.File;
+with Config_Runtime.Environment;
+
 --  Main example application entry point.
 --  Demonstrates full-page rendering, websocket action dispatch, and persistence.
 procedure Example_App is
@@ -205,7 +212,51 @@ procedure Example_App is
          Index := Index + 1;
          return Ada.Command_Line.Argument (Index);
       end Next_Value;
+
+      --  Load configuration under the command line: built-in defaults are
+      --  overlaid by an optional config file (EXAMPLE_APP_CONFIG or
+      --  example_app.toml), then by EXAMPLE_APP_* environment variables. The
+      --  command-line switches below override all of it.
+      procedure Apply_Config (Into : in out Settings_Type) is
+         use type Interfaces.Integer_64;
+         Store  : Config.Store.Store
+                    (Capacity => 64, Values_Capacity => 128, Pool => 8192);
+         Path   : aliased constant String :=
+           (if Ada.Environment_Variables.Exists ("EXAMPLE_APP_CONFIG")
+            then Ada.Environment_Variables.Value ("EXAMPLE_APP_CONFIG")
+            else "example_app.toml");
+         File_Src : Config_Runtime.File.Source (Path'Access);
+         Prefix   : aliased constant String := "EXAMPLE_APP_";
+         Env_Src  : Config_Runtime.Environment.Source (Prefix'Access);
+         Ok       : Boolean;
+
+         function Get_Nat (Key : String; Default : Natural) return Natural is
+            V : constant Interfaces.Integer_64 :=
+              Config.Reader.Get_Integer
+                (Store, Key, Interfaces.Integer_64 (Default));
+         begin
+            return (if V >= 0
+                      and then V <= Interfaces.Integer_64 (Natural'Last)
+                    then Natural (V) else Default);
+         end Get_Nat;
+      begin
+         File_Src.Load (Store, Id => 1, Ok => Ok);   --  optional file
+         Env_Src.Load (Store, Id => 2, Ok => Ok);
+
+         if Config.Store.Has (Store, "server.host") then
+            Into.Host :=
+              To_Unbounded_String (Config.Reader.Get_String (Store, "server.host"));
+         end if;
+         Into.Port := Get_Nat ("server.port", Into.Port);
+         Into.Production :=
+           Config.Reader.Get_Boolean (Store, "server.production", Into.Production);
+         Into.Session_Timeout :=
+           Get_Nat ("server.session.timeout", Into.Session_Timeout);
+         Into.Structured_Log :=
+           Config.Reader.Get_Boolean (Store, "logging.structured", Into.Structured_Log);
+      end Apply_Config;
    begin
+      Apply_Config (Result);
       while Index <= Ada.Command_Line.Argument_Count loop
          declare
             Argument : constant String := Ada.Command_Line.Argument (Index);
