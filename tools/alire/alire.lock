@@ -4,6 +4,15 @@
 [solution.context]
 solved = true
 [[solution.state]]
+crate = "cache"
+fulfilment = "linked"
+pinned = false
+transitivity = "direct"
+versions = "~0.1.0-dev"
+[solution.state.link]
+lockfiled = true
+path = "../../cache"
+[[solution.state]]
 crate = "cryptolib"
 fulfilment = "linked"
 pinned = false
