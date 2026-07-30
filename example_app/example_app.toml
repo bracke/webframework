@@ -1,0 +1,15 @@
+# Example application configuration (loaded by config + config_runtime).
+# Precedence: these values override built-in defaults, are themselves
+# overridden by EXAMPLE_APP_* environment variables, and finally by any
+# --switch on the command line. Missing file / keys are fine.
+
+[server]
+host = "127.0.0.1"
+port = 8080
+production = false
+
+[server.session]
+timeout = 3600
+
+[logging]
+structured = false
