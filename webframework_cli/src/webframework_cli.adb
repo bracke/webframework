@@ -639,6 +639,9 @@ package body Webframework_Cli is
         "--  Generated project file for a webframework application." & LF
         & "--  Keep this file plain and predictable for manual review." & LF
         & Framework_Project_With & LF
+        & "with """ & Sibling_Root ("config") & "/config.gpr"";" & LF
+        & "with """ & Sibling_Root ("config")
+          & "/config_runtime/config_runtime.gpr"";" & LF
         & "project " & App_Name & " is" & LF
         & "   --  Place source and artifact directories explicitly so output is" & LF
         & "   --  deterministic in both source and IDE contexts." & LF
@@ -745,8 +748,7 @@ package body Webframework_Cli is
         & "      when Error : others =>" & LF
         & "         Webframework_Logging.Error" & LF
         & "           (""home page render failed: "" & Ada.Exceptions.Exception_Message (Error));" & LF
-        & "         return Web.Response.Internal_Server_Error" & LF
-        & "           (""Home page is temporarily unavailable."");" & LF
+        & "         return Web.Response.Internal_Server_Error;" & LF
         & "   end Home;" & LF
         & LF
         & "   --  Handle GET /health." & LF
@@ -760,8 +762,7 @@ package body Webframework_Cli is
         & "      when Error : others =>" & LF
         & "         Webframework_Logging.Error" & LF
         & "           (""health route failed: "" & Ada.Exceptions.Exception_Message (Error));" & LF
-        & "         return Web.Response.Internal_Server_Error" & LF
-        & "           (""Health endpoint is temporarily unavailable."");" & LF
+        & "         return Web.Response.Internal_Server_Error;" & LF
         & "   end Health;" & LF
         & "end App.Pages;" & LF;
       Main : constant String :=
@@ -1004,7 +1005,6 @@ package body Webframework_Cli is
         & "   App.Runtime.Get (""/health"", App.Pages.Health'Access);" & LF
         & "   App.Runtime.WebSocket (""/ws"", App.Runtime.WebSocket_Handler'Access);" & LF
         & "   App.Runtime.Static (""/static"", ""static"");" & LF
-        & "   App.Runtime.Start_Cleanup_Task (Settings.Cleanup_Interval);" & LF
         & "   Webframework_Logging.Info (""webframework: "" & App.Runtime.Configuration_Report);" & LF
         & "   App.Runtime.Run (To_String (Settings.Host), Settings.Port);" & LF
         & "exception" & LF
@@ -1028,7 +1028,7 @@ package body Webframework_Cli is
          & "end App;" & LF);
       Write_If_Missing (Source_Path (Root, "app-state.ads"), State_Spec);
       Write_If_Missing (Source_Path (Root, "app-state.adb"), State_Body);
-      Write_If_Missing (Source_Path (Root, "app-dispatcher.ads"), Dispatcher);
+      Write_If_Missing (Source_Path (Root, "app-runtime.ads"), Dispatcher);
       Write_If_Missing (Source_Path (Root, "app-live.ads"), Live);
       Write_If_Missing (Source_Path (Root, "app-pages.ads"), Pages_Spec);
       Write_If_Missing (Source_Path (Root, "app-pages.adb"), Pages_Body);
@@ -1114,8 +1114,7 @@ package body Webframework_Cli is
         & "         Webframework_Logging.Error" & LF
         & "           (""page render failed for " & Page_Name & ": "" &" & LF
         & "              Ada.Exceptions.Exception_Message (Error));" & LF
-        & "         return Web.Response.Internal_Server_Error" & LF
-        & "           (""Page is temporarily unavailable."");" & LF
+        & "         return Web.Response.Internal_Server_Error;" & LF
         & "   end " & Function_Name & ";" & LF
         & "end " & Package_Name & ";" & LF;
    begin
@@ -1405,7 +1404,7 @@ package body Webframework_Cli is
       if not Has_Main_Program (Root) then
          Report_Missing (Result, "main program is missing");
       end if;
-      Check_File (Result, Source_Path (Root, "app-dispatcher.ads"), "dispatcher instantiation is missing");
+      Check_File (Result, Source_Path (Root, "app-runtime.ads"), "dispatcher instantiation is missing");
       Check_File (Result, Source_Path (Root, "app-live.ads"), "live instantiation is missing");
       Check_File
         (Result,
