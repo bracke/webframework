@@ -1,4 +1,4 @@
-with Web.Logging;
+with Webframework_Logging;
 
 package body Web.Errors is
    use type Web.Config.Mode_Type;
@@ -9,7 +9,7 @@ package body Web.Errors is
    is
       Message : constant String := Ada.Exceptions.Exception_Message (Occurrence);
    begin
-      Web.Logging.Error (Ada.Exceptions.Exception_Information (Occurrence));
+      Webframework_Logging.Error (Ada.Exceptions.Exception_Information (Occurrence));
 
       if Mode = Web.Config.Development and then Message'Length > 0 then
          return Web.Response.Create (500, Web.Response.Generate_Error_Page (500, Message), "text/html; charset=utf-8");

@@ -26,7 +26,7 @@ with App.Shutdown;
 with App.State;
 with App.Todo;
 with Web.Config;
-with Web.Logging;
+with Webframework_Logging;
 with Web.Html;
 
 --  Main example application entry point.
@@ -55,7 +55,7 @@ procedure Example_App is
       Use_Forwarded_For : Boolean := False;
       Certificate     : Unbounded_String;
       Private_Key     : Unbounded_String;
-      Log_Level      : Web.Logging.Level_Type := Web.Logging.Debug_Level;
+      Log_Level      : Webframework_Logging.Level_Type := Webframework_Logging.Debug_Level;
       Structured_Log : Boolean := False;
       --  Connection hardening settings
       Ping_Interval  : Natural := 30;      --  Ping interval in seconds (0 = disabled)
@@ -102,7 +102,7 @@ procedure Example_App is
    --  Helper to keep logging visible in both framework sink and console output.
    procedure Log_Message (Message : String; Role : Terminal_Styles.Style_Role) is
    begin
-      Web.Logging.Info (Message);
+      Webframework_Logging.Info (Message);
       Ada.Text_IO.Put_Line (Terminal_Styles.Line (Message, Role));
    end Log_Message;
 
@@ -113,7 +113,7 @@ procedure Example_App is
 
    procedure Log_Error (Message : String) is
    begin
-      Web.Logging.Error (Message);
+      Webframework_Logging.Error (Message);
       Ada.Text_IO.Put_Line
         (Ada.Text_IO.Standard_Error,
          Terminal_Styles.Line (Message, Terminal_Styles.Role_Error));
@@ -169,18 +169,18 @@ procedure Example_App is
       return "http://" & Host;
    end Allowed_Origin;
 
-   function Parse_Log_Level (Value : String) return Web.Logging.Level_Type is
+   function Parse_Log_Level (Value : String) return Webframework_Logging.Level_Type is
       Normalized : constant String := Ada.Characters.Handling.To_Lower (Value);
    begin
       --  Map CLI text to strongly-typed logging level; reject unknown values early.
       if Normalized = "debug" then
-         return Web.Logging.Debug_Level;
+         return Webframework_Logging.Debug_Level;
       elsif Normalized = "info" then
-         return Web.Logging.Info_Level;
+         return Webframework_Logging.Info_Level;
       elsif Normalized = "warn" then
-         return Web.Logging.Warn_Level;
+         return Webframework_Logging.Warn_Level;
       elsif Normalized = "error" then
-         return Web.Logging.Error_Level;
+         return Webframework_Logging.Error_Level;
       end if;
 
       raise Constraint_Error with "invalid log level: " & Value;
@@ -269,8 +269,8 @@ procedure Example_App is
 
    procedure Apply_Logging (Settings : Settings_Type) is
    begin
-      Web.Logging.Set_Minimum_Level (Settings.Log_Level);
-      Web.Logging.Set_Structured (Settings.Structured_Log);
+      Webframework_Logging.Set_Minimum_Level (Settings.Log_Level);
+      Webframework_Logging.Set_Structured (Settings.Structured_Log);
    end Apply_Logging;
 
    --  Build a complete application configuration from CLI settings.
@@ -403,7 +403,7 @@ begin
    begin
       App.Attachments.Initialize ("example_app_attachments", Attach_Status);
       if Attach_Status /= App.Attachments.Ready then
-         Web.Logging.Error
+         Webframework_Logging.Error
            ("attachments feature failed to initialize: "
             & App.Attachments.Init_Status'Image (Attach_Status));
       end if;
@@ -419,14 +419,14 @@ begin
    begin
       App.Smtp_Catcher.Start (Catcher_Status);
       if Catcher_Status = App.Smtp_Catcher.Bind_Error then
-         Web.Logging.Error
+         Webframework_Logging.Error
            ("SMTP catcher failed to bind 127.0.0.1:"
             & Positive'Image (App.Smtp_Catcher.Port)
             & " -- email demo disabled");
       else
          App.Notifications.Initialize (Notif_Status);
          if Notif_Status /= App.Notifications.Ready then
-            Web.Logging.Error
+            Webframework_Logging.Error
               ("email notifications feature failed to initialize: "
                & App.Notifications.Init_Status'Image (Notif_Status));
          end if;

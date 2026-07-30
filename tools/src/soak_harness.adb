@@ -6,7 +6,7 @@ with Ada.Text_IO;
 with GNAT.Sockets;
 with Tool_Soak_Handlers;
 with Web.Config;
-with Web.Logging;
+with Webframework_Logging;
 with Web.Server;
 
 procedure Soak_Harness is
@@ -233,7 +233,7 @@ procedure Soak_Harness is
    Port   : constant Natural := Free_Port;
    Config : Web.Config.Config_Type := Web.Config.Default_Config;
 begin
-   Web.Logging.Set_Minimum_Level (Web.Logging.Warn_Level);
+   Webframework_Logging.Set_Minimum_Level (Webframework_Logging.Warn_Level);
    Config.Max_Connections := Client_Count + 8;
    Web.Server.Stop;
    Web.Server.Configure (Config);

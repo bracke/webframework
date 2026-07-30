@@ -20,7 +20,6 @@ project Webframework is
       "Web.Html",
       "Web.Http_Body",
       "Web.Live",
-      "Web.Logging",
       "Web.Multipart",
       "Web.Patch",
       "Web.Protocol",

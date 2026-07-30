@@ -13,7 +13,7 @@ with Ada.Unchecked_Deallocation;
 with System;
 with Web.Context;
 with Web.Errors;
-with Web.Logging;
+with Webframework_Logging;
 with Web.Security;
 with Web.Static;
 with Web.WebSocket;
@@ -442,7 +442,7 @@ package body Web.Server is
       return Default_Error_Response (Status, Detail);
    exception
       when Error : others =>
-         Web.Logging.Error (Ada.Exceptions.Exception_Message (Error));
+         Webframework_Logging.Error (Ada.Exceptions.Exception_Message (Error));
          return Default_Error_Response (Status, "");
    end Build_Error_Response;
 
@@ -599,8 +599,8 @@ package body Web.Server is
       Status     : Natural;
       At_Time    : String) is
    begin
-      if Web.Logging.Enabled (Web.Logging.Info_Level) then
-         Web.Logging.Info
+      if Webframework_Logging.Enabled (Webframework_Logging.Info_Level) then
+         Webframework_Logging.Info
            ("request_id=" & Trimmed_Image (Request_Id)
             & " ip=" & Client_Ip
             & " method=" & Method
@@ -1810,7 +1810,7 @@ package body Web.Server is
             Fallback : constant Web.Response.Response_Type :=
               Fallback_Response (Request, Response);
          begin
-            Web.Logging.Warn ("response compression disabled: " & Ada.Exceptions.Exception_Message (Error));
+            Webframework_Logging.Warn ("response compression disabled: " & Ada.Exceptions.Exception_Message (Error));
             Web.Connection.Send_All (Conn, Web.Response.Serialize (Fallback));
             if Web.Response.Is_File_Body (Fallback) then
                Send_File_Body (Conn, Fallback);
@@ -2308,7 +2308,7 @@ package body Web.Server is
                  Build_Error_Response (Request, Error);
             begin
                Request_Status := Web.Response.Status (Response);
-               Web.Logging.Warn
+               Webframework_Logging.Warn
                  (Ada.Exceptions.Exception_Message (Error));
                Send_Response (Conn, Request, Response);
             end;
@@ -2319,7 +2319,7 @@ package body Web.Server is
                  Build_Error_Response (Request, Error);
             begin
                Request_Status := Web.Response.Status (Response);
-               Web.Logging.Error (Ada.Exceptions.Exception_Information (Error));
+               Webframework_Logging.Error (Ada.Exceptions.Exception_Information (Error));
                Send_Response (Conn, Request, Response);
             end;
             Finalize_Request;
@@ -2346,7 +2346,7 @@ package body Web.Server is
             Handle_Connection (Client, TLS_Client);
          exception
             when Error : others =>
-               Web.Logging.Error (Ada.Exceptions.Exception_Information (Error));
+               Webframework_Logging.Error (Ada.Exceptions.Exception_Information (Error));
          end;
 
          Connection_Limiter.Release;
@@ -2370,7 +2370,7 @@ package body Web.Server is
       GNAT.Sockets.Bind_Socket (Listener, Address);
       GNAT.Sockets.Listen_Socket (Listener, Server_Config.Max_Connections);
       Server_State.Started (Listener, Address);
-      Web.Logging.Info
+      Webframework_Logging.Info
         ("listening on "
          & (if Use_TLS then "https://" else "http://")
          & Host
@@ -2407,7 +2407,7 @@ package body Web.Server is
                               raise;
                         end;
                      else
-                        Web.Logging.Warn ("connection limit reached; closing accepted socket");
+                        Webframework_Logging.Warn ("connection limit reached; closing accepted socket");
                         GNAT.Sockets.Close_Socket (Socket);
                      end if;
                   end;
@@ -2417,7 +2417,7 @@ package body Web.Server is
                   if Server_State.Stopping then
                      exit;
                   end if;
-                  Web.Logging.Error (Ada.Exceptions.Exception_Information (Error));
+                  Webframework_Logging.Error (Ada.Exceptions.Exception_Information (Error));
             end;
          end loop;
          Queue.Close;

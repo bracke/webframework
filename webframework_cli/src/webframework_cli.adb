@@ -5,7 +5,7 @@ with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Ada.Text_IO;
 with Terminal_Styles;
-with Web.Logging;
+with Webframework_Logging;
 with Project_Tools.Files;
 with Project_Tools.Text;
 
@@ -20,19 +20,19 @@ package body Webframework_Cli is
 
    procedure Print_Info (Message : String) is
    begin
-      Web.Logging.Info (Message);
+      Webframework_Logging.Info (Message);
       Ada.Text_IO.Put_Line (Terminal_Styles.Line (Message, Terminal_Styles.Role_Info));
    end Print_Info;
 
    procedure Print_Warn (Message : String) is
    begin
-      Web.Logging.Warn (Message);
+      Webframework_Logging.Warn (Message);
       Ada.Text_IO.Put_Line (Terminal_Styles.Line (Message, Terminal_Styles.Role_Warning));
    end Print_Warn;
 
    procedure Print_Error (Message : String) is
    begin
-      Web.Logging.Error (Message);
+      Webframework_Logging.Error (Message);
       Ada.Text_IO.Put_Line
         (Ada.Text_IO.Standard_Error,
          Terminal_Styles.Line (Message, Terminal_Styles.Role_Error));
@@ -319,7 +319,19 @@ package body Webframework_Cli is
         & "ssh_lib = { path = """ & Sibling_Root ("sshlib") & """ }" & LF
         & LF
         & "[[pins]]" & LF
-        & "zlib = { path = """ & Sibling_Root ("zlib") & """ }" & LF;
+        & "zlib = { path = """ & Sibling_Root ("zlib") & """ }" & LF
+        & LF
+        & "[[depends-on]]" & LF
+        & "webframework_logging = ""*""" & LF
+        & LF
+        & "[[pins]]" & LF
+        & "webframework_logging = { path = """
+          & Absolute_Framework_Root & "/webframework_logging" & """ }" & LF
+        & "logging = { path = """ & Sibling_Root ("logging") & """ }" & LF
+        & "logging_runtime = { path = """
+          & Sibling_Root ("logging") & "/logging_runtime" & """ }" & LF
+        & "representation = { path = """
+          & Sibling_Root ("representation") & """ }" & LF;
    end Base_Alire_Manifest;
 
    function Read_File (Path : String) return String is
@@ -704,7 +716,7 @@ package body Webframework_Cli is
       Pages_Body : constant String :=
         "with Ada.Exceptions;" & LF
         & "with App.Runtime;" & LF
-        & "with Web.Logging;" & LF
+        & "with Webframework_Logging;" & LF
         & "with Web.Response;" & LF
         & LF
         & "--  Route handlers are intentionally defensive and return clear errors." & LF
@@ -721,7 +733,7 @@ package body Webframework_Cli is
         & "   --  Defensive fallback: keep process alive if this route has a bug." & LF
         & "   exception" & LF
         & "      when Error : others =>" & LF
-        & "         Web.Logging.Error" & LF
+        & "         Webframework_Logging.Error" & LF
         & "           (""home page render failed: "" & Ada.Exceptions.Exception_Message (Error));" & LF
         & "         return Web.Response.Internal_Server_Error" & LF
         & "           (""Home page is temporarily unavailable."");" & LF
@@ -736,7 +748,7 @@ package body Webframework_Cli is
         & "   --  If health logic is changed later, do not crash the server." & LF
         & "   exception" & LF
         & "      when Error : others =>" & LF
-        & "         Web.Logging.Error" & LF
+        & "         Webframework_Logging.Error" & LF
         & "           (""health route failed: "" & Ada.Exceptions.Exception_Message (Error));" & LF
         & "         return Web.Response.Internal_Server_Error" & LF
         & "           (""Health endpoint is temporarily unavailable."");" & LF
@@ -751,7 +763,7 @@ package body Webframework_Cli is
         & "with App.Runtime;" & LF
         & "with App.Pages;" & LF
         & "with Web.Config;" & LF
-        & "with Web.Logging;" & LF
+        & "with Webframework_Logging;" & LF
         & LF
         & "--  Generated main for the scaffolded application." & LF
         & "--  This file is intentionally explicit and easy to edit." & LF
@@ -761,14 +773,14 @@ package body Webframework_Cli is
         & "   --  Print informational messages to both logging and stdout." & LF
         & "   procedure Print_Info (Message : String) is" & LF
         & "   begin" & LF
-        & "      Web.Logging.Info (Message);" & LF
+        & "      Webframework_Logging.Info (Message);" & LF
         & "      Ada.Text_IO.Put_Line (Message);" & LF
         & "   end Print_Info;" & LF
         & LF
         & "   --  Print fatal/usage errors to logging and stderr." & LF
         & "   procedure Print_Error (Message : String) is" & LF
         & "   begin" & LF
-        & "      Web.Logging.Error (Message);" & LF
+        & "      Webframework_Logging.Error (Message);" & LF
         & "      Ada.Text_IO.Put_Line (Ada.Text_IO.Standard_Error, Message);" & LF
         & "   end Print_Error;" & LF
         & LF
@@ -789,7 +801,7 @@ package body Webframework_Cli is
         & "      Compression : Boolean := True;" & LF
         & "      Compression_Min_Size : Natural := 256;" & LF
         & "      --  Logging controls." & LF
-        & "      Log_Level : Web.Logging.Level_Type := Web.Logging.Debug_Level;" & LF
+        & "      Log_Level : Webframework_Logging.Level_Type := Webframework_Logging.Debug_Level;" & LF
         & "      Structured_Log : Boolean := False;" & LF
         & "      --  Session cleanup frequency in seconds." & LF
         & "      Cleanup_Interval : Positive := 60;" & LF
@@ -823,17 +835,17 @@ package body Webframework_Cli is
         & "   end Usage;" & LF
         & LF
         & "   --  Parse string log levels from CLI into typed values." & LF
-        & "   function Parse_Log_Level (Value : String) return Web.Logging.Level_Type is" & LF
+        & "   function Parse_Log_Level (Value : String) return Webframework_Logging.Level_Type is" & LF
         & "      Normalized : constant String := Ada.Characters.Handling.To_Lower (Value);" & LF
         & "   begin" & LF
         & "      if Normalized = ""debug"" then" & LF
-        & "         return Web.Logging.Debug_Level;" & LF
+        & "         return Webframework_Logging.Debug_Level;" & LF
         & "      elsif Normalized = ""info"" then" & LF
-        & "         return Web.Logging.Info_Level;" & LF
+        & "         return Webframework_Logging.Info_Level;" & LF
         & "      elsif Normalized = ""warn"" then" & LF
-        & "         return Web.Logging.Warn_Level;" & LF
+        & "         return Webframework_Logging.Warn_Level;" & LF
         & "      elsif Normalized = ""error"" then" & LF
-        & "         return Web.Logging.Error_Level;" & LF
+        & "         return Webframework_Logging.Error_Level;" & LF
         & "      end if;" & LF
         & "      raise Constraint_Error with ""invalid log level: "" & Value;" & LF
         & "   end Parse_Log_Level;" & LF
@@ -916,8 +928,8 @@ package body Webframework_Cli is
         & "   --  Configure logging from CLI values before server startup." & LF
         & "   procedure Apply_Logging (Settings : Settings_Type) is" & LF
         & "   begin" & LF
-        & "      Web.Logging.Set_Minimum_Level (Settings.Log_Level);" & LF
-        & "      Web.Logging.Set_Structured (Settings.Structured_Log);" & LF
+        & "      Webframework_Logging.Set_Minimum_Level (Settings.Log_Level);" & LF
+        & "      Webframework_Logging.Set_Structured (Settings.Structured_Log);" & LF
         & "   end Apply_Logging;" & LF
         & LF
         & "   --  Bind all pieces and start serving." & LF
@@ -936,7 +948,7 @@ package body Webframework_Cli is
         & "   App.Runtime.WebSocket (""/ws"", App.Runtime.WebSocket_Handler'Access);" & LF
         & "   App.Runtime.Static (""/static"", ""static"");" & LF
         & "   App.Runtime.Start_Cleanup_Task (Settings.Cleanup_Interval);" & LF
-        & "   Web.Logging.Info (""webframework: "" & App.Runtime.Configuration_Report);" & LF
+        & "   Webframework_Logging.Info (""webframework: "" & App.Runtime.Configuration_Report);" & LF
         & "   App.Runtime.Run (To_String (Settings.Host), Settings.Port);" & LF
         & "exception" & LF
         & "   --  Preserve diagnostics for command-line validation and startup failures." & LF
@@ -1021,7 +1033,7 @@ package body Webframework_Cli is
       Unit_Body : constant String :=
         "with Ada.Exceptions;" & LF
         & "with App.Runtime;" & LF
-        & "with Web.Logging;" & LF
+        & "with Webframework_Logging;" & LF
         & "with Web.Response;" & LF
         & LF
         & "--  Rendering stays minimal and readable for first-party edits." & LF
@@ -1042,7 +1054,7 @@ package body Webframework_Cli is
         & "   --  Preserve process availability when a template/markup error happens." & LF
         & "   exception" & LF
         & "      when Error : others =>" & LF
-        & "         Web.Logging.Error" & LF
+        & "         Webframework_Logging.Error" & LF
         & "           (""page render failed for " & Page_Name & ": "" &" & LF
         & "              Ada.Exceptions.Exception_Message (Error));" & LF
         & "         return Web.Response.Internal_Server_Error" & LF
@@ -1088,7 +1100,7 @@ package body Webframework_Cli is
         & "end " & Package_Name & ";" & LF;
       Unit_Body : constant String :=
         "with Ada.Exceptions;" & LF
-        & "with Web.Logging;" & LF
+        & "with Webframework_Logging;" & LF
         & "package body " & Package_Name & " is" & LF
         & "   --  Handle event by updating State and returning a patch list." & LF
         & "   --  Use small, focused patches to keep client updates predictable." & LF
@@ -1101,7 +1113,7 @@ package body Webframework_Cli is
         & "      return Web.Patch.Single (Web.Patch.Set_Text (""status"", ""ok""));" & LF
         & "   exception" & LF
         & "      when Error : others =>" & LF
-        & "         Web.Logging.Error" & LF
+        & "         Webframework_Logging.Error" & LF
         & "           (""" & Handler_Full_Name (Action) & """: "" &" & LF
         & "              Ada.Exceptions.Exception_Message (Error));" & LF
         & "         return Web.Patch.Single" & LF

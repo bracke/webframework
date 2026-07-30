@@ -68,6 +68,24 @@ versions = "~0.1.0-dev"
 lockfiled = true
 path = "../../hostkit"
 [[solution.state]]
+crate = "logging"
+fulfilment = "linked"
+pinned = false
+transitivity = "direct"
+versions = "~0.1.0-dev"
+[solution.state.link]
+lockfiled = true
+path = "../../logging"
+[[solution.state]]
+crate = "logging_runtime"
+fulfilment = "linked"
+pinned = false
+transitivity = "direct"
+versions = "~0.1.0-dev"
+[solution.state.link]
+lockfiled = true
+path = "../../logging/logging_runtime"
+[[solution.state]]
 crate = "project_tools"
 fulfilment = "linked"
 pinned = false
@@ -76,6 +94,15 @@ versions = "*"
 [solution.state.link]
 lockfiled = true
 path = "../../project_tools"
+[[solution.state]]
+crate = "representation"
+fulfilment = "linked"
+pinned = false
+transitivity = "direct"
+versions = "~0.1.0-dev"
+[solution.state.link]
+lockfiled = true
+path = "../../representation"
 [[solution.state]]
 crate = "ssh_lib"
 fulfilment = "linked"
@@ -94,6 +121,15 @@ versions = "*"
 [solution.state.link]
 lockfiled = true
 path = ".."
+[[solution.state]]
+crate = "webframework_logging"
+fulfilment = "linked"
+pinned = false
+transitivity = "direct"
+versions = "*"
+[solution.state.link]
+lockfiled = true
+path = "../webframework_logging"
 [[solution.state]]
 crate = "zlib"
 fulfilment = "linked"

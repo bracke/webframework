@@ -1,7 +1,7 @@
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Exceptions;
 with Web.Errors;
-with Web.Logging;
+with Webframework_Logging;
 with Web.Html;
 
 package body Web.Dispatcher is
@@ -75,7 +75,7 @@ package body Web.Dispatcher is
 
       Cursor := Handlers.Find (Action);
       if not Handler_Maps.Has_Element (Cursor) then
-         Web.Logging.Warn ("unknown action: " & Action);
+         Webframework_Logging.Warn ("unknown action: " & Action);
          return (Items => Web.Patch.Patch_Vectors.Empty_Vector);
       end if;
 
@@ -87,7 +87,7 @@ package body Web.Dispatcher is
          if Guard_Maps.Has_Element (Guard_Cursor)
            and then not Guard_Maps.Element (Guard_Cursor) (State, Event)
          then
-            Web.Logging.Warn ("action not authorized: " & Action);
+            Webframework_Logging.Warn ("action not authorized: " & Action);
             return (Items => Web.Patch.Patch_Vectors.Empty_Vector);
          end if;
       end;
@@ -95,7 +95,7 @@ package body Web.Dispatcher is
       return Handler_Maps.Element (Cursor) (State, Event);
    exception
       when Error : others =>
-         Web.Logging.Error ("handler failed: " & Ada.Exceptions.Exception_Message (Error));
+         Webframework_Logging.Error ("handler failed: " & Ada.Exceptions.Exception_Message (Error));
          return (Items => Web.Patch.Patch_Vectors.Empty_Vector);
    end Dispatch;
 end Web.Dispatcher;

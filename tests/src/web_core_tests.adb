@@ -4,7 +4,7 @@ with AUnit.Test_Caller;
 with Web.Cookie;
 with Web.Errors;
 with Web.Html;
-with Web.Logging;
+with Webframework_Logging;
 with Web.Request;
 with Web.Response;
 with Web.Security;
@@ -13,7 +13,7 @@ with Zlib;
 package body Web_Core_Tests is
    package Caller is new AUnit.Test_Caller (Fixture);
    use AUnit.Assertions;
-   use type Web.Logging.Level_Type;
+   use type Webframework_Logging.Level_Type;
    use type Zlib.Status_Code;
 
    function To_Bytes (Value : String) return Zlib.Byte_Array is
@@ -904,15 +904,15 @@ package body Web_Core_Tests is
    procedure Test_Logging (Item : in out Fixture) is
       pragma Unreferenced (Item);
    begin
-      Web.Logging.Set_Minimum_Level (Web.Logging.Warn_Level);
-      Web.Logging.Set_Structured (True);
-      Assert (Web.Logging.Minimum_Level = Web.Logging.Warn_Level, "minimum logging level set");
-      Assert (Web.Logging.Structured, "structured logging enabled");
+      Webframework_Logging.Set_Minimum_Level (Webframework_Logging.Warn_Level);
+      Webframework_Logging.Set_Structured (True);
+      Assert (Webframework_Logging.Minimum_Level = Webframework_Logging.Warn_Level, "minimum logging level set");
+      Assert (Webframework_Logging.Structured, "structured logging enabled");
 
-      Web.Logging.Set_Minimum_Level (Web.Logging.Debug_Level);
-      Web.Logging.Set_Structured (False);
-      Assert (Web.Logging.Minimum_Level = Web.Logging.Debug_Level, "minimum logging level reset");
-      Assert (not Web.Logging.Structured, "structured logging disabled");
+      Webframework_Logging.Set_Minimum_Level (Webframework_Logging.Debug_Level);
+      Webframework_Logging.Set_Structured (False);
+      Assert (Webframework_Logging.Minimum_Level = Webframework_Logging.Debug_Level, "minimum logging level reset");
+      Assert (not Webframework_Logging.Structured, "structured logging disabled");
    end Test_Logging;
 
    procedure Test_Security (Item : in out Fixture) is
