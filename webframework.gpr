@@ -33,6 +33,7 @@ project Webframework is
       "Web.WebSocket",
       "Web.SSE",
       "Web.CORS",
+      "Web.Rate_Limit",
       "Web.Assets",
       "Web.Assets.Clients",
       "Web.Binding",

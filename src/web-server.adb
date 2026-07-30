@@ -18,6 +18,7 @@ with Web.Security;
 with Web.Static;
 with Web.WebSocket;
 with Web.SSE;
+with Web.Rate_Limit;
 
 package body Web.Server is
    use Ada.Strings.Fixed;
@@ -2217,6 +2218,19 @@ package body Web.Server is
       CORS_Configured := True;
    end Set_CORS;
 
+   procedure Set_Rate_Limit (Max_Requests : Natural; Per_Seconds : Positive) is
+   begin
+      Web.Rate_Limit.Configure (Max_Requests, Per_Seconds);
+   end Set_Rate_Limit;
+
+   --  Wall-clock seconds on a fixed epoch, for the rate limiter's windows.
+   function Now_Seconds return Web.Rate_Limit.Timestamp is
+      use type Ada.Calendar.Time;
+      Epoch : constant Ada.Calendar.Time := Ada.Calendar.Time_Of (2000, 1, 1);
+   begin
+      return Web.Rate_Limit.Timestamp (Ada.Calendar.Clock - Epoch);
+   end Now_Seconds;
+
    function Health_Response return Web.Response.Response_Type is
    begin
       return Web.Response.Text ("ok");
@@ -2505,6 +2519,9 @@ package body Web.Server is
       declare
          Peer : constant String :=
            GNAT.Sockets.Image (GNAT.Sockets.Get_Peer_Name (Socket));
+         --  The peer IP without the (per-connection) port, for rate-limit keying.
+         Peer_Addr : constant String :=
+           GNAT.Sockets.Image (GNAT.Sockets.Get_Peer_Name (Socket).Addr);
          Request_Id : Natural := 0;
          Request_Time : constant String := Request_Timestamp (Ada.Calendar.Clock);
          Request_Status : Natural := 0;
@@ -2626,6 +2643,23 @@ package body Web.Server is
 
                Require_Allowed_Request (Request);
 
+               --  Per-IP HTTP rate limit (no-op unless configured). Keyed by the
+               --  resolved client IP: the X-Forwarded-For client when trusted
+               --  (Client_Ip already holds it), otherwise the port-less peer.
+               declare
+                  Rate_Key : constant String :=
+                    (if Client_Ip = To_Unbounded_String (Peer) then Peer_Addr
+                     else To_String (Client_Ip));
+                  Rate_Ok  : Boolean;
+                  Retry    : Natural;
+               begin
+                  Web.Rate_Limit.Check (Rate_Key, Now_Seconds, Rate_Ok, Retry);
+                  if not Rate_Ok then
+                     raise Web.Errors.Rate_Limited_Error
+                       with Trimmed_Image (Retry);
+                  end if;
+               end;
+
                if Web.WebSocket.Is_Upgrade (Request) then
                   declare
                      Cursor : constant Socket_Maps.Cursor := Sockets.Find (To_String (Path));
@@ -2718,6 +2752,18 @@ package body Web.Server is
 
          Finalize_Request;
       exception
+         when Error : Web.Errors.Rate_Limited_Error =>
+            declare
+               Response : Web.Response.Response_Type :=
+                 Build_Error_Response (Request, 429, "too many requests");
+            begin
+               Web.Response.Set_Header
+                 (Response, "Retry-After",
+                  Ada.Exceptions.Exception_Message (Error));
+               Request_Status := 429;
+               Send_Response (Conn, Request, Response);
+            end;
+            Finalize_Request;
          when Error : Web.Errors.Bad_Request_Error | Web.Errors.Protocol_Error | Web.Errors.Security_Error =>
             declare
                Response : constant Web.Response.Response_Type :=

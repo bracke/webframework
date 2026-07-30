@@ -7,6 +7,9 @@ package Web.Errors is
    Not_Found_Error   : exception;
    Protocol_Error    : exception;
    Security_Error    : exception;
+   --  Raised when a client exceeds its HTTP rate limit. The exception message
+   --  carries the Retry-After value in seconds.
+   Rate_Limited_Error : exception;
 
    --  Convert an exception into a framework HTTP response.
    --  @param Occurrence Exception occurrence.

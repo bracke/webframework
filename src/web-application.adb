@@ -54,6 +54,12 @@ package body Web.Application is
       Web.Server.Set_CORS (Policy);
    end Set_CORS;
 
+   procedure Set_HTTP_Rate_Limit
+     (Max_Requests : Natural; Per_Seconds : Positive) is
+   begin
+      Web.Server.Set_Rate_Limit (Max_Requests, Per_Seconds);
+   end Set_HTTP_Rate_Limit;
+
    procedure Set_Secure_Cookies (Enabled : Boolean) is
    begin
       Live.Set_Secure_Cookies (Enabled);

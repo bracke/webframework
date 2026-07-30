@@ -100,6 +100,14 @@ package Web.Application is
    --  @return No return value.
    procedure Set_CORS (Policy : Web.CORS.Policy);
 
+   --  Enable per-IP HTTP rate limiting (see Web.Server.Set_Rate_Limit): at most
+   --  Max_Requests from one client IP within Per_Seconds, else 429. Named apart
+   --  from Set_Rate_Limit, which limits the WebSocket live channel.
+   --  @param Max_Requests Requests allowed per window; 0 disables.
+   --  @param Per_Seconds  Window length in seconds.
+   --  @return No return value.
+   procedure Set_HTTP_Rate_Limit (Max_Requests : Natural; Per_Seconds : Positive);
+
    --  Set the session cookie secure flag.
    --  @param Enabled True to include `Secure` on session cookies.
    --  @return No return value.
