@@ -100,6 +100,20 @@ package body Web.Server is
    SSE_Routes : SSE_Maps.Map;
    SSE_Guards : Socket_Guard_Maps.Map;
 
+   --  A dynamic route: a path with ":name" segments (e.g. "/users/:id"), matched
+   --  by pattern and captured into the request context. Kept in a list, not the
+   --  hash map, because matching is not an exact key lookup. Context-aware only,
+   --  since a plain handler cannot read a captured value.
+   type Pattern_Route is record
+      Method  : Unbounded_String;
+      Pattern : Unbounded_String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guards  : Guard_Vectors.Vector;
+   end record;
+   package Pattern_Route_Vectors is new Ada.Containers.Vectors
+     (Index_Type => Positive, Element_Type => Pattern_Route);
+   Pattern_Routes : Pattern_Route_Vectors.Vector;
+
    --  A streaming POST route together with its guards.
    type Stream_Route is record
       Handler : Stream_Handler;
@@ -1145,7 +1159,23 @@ package body Web.Server is
       end if;
    end Reject_Unsupported_HTTP;
 
-   procedure Get (Path : String; Handler : Route_Handler) is
+   --  Whether Path has a ":name" parameter segment (a dynamic route).
+   function Has_Param_Segment (Path : String) return Boolean is
+   begin
+      for I in Path'Range loop
+         if Path (I) = ':'
+           and then (I = Path'First or else Path (I - 1) = '/')
+         then
+            return True;
+         end if;
+      end loop;
+      return False;
+   end Has_Param_Segment;
+
+   --  Register a plain (context-free) exact route under Method.
+   procedure Register_Plain
+     (Method : String; Path : String; Handler : Route_Handler)
+   is
       Position : Route_Maps.Cursor;
       Inserted : Boolean;
    begin
@@ -1153,37 +1183,46 @@ package body Web.Server is
       if Handler = null then
          raise Web.Errors.Security_Error with "route handler is null";
       end if;
+      if Has_Param_Segment (Path) then
+         raise Web.Errors.Security_Error
+           with "path parameters require the context-aware route form";
+      end if;
 
       Route_Maps.Insert
         (Container => Routes,
-         Key       => "GET " & Path,
+         Key       => Method & " " & Path,
          New_Item  => Handler,
          Position  => Position,
          Inserted  => Inserted);
       if not Inserted then
          raise Web.Errors.Security_Error with "duplicate route path";
       end if;
+   end Register_Plain;
+
+   procedure Get (Path : String; Handler : Route_Handler) is
+   begin
+      Register_Plain ("GET", Path, Handler);
    end Get;
 
    procedure Post (Path : String; Handler : Route_Handler) is
-      Position : Route_Maps.Cursor;
-      Inserted : Boolean;
    begin
-      Require_Registration_Path (Path, "route");
-      if Handler = null then
-         raise Web.Errors.Security_Error with "route handler is null";
-      end if;
-
-      Route_Maps.Insert
-        (Container => Routes,
-         Key       => "POST " & Path,
-         New_Item  => Handler,
-         Position  => Position,
-         Inserted  => Inserted);
-      if not Inserted then
-         raise Web.Errors.Security_Error with "duplicate route path";
-      end if;
+      Register_Plain ("POST", Path, Handler);
    end Post;
+
+   procedure Put (Path : String; Handler : Route_Handler) is
+   begin
+      Register_Plain ("PUT", Path, Handler);
+   end Put;
+
+   procedure Patch (Path : String; Handler : Route_Handler) is
+   begin
+      Register_Plain ("PATCH", Path, Handler);
+   end Patch;
+
+   procedure Delete (Path : String; Handler : Route_Handler) is
+   begin
+      Register_Plain ("DELETE", Path, Handler);
+   end Delete;
 
    procedure Post_Stream
      (Path    : String;
@@ -1254,13 +1293,43 @@ package body Web.Server is
       end if;
    end Register_Guarded;
 
+   --  Register a context-aware route under Method: an exact route when Path is
+   --  literal, or a pattern route when it carries ":name" segments.
+   procedure Register_Contextual
+     (Method  : String;
+      Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access)
+   is
+   begin
+      Require_Registration_Path (Path, "route");
+      if Handler = null then
+         raise Web.Errors.Security_Error with "route handler is null";
+      end if;
+
+      if Has_Param_Segment (Path) then
+         declare
+            PR : Pattern_Route;
+         begin
+            PR.Method  := To_Unbounded_String (Method);
+            PR.Pattern := To_Unbounded_String (Path);
+            PR.Handler := Handler;
+            if Guard /= null then
+               PR.Guards.Append (Guard);
+            end if;
+            Pattern_Routes.Append (PR);
+         end;
+      else
+         Register_Guarded (Method & " " & Path, Handler, Guard);
+      end if;
+   end Register_Contextual;
+
    procedure Get
      (Path    : String;
       Handler : Web.Guard.Contextual_Handler;
       Guard   : Web.Guard.Guard_Access := null) is
    begin
-      Require_Registration_Path (Path, "route");
-      Register_Guarded ("GET " & Path, Handler, Guard);
+      Register_Contextual ("GET", Path, Handler, Guard);
    end Get;
 
    procedure Post
@@ -1268,9 +1337,32 @@ package body Web.Server is
       Handler : Web.Guard.Contextual_Handler;
       Guard   : Web.Guard.Guard_Access := null) is
    begin
-      Require_Registration_Path (Path, "route");
-      Register_Guarded ("POST " & Path, Handler, Guard);
+      Register_Contextual ("POST", Path, Handler, Guard);
    end Post;
+
+   procedure Put
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Register_Contextual ("PUT", Path, Handler, Guard);
+   end Put;
+
+   procedure Patch
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Register_Contextual ("PATCH", Path, Handler, Guard);
+   end Patch;
+
+   procedure Delete
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Register_Contextual ("DELETE", Path, Handler, Guard);
+   end Delete;
 
    procedure WebSocket (Path : String; Handler : WebSocket_Handler) is
       Position : Socket_Maps.Cursor;
@@ -1696,6 +1788,158 @@ package body Web.Server is
       return True;
    end Static_Prefix_Matches;
 
+   ---------------------------------------------------------------------------
+   --  Path-pattern routing (":name" segments)
+   ---------------------------------------------------------------------------
+
+   Max_Segments : constant := 64;
+   type Seg_Bounds is record First : Integer := 1; Last : Integer := 0; end record;
+   type Seg_Array is array (1 .. Max_Segments) of Seg_Bounds;
+
+   --  Split S into its non-empty '/'-delimited segments.
+   procedure Split_Segments
+     (S : String; Segs : out Seg_Array; Count : out Natural)
+   is
+      I : Integer := S'First;
+   begin
+      Count := 0;
+      while I <= S'Last loop
+         if S (I) = '/' then
+            I := I + 1;
+         else
+            declare
+               Start : constant Integer := I;
+            begin
+               while I <= S'Last and then S (I) /= '/' loop
+                  I := I + 1;
+               end loop;
+               if Count < Max_Segments then
+                  Count := Count + 1;
+                  Segs (Count) := (First => Start, Last => I - 1);
+               end if;
+            end;
+         end if;
+      end loop;
+   end Split_Segments;
+
+   --  Whether a request Path matches a registered Pattern (":name" matches any
+   --  one non-empty segment; literals must be equal; segment counts must match).
+   function Pattern_Matches (Pattern : String; Path : String) return Boolean is
+      PS, RS : Seg_Array;
+      PC, RC : Natural;
+   begin
+      Split_Segments (Pattern, PS, PC);
+      Split_Segments (Path, RS, RC);
+      if PC = 0 or else PC /= RC then
+         return False;
+      end if;
+      for I in 1 .. PC loop
+         declare
+            P : constant String := Pattern (PS (I).First .. PS (I).Last);
+            R : constant String := Path (RS (I).First .. RS (I).Last);
+         begin
+            if P (P'First) = ':' then
+               null;   --  parameter: matches R (already non-empty)
+            elsif P /= R then
+               return False;
+            end if;
+         end;
+      end loop;
+      return True;
+   end Pattern_Matches;
+
+   --  Set the path parameters of a matched Pattern/Path pair into Context.
+   procedure Capture_Params
+     (Pattern : String;
+      Path    : String;
+      Context : in out Web.Context.Request_Context)
+   is
+      PS, RS : Seg_Array;
+      PC, RC : Natural;
+   begin
+      Split_Segments (Pattern, PS, PC);
+      Split_Segments (Path, RS, RC);
+      for I in 1 .. Natural'Min (PC, RC) loop
+         declare
+            P : constant String := Pattern (PS (I).First .. PS (I).Last);
+         begin
+            if P'Length > 1 and then P (P'First) = ':' then
+               Web.Context.Set_Path_Param
+                 (Context,
+                  P (P'First + 1 .. P'Last),
+                  Path (RS (I).First .. RS (I).Last));
+            end if;
+         end;
+      end loop;
+   end Capture_Params;
+
+   --  Whether Method is registered for Path (exact or by pattern).
+   function Method_Registered (Path : String; Method : String) return Boolean is
+      Key : constant String := Method & " " & Path;
+   begin
+      if Guarded_Routes.Contains (Key) or else Routes.Contains (Key) then
+         return True;
+      end if;
+      for PR of Pattern_Routes loop
+         if To_String (PR.Method) = Method
+           and then Pattern_Matches (To_String (PR.Pattern), Path)
+         then
+            return True;
+         end if;
+      end loop;
+      return False;
+   end Method_Registered;
+
+   --  The Allow header value for Path: every registered method, plus OPTIONS
+   --  (auto-answered). "" when the path matches no route at all.
+   function Allow_Header (Path : String) return String is
+      R : Unbounded_String;
+      procedure Add (M : String) is
+      begin
+         if Method_Registered (Path, M) then
+            if Length (R) > 0 then
+               Append (R, ", ");
+            end if;
+            Append (R, M);
+         end if;
+      end Add;
+   begin
+      Add ("GET");
+      Add ("POST");
+      Add ("PUT");
+      Add ("PATCH");
+      Add ("DELETE");
+      if Length (R) > 0 then
+         Append (R, ", OPTIONS");
+      end if;
+      return To_String (R);
+   end Allow_Header;
+
+   --  Run only the given route guards (globals are run separately). Halts on the
+   --  first guard whose decision is Halt.
+   procedure Run_Route_Guards
+     (Request  : Web.Request.Request_Type;
+      Context  : in out Web.Context.Request_Context;
+      Guards   : Guard_Vectors.Vector;
+      Halted   : out Boolean;
+      Response : out Web.Response.Response_Type)
+   is
+   begin
+      Halted := False;
+      Response := Web.Response.Not_Found;   --  only read when Halted
+      for Guard of Guards loop
+         declare
+            Outcome : constant Web.Guard.Guard_Outcome := Guard (Request, Context);
+         begin
+            if Outcome.Decision = Web.Guard.Halt then
+               Response := Outcome.Response;
+               Halted := True;
+               return;
+            end if;
+         end;
+      end loop;
+   end Run_Route_Guards;
+
    --  Run the global guards followed by Route's guards against Request. On the
    --  first guard that halts, Halted is set and Response carries its response;
    --  otherwise Halted is False. Shared by HTTP dispatch and the WebSocket
@@ -1742,12 +1986,27 @@ package body Web.Server is
       Halted : Boolean := False;
       Halt_Response : Web.Response.Response_Type;
    begin
-      --  Only allow GET and POST methods
-      if Method /= "GET" and then Method /= "POST" then
-         return Build_Error_Response (Request, 405, "method not allowed");
+      --  Auto OPTIONS: answer with the methods available for the path. It runs
+      --  ahead of the guards so a CORS preflight (which carries no credentials)
+      --  is not rejected; it exposes only which methods exist, no data.
+      if Method = "OPTIONS" then
+         declare
+            Allow : constant String := Allow_Header (Path);
+         begin
+            if Allow'Length > 0 then
+               declare
+                  Response : Web.Response.Response_Type :=
+                    Web.Response.Create (204, "", "text/plain; charset=utf-8");
+               begin
+                  Web.Response.Set_Header (Response, "Allow", Allow);
+                  return Response;
+               end;
+            end if;
+            return Build_Error_Response (Request, 404, "");
+         end;
       end if;
 
-      --  Context-aware (optionally guarded) routes take precedence.
+      --  Context-aware (optionally guarded) exact routes take precedence.
       declare
          Cursor : constant Guarded_Route_Maps.Cursor := Guarded_Routes.Find (Route_Key);
       begin
@@ -1766,28 +2025,64 @@ package body Web.Server is
          end if;
       end;
 
-      --  Plain routes still run the global guards.
+      --  Everything else runs the global guards first: a global guard may halt
+      --  any request, including one that will not match a route.
       Apply_Guards (Request, Ctx, Guard_Vectors.Empty_Vector, Halted, Halt_Response);
       if Halted then
          return Halt_Response;
       end if;
 
+      --  Plain exact route.
       declare
          Cursor : constant Route_Maps.Cursor := Routes.Find (Route_Key);
       begin
          if Route_Maps.Has_Element (Cursor) then
             return Route_Maps.Element (Cursor) (Request);
          end if;
+      end;
 
-         --  Static files are only served via GET
-         if Method = "GET" and then Static_Prefix_Matches (Path) then
-            return Web.Static.Serve (To_String (Static_Prefix_Text), To_String (Static_Dir_Text), Path);
+      --  Pattern (path-parameter) routes, in registration order; the first match
+      --  wins. Globals already ran, so only the route's own guards run here.
+      for PR of Pattern_Routes loop
+         if To_String (PR.Method) = Method
+           and then Pattern_Matches (To_String (PR.Pattern), Path)
+         then
+            Capture_Params (To_String (PR.Pattern), Path, Ctx);
+            declare
+               Route_Halted : Boolean := False;
+            begin
+               Run_Route_Guards (Request, Ctx, PR.Guards, Route_Halted, Halt_Response);
+               if Route_Halted then
+                  return Halt_Response;
+               end if;
+            end;
+            return PR.Handler (Request, Ctx);
+         end if;
+      end loop;
+
+      --  Static files are only served via GET.
+      if Method = "GET" and then Static_Prefix_Matches (Path) then
+         return Web.Static.Serve
+           (To_String (Static_Prefix_Text), To_String (Static_Dir_Text), Path);
+      end if;
+
+      --  The path exists, but not under this method -> 405 with Allow.
+      declare
+         Allow : constant String := Allow_Header (Path);
+      begin
+         if Allow'Length > 0 then
+            declare
+               Response : Web.Response.Response_Type :=
+                 Build_Error_Response (Request, 405, "method not allowed");
+            begin
+               Web.Response.Set_Header (Response, "Allow", Allow);
+               return Response;
+            end;
          end if;
       end;
 
-      --  A POST that matches no registered route is a bad request: this
-      --  framework is GET/WebSocket-driven, so POST is only valid against an
-      --  explicitly registered route. An unmatched GET is a normal 404.
+      --  Unknown path. Preserve the legacy contract that an unmatched POST is a
+      --  bad request; any other unmatched method is a normal 404.
       if Method = "POST" then
          return Build_Error_Response (Request, 400, "");
       end if;

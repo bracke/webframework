@@ -102,3 +102,27 @@ Web.Server.Server_Sent_Events ("/events", Ticks'Access);
 On the client: `new EventSource("/events")` and listen for the `tick` event.
 `Web.SSE` splits multi-line data into one `data:` line each and strips CR/LF from
 the event name/id, so caller data cannot forge SSE fields.
+
+## REST resources
+
+Register the HTTP verbs and capture path parameters. A `:name` segment matches
+one path segment; read it from the request context. Path-parameter routes use
+the context-aware form (a plain handler has no context to read from). An exact
+route always beats a pattern for the same path.
+
+```ada
+function Show_User
+  (Request : Web.Request.Request_Type;
+   Context : Web.Context.Request_Context) return Web.Response.Response_Type is
+begin
+   return Web.Response.Text ("user " & Web.Context.Path_Param (Context, "id"));
+end Show_User;
+
+--  at startup:
+Web.Server.Get    ("/users/:id", Show_User'Access, Require_Auth'Access);
+Web.Server.Delete ("/users/:id", Delete_User'Access, Require_Auth'Access);
+```
+
+`OPTIONS` is answered automatically with an `Allow` header, and a request to a
+known path under an unregistered method returns `405` with `Allow`. (CORS
+response headers are still the app's to add.)

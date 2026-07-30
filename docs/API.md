@@ -56,8 +56,11 @@ application state.
 
 ## Webframework
 
-- `Web.Server`: `GNAT.Sockets` HTTP/HTTPS server, route/static/WebSocket/SSE
-  registry, request parsing, response sending, `Run`, `Run_TLS`, and
+- `Web.Server`: `GNAT.Sockets` HTTP/HTTPS server; a route registry for
+  `Get`/`Post`/`Put`/`Patch`/`Delete` (exact or `/users/:id` path-parameter
+  patterns), static, WebSocket and SSE; auto `OPTIONS` (Allow) and `405` for a
+  known path under the wrong method; request parsing, response sending, `Run`,
+  `Run_TLS`, and
   cooperative observable `Stop`. `Health_Response` returns a stable text
   health-check response, and `Configuration_Report` returns a short validated
   runtime policy summary. Normal HTTP responses negotiate `gzip` or `deflate`

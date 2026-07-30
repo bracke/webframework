@@ -54,6 +54,13 @@ package Web.Server is
    --  @return No return value.
    procedure Post (Path : String; Handler : Route_Handler);
 
+   --  Register PUT / PATCH / DELETE routes. Same exact-path semantics as Get
+   --  and Post. A path parameter (a ":name" segment) requires the context-aware
+   --  form below, since a plain handler has no way to read the captured value.
+   procedure Put (Path : String; Handler : Route_Handler);
+   procedure Patch (Path : String; Handler : Route_Handler);
+   procedure Delete (Path : String; Handler : Route_Handler);
+
    --  Register a streaming POST route (e.g. a large-file upload). The body is
    --  not buffered: the handler pulls it from the reader. Global guards and the
    --  optional route Guard run before the handler, exactly as for other routes.
@@ -87,6 +94,24 @@ package Web.Server is
    --  @param Guard Optional per-route guard; null installs none.
    --  @return No return value.
    procedure Post
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+
+   --  Register context-aware PUT / PATCH / DELETE routes, optionally guarded.
+   --  The path may contain ":name" segments (e.g. "/users/:id"); the captured
+   --  value is read in the handler with Web.Context.Path_Param (Ctx, "id").
+   --  A static route (no ":name") always wins over a pattern route for the same
+   --  path; pattern routes are tried in registration order.
+   procedure Put
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+   procedure Patch
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+   procedure Delete
      (Path    : String;
       Handler : Web.Guard.Contextual_Handler;
       Guard   : Web.Guard.Guard_Access := null);
