@@ -43,3 +43,10 @@ b__*.ads
 *~
 *.swp
 .DS_Store
+
+# webframework_logging (bridge crate) build outputs
+/webframework_logging/alire/
+/webframework_logging/config/
+/webframework_logging/lib/
+/webframework_logging/obj/
+/webframework_logging/bin/
