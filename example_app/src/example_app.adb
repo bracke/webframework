@@ -547,7 +547,7 @@ begin
    --  Server-Sent Events demo: a guarded page whose EventSource subscribes to
    --  the guarded /events stream -- a one-way push channel (unlike /ws below).
    App.Runtime.Get
-     ("/events-demo", App.Server_Events.Demo_Page'Access,
+     ("/events-demo", App.Pages.Live_Events'Access,
       App.Guards.Require_App_Access'Access);
    App.Runtime.Server_Sent_Events ("/events", App.Server_Events.Clock_Stream'Access);
    App.Runtime.Guard_Server_Sent_Events
