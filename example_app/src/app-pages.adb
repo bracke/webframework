@@ -719,6 +719,52 @@ package body App.Pages is
          return Web.Response.Internal_Server_Error;
    end Api_Delete_Project;
 
+   function Api_Delete_Project_REST
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type is
+      use App.Projects;
+      Id_Text  : constant String := Web.Context.Path_Param (Context, "id");
+      Id_Value : Integer := 0;
+      Parsed   : Boolean := True;
+   begin
+      --  CSRF: reject a mutation whose token is not valid for this session.
+      if not App.Csrf.Verify
+        (Request, App.Runtime.Find_Or_Create_Session (Request))
+      then
+         return Api_Error (403, "invalid csrf token");
+      end if;
+
+      --  The id is a path parameter, not a body field.
+      begin
+         Id_Value := Integer'Value (Id_Text);
+      exception
+         when others =>
+            Parsed := False;
+      end;
+      if not Parsed then
+         return Api_Error (400, "invalid project id");
+      end if;
+
+      declare
+         Check : constant Validation.Results.Result :=
+           App.Project_Validation.Validate_Delete ((Id => Id_Value));
+      begin
+         if Validation.Results.Has_Errors (Check) then
+            return Web.Response.Create
+              (400, App.Project_Validation.Error_JSON (Check), Json_Content_Type);
+         end if;
+      end;
+
+      Delete_Project (Natural (Id_Value));
+      return Api_Success;
+   exception
+      when Error : others =>
+         Webframework_Logging.Error
+           (Log_Tag (Request) & "REST delete project failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Api_Delete_Project_REST;
+
    ---------------------------------------------------------------------------
    --  Attachments (file upload / list / download / delete)
    ---------------------------------------------------------------------------

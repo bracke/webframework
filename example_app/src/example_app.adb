@@ -520,6 +520,11 @@ begin
    App.Runtime.Post
      ("/api/projects/delete", App.Pages.Api_Delete_Project'Access,
       App.Guards.Require_App_Access_Api'Access);
+   --  REST variant used by the projects page: DELETE /api/projects/:id, with the
+   --  id as a path parameter. Demonstrates a new verb + path-parameter routing.
+   App.Runtime.Delete
+     ("/api/projects/:id", App.Pages.Api_Delete_Project_REST'Access,
+      App.Guards.Require_App_Access_Api'Access);
    --  Attachments feature: a page plus multipart upload, download, and delete.
    --  All are guarded pages (an anonymous caller is redirected to /login); the
    --  upload and delete forms carry the session-bound CSRF token.
