@@ -42,6 +42,7 @@ package body App.Nav is
       NR.Add (Routes, "todo", "/todo", Added);
       NR.Add (Routes, "attachments", "/attachments", Added);
       NR.Add (Routes, "email_demo", "/email-demo", Added);
+      NR.Add (Routes, "live_events", "/events-demo", Added);
       NR.Add (Routes, "health", "/health", Added);
       NR.Finalize (Routes);
 
@@ -58,6 +59,9 @@ package body App.Nav is
          Visibility_Key => "10");
       NM.Add_Route
         (Menu, NM.No_Item, "Email Demo", "email_demo", Ignore,
+         Visibility_Key => "10");
+      NM.Add_Route
+        (Menu, NM.No_Item, "Live Events", "live_events", Ignore,
          Visibility_Key => "10");
       NM.Finalize (Menu);
       Ready := True;

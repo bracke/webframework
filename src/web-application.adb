@@ -154,6 +154,17 @@ package body Web.Application is
       Web.Server.Guard_WebSocket (Path, Guard);
    end Guard_WebSocket;
 
+   procedure Server_Sent_Events (Path : String; Handler : SSE_Handler_Access) is
+   begin
+      Web.Server.Server_Sent_Events (Path, Handler);
+   end Server_Sent_Events;
+
+   procedure Guard_Server_Sent_Events
+     (Path : String; Guard : Web.Guard.Guard_Access) is
+   begin
+      Web.Server.Guard_Server_Sent_Events (Path, Guard);
+   end Guard_Server_Sent_Events;
+
    procedure Static (Url_Prefix : String; Directory : String) is
    begin
       Web.Server.Static (Url_Prefix, Directory);
