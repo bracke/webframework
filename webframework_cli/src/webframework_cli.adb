@@ -331,7 +331,17 @@ package body Webframework_Cli is
         & "logging_runtime = { path = """
           & Sibling_Root ("logging") & "/logging_runtime" & """ }" & LF
         & "representation = { path = """
-          & Sibling_Root ("representation") & """ }" & LF;
+          & Sibling_Root ("representation") & """ }" & LF
+        & LF
+        & "[[depends-on]]" & LF
+        & "config = ""*""" & LF
+        & "config_runtime = ""*""" & LF
+        & LF
+        & "[[pins]]" & LF
+        & "config = { path = """ & Sibling_Root ("config") & """ }" & LF
+        & "config_runtime = { path = """
+          & Sibling_Root ("config") & "/config_runtime" & """ }" & LF
+        & "hostkit = { path = """ & Sibling_Root ("hostkit") & """ }" & LF;
    end Base_Alire_Manifest;
 
    function Read_File (Path : String) return String is
@@ -764,6 +774,12 @@ package body Webframework_Cli is
         & "with App.Pages;" & LF
         & "with Web.Config;" & LF
         & "with Webframework_Logging;" & LF
+        & "with Ada.Environment_Variables;" & LF
+        & "with Interfaces;" & LF
+        & "with Config.Store;" & LF
+        & "with Config.Reader;" & LF
+        & "with Config_Runtime.File;" & LF
+        & "with Config_Runtime.Environment;" & LF
         & LF
         & "--  Generated main for the scaffolded application." & LF
         & "--  This file is intentionally explicit and easy to edit." & LF
@@ -864,7 +880,48 @@ package body Webframework_Cli is
         & "         Index := Index + 1;" & LF
         & "         return Ada.Command_Line.Argument (Index);" & LF
         & "      end Next_Value;" & LF
+        & "" & LF
+        & "      --  Load configuration under the command line: built-in defaults are" & LF
+        & "      --  overlaid by an optional config file (APP_CONFIG or app.toml), then" & LF
+        & "      --  by APP_* environment variables. The CLI switches below override all." & LF
+        & "      procedure Apply_Config (Into : in out Settings_Type) is" & LF
+        & "         use type Interfaces.Integer_64;" & LF
+        & "         Store : Config.Store.Store" & LF
+        & "                   (Capacity => 64, Values_Capacity => 128, Pool => 8192);" & LF
+        & "         Path : aliased constant String :=" & LF
+        & "           (if Ada.Environment_Variables.Exists (""APP_CONFIG"")" & LF
+        & "            then Ada.Environment_Variables.Value (""APP_CONFIG"")" & LF
+        & "            else ""app.toml"");" & LF
+        & "         File_Src : Config_Runtime.File.Source (Path'Access);" & LF
+        & "         Prefix : aliased constant String := ""APP_"";" & LF
+        & "         Env_Src : Config_Runtime.Environment.Source (Prefix'Access);" & LF
+        & "         Ok : Boolean;" & LF
+        & "         function Get_Nat (Key : String; Default : Natural) return Natural is" & LF
+        & "            V : constant Interfaces.Integer_64 :=" & LF
+        & "              Config.Reader.Get_Integer" & LF
+        & "                (Store, Key, Interfaces.Integer_64 (Default));" & LF
+        & "         begin" & LF
+        & "            return (if V >= 0" & LF
+        & "                      and then V <= Interfaces.Integer_64 (Natural'Last)" & LF
+        & "                    then Natural (V) else Default);" & LF
+        & "         end Get_Nat;" & LF
+        & "      begin" & LF
+        & "         File_Src.Load (Store, Id => 1, Ok => Ok);" & LF
+        & "         Env_Src.Load (Store, Id => 2, Ok => Ok);" & LF
+        & "         if Config.Store.Has (Store, ""server.host"") then" & LF
+        & "            Into.Host :=" & LF
+        & "              To_Unbounded_String (Config.Reader.Get_String (Store, ""server.host""));" & LF
+        & "         end if;" & LF
+        & "         Into.Port := Get_Nat (""server.port"", Into.Port);" & LF
+        & "         Into.Production :=" & LF
+        & "           Config.Reader.Get_Boolean (Store, ""server.production"", Into.Production);" & LF
+        & "         Into.Session_Timeout :=" & LF
+        & "           Get_Nat (""server.session.timeout"", Into.Session_Timeout);" & LF
+        & "         Into.Structured_Log :=" & LF
+        & "           Config.Reader.Get_Boolean (Store, ""logging.structured"", Into.Structured_Log);" & LF
+        & "      end Apply_Config;" & LF
         & "   begin" & LF
+        & "      Apply_Config (Result);" & LF
         & "      while Index <= Ada.Command_Line.Argument_Count loop" & LF
         & "         declare" & LF
         & "            Argument : constant String := Ada.Command_Line.Argument (Index);" & LF
