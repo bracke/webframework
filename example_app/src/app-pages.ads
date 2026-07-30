@@ -108,6 +108,14 @@ package App.Pages is
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type;
 
+   --  REST variant: DELETE /api/projects/:id. The id comes from the path
+   --  parameter (Web.Context.Path_Param) rather than the body; the CSRF token
+   --  still travels in the (small) request body. Demonstrates a REST verb + a
+   --  path parameter.
+   function Api_Delete_Project_REST
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
    --  Attachments page: the upload form and the list of stored files. Guarded.
    function Attachments
      (Request : Web.Request.Request_Type;

@@ -214,15 +214,13 @@ function deleteProject(projectId) {
     return;
   }
   
-  const params = new URLSearchParams();
-  params.append('id', projectId);
-  
-  fetch('/api/projects/delete', {
-    method: 'POST',
+  // REST: the id is in the path; only the CSRF token travels in the body.
+  fetch('/api/projects/' + encodeURIComponent(projectId), {
+    method: 'DELETE',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: window.wfCsrfBody(params.toString()),
+    body: window.wfCsrfBody(''),
     credentials: 'include'
   })
   .then(response => {
