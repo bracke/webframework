@@ -1,7 +1,7 @@
 with App.Store;
 with App.Templates;
 with Ada.Exceptions;
-with Web.Logging;
+with Webframework_Logging;
 with Web.Html;
 
 package body App.Todo is
@@ -36,7 +36,7 @@ package body App.Todo is
    exception
       when Error : others =>
          --  Do not leak persistence details to client; keep a stable error message.
-         Web.Logging.Error
+         Webframework_Logging.Error
            ("todo.add failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Patch.Single
            (Web.Patch.Set_Text

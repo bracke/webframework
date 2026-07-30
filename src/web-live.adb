@@ -7,7 +7,7 @@ with Ada.Strings.Unbounded;
 with Ada.Containers.Hashed_Sets;
 with Web.Cookie;
 with Web.Errors;
-with Web.Logging;
+with Webframework_Logging;
 with Web.Protocol;
 with Web.Security;
 with Web.WebSocket;
@@ -172,7 +172,7 @@ package body Web.Live is
          Created := False;
 
          if not Web.Security.Is_Valid_Session_Id (Id) then
-            Web.Logging.Warn ("invalid session id rejected");
+            Webframework_Logging.Warn ("invalid session id rejected");
             return;
          end if;
 
@@ -237,7 +237,7 @@ package body Web.Live is
          Created := False;
 
          if not Web.Security.Is_Valid_Session_Id (Id) then
-            Web.Logging.Warn ("invalid session id rejected");
+            Webframework_Logging.Warn ("invalid session id rejected");
             return;
          end if;
 
@@ -331,7 +331,7 @@ package body Web.Live is
          Sessions.Replace_Element (Position, Copy);
       exception
          when Error : others =>
-            Web.Logging.Error ("live dispatch failed: " & Ada.Exceptions.Exception_Message (Error));
+            Webframework_Logging.Error ("live dispatch failed: " & Ada.Exceptions.Exception_Message (Error));
             Patches := (Items => Web.Patch.Patch_Vectors.Empty_Vector);
       end Dispatch_Event;
 
@@ -571,7 +571,7 @@ package body Web.Live is
             --  Increment and check rate limit
             Copy.Rate_Limit_Count := Copy.Rate_Limit_Count + 1;
             if Copy.Rate_Limit_Count > Rate_Limit then
-               Web.Logging.Warn ("rate limit exceeded for session " & Id &
+               Webframework_Logging.Warn ("rate limit exceeded for session " & Id &
                                " (" & Natural'Image (Copy.Rate_Limit_Count) &
                                " messages in last minute)");
                raise Web.Errors.Protocol_Error with "rate limit exceeded";
@@ -596,7 +596,7 @@ package body Web.Live is
 
             --  Check if this message ID has been processed
             if Copy.Processed_Message_Id_Set.Contains (Message_Id_U) then
-               Web.Logging.Debug ("duplicate message detected: " & Message_Id);
+               Webframework_Logging.Debug ("duplicate message detected: " & Message_Id);
                Is_Duplicate := True; --  Duplicate detected
                return;
             end if;
@@ -687,7 +687,7 @@ package body Web.Live is
                Removed : constant Natural := Cleanup_Sessions;
             begin
                if Removed > 0 then
-                  Web.Logging.Debug ("expired sessions cleaned: " & Natural'Image (Removed));
+                  Webframework_Logging.Debug ("expired sessions cleaned: " & Natural'Image (Removed));
                end if;
             end;
          end select;
@@ -713,7 +713,7 @@ package body Web.Live is
             end if;
 
             if Session_Count > 1 then
-               Web.Logging.Warn ("duplicate session cookie rejected");
+               Webframework_Logging.Warn ("duplicate session cookie rejected");
             end if;
          end;
       end if;
@@ -1037,7 +1037,7 @@ package body Web.Live is
       Store_Index := Shard_Index (Id);
       Stores (Store_Index).Attach_Socket (Id, Socket, Old_Socket);
       if Old_Socket /= GNAT.Sockets.No_Socket and then Old_Socket /= Socket then
-         Web.Logging.Info ("replacing websocket for session " & Id);
+         Webframework_Logging.Info ("replacing websocket for session " & Id);
          Close_Quietly (Old_Socket);
       end if;
 
@@ -1056,10 +1056,10 @@ package body Web.Live is
                      begin
                         Web.WebSocket.Send_Text (Conn, Web.Protocol.Create_Ping_Message);
                         Last_Ping_Time := Current_Time;
-                        Web.Logging.Debug ("sent ping to session " & Id);
+                        Webframework_Logging.Debug ("sent ping to session " & Id);
                      exception
                         when Error : others =>
-                           Web.Logging.Warn ("failed to send ping to session " & Id & ": " &
+                           Webframework_Logging.Warn ("failed to send ping to session " & Id & ": " &
                                            Ada.Exceptions.Exception_Message (Error));
                            Done := True;
                      end;
@@ -1088,7 +1088,7 @@ package body Web.Live is
                      begin
                         --  Check for ping messages first
                         if Web.Protocol.Is_Ping_Message (Payload) then
-                           Web.Logging.Debug ("received ping from session " & Id);
+                           Webframework_Logging.Debug ("received ping from session " & Id);
                            Web.WebSocket.Send_Text (Conn, Web.Protocol.Create_Pong_Message);
 
                            --  Update session ping time
@@ -1098,7 +1098,7 @@ package body Web.Live is
 
                         --  Check for pong messages
                         if Web.Protocol.Is_Pong_Message (Payload) then
-                           Web.Logging.Debug ("received pong from session " & Id);
+                           Webframework_Logging.Debug ("received pong from session " & Id);
 
                            --  Update session pong time
                            Stores (Store_Index).Update_Pong_Time (Id);
@@ -1111,7 +1111,7 @@ package body Web.Live is
                               Ack_Id : constant String := Web.Protocol.Get_Ack_Id_From_Message (Payload);
                            begin
                               if Ack_Id'Length > 0 then
-                                 Web.Logging.Debug ("received ack " & Ack_Id & " from session " & Id);
+                                 Webframework_Logging.Debug ("received ack " & Ack_Id & " from session " & Id);
                                  --  Mark acknowledgment as received (could track this if needed)
                               end if;
                            end;
@@ -1120,7 +1120,7 @@ package body Web.Live is
 
                         --  Check for server reconnect requests
                         if Web.Protocol.Is_Server_Reconnect (Payload) then
-                           Web.Logging.Info ("received server reconnect request from session " & Id);
+                           Webframework_Logging.Info ("received server reconnect request from session " & Id);
 
                            --  Update session state for reconnection
                            Stores (Store_Index).Start_Reconnection (Id);
@@ -1142,7 +1142,7 @@ package body Web.Live is
                            begin
                               Stores (Store_Index).Check_And_Add_Message_Id (Id, Event_Message_Id, Is_Duplicate);
                               if Is_Duplicate then
-                                 Web.Logging.Debug ("duplicate message detected: " & Event_Message_Id);
+                                 Webframework_Logging.Debug ("duplicate message detected: " & Event_Message_Id);
                                  return;  --  Skip processing duplicate message
                               end if;
                            end;
@@ -1153,7 +1153,7 @@ package body Web.Live is
                            --  Handle reconnection state
                            if Is_Reconnecting then
                               Stores (Store_Index).Start_Reconnection (Id);
-                              Web.Logging.Info ("session " & Id & " is reconnecting");
+                              Webframework_Logging.Info ("session " & Id & " is reconnecting");
                            else
                               Stores (Store_Index).End_Reconnection (Id);
                            end if;
@@ -1195,11 +1195,11 @@ package body Web.Live is
                   when Web.WebSocket.Ping_Frame =>
                      --  Handle WebSocket-level ping
                      Web.WebSocket.Send_Pong (Conn, Payload);
-                     Web.Logging.Debug ("received WebSocket ping from session " & Id);
+                     Webframework_Logging.Debug ("received WebSocket ping from session " & Id);
 
                   when Web.WebSocket.Pong_Frame =>
                      --  Handle WebSocket-level pong
-                     Web.Logging.Debug ("received WebSocket pong from session " & Id);
+                     Webframework_Logging.Debug ("received WebSocket pong from session " & Id);
 
                   when Web.WebSocket.Close_Frame =>
                      Web.WebSocket.Send_Close (Conn);
@@ -1214,10 +1214,10 @@ package body Web.Live is
          end loop;
       exception
          when Error : Web.Errors.Protocol_Error | Web.Errors.Bad_Request_Error =>
-            Web.Logging.Warn ("closing websocket: " & Ada.Exceptions.Exception_Message (Error));
+            Webframework_Logging.Warn ("closing websocket: " & Ada.Exceptions.Exception_Message (Error));
             Web.WebSocket.Send_Close (Conn);
          when Error : others =>
-            Web.Logging.Error ("websocket loop failed: " & Ada.Exceptions.Exception_Information (Error));
+            Webframework_Logging.Error ("websocket loop failed: " & Ada.Exceptions.Exception_Information (Error));
             Web.WebSocket.Send_Close (Conn);
       end;
 

@@ -21,7 +21,7 @@ with App.Templates;
 with Templates.Values;
 with Web.Html;
 with Web.Server;
-with Web.Logging;
+with Webframework_Logging;
 with Webfiles;
 with Webframework_Forms;
 with Forms.Submission;
@@ -166,7 +166,7 @@ package body App.Pages is
       exception
          when Error : others =>
             --  Keep route stable and return explicit HTTP 500 on any rendering failure.
-            Web.Logging.Error
+            Webframework_Logging.Error
               ("home route render failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Home;
@@ -304,7 +304,7 @@ package body App.Pages is
       return App.Runtime.Html_Response (Session_Id, To_String (Page));
       exception
          when Error : others =>
-            Web.Logging.Error
+            Webframework_Logging.Error
               ("login route render failed: " & Ada.Exceptions.Exception_Message (Error));
             return Web.Response.Internal_Server_Error;
    end Login;
@@ -380,7 +380,7 @@ package body App.Pages is
       end;
       exception
          when Error : others =>
-            Web.Logging.Error
+            Webframework_Logging.Error
               (Log_Tag (Request) & "login API failed: " & Ada.Exceptions.Exception_Message (Error));
             return Web.Response.Internal_Server_Error;
    end Api_Login;
@@ -416,7 +416,7 @@ package body App.Pages is
       return App.Runtime.Html_Response (Session_Id, Success_Body);
       exception
          when Error : others =>
-            Web.Logging.Error
+            Webframework_Logging.Error
               (Log_Tag (Request) & "logout API failed: " & Ada.Exceptions.Exception_Message (Error));
             return Web.Response.Internal_Server_Error;
    end Api_Logout;
@@ -512,7 +512,7 @@ package body App.Pages is
       exception
          when Error : others =>
             --  Keep route stable and return explicit HTTP 500 on any rendering failure.
-            Web.Logging.Error
+            Webframework_Logging.Error
               ("projects route render failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Projects;
@@ -577,7 +577,7 @@ package body App.Pages is
       exception
          when Error : others =>
             --  Keep route stable and return explicit HTTP 500 on any rendering failure.
-            Web.Logging.Error
+            Webframework_Logging.Error
               ("todo route render failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Todo;
@@ -634,7 +634,7 @@ package body App.Pages is
       return Api_Success;
    exception
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            (Log_Tag (Request) & "add project API failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Api_Add_Project;
@@ -675,7 +675,7 @@ package body App.Pages is
       return Api_Success;
    exception
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            (Log_Tag (Request) & "delete project API failed: " & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
    end Api_Delete_Project;
@@ -800,7 +800,7 @@ package body App.Pages is
       return App.Runtime.Html_Response (Session_Id, To_String (Page));
    exception
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            ("attachments route render failed: "
             & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
@@ -828,12 +828,12 @@ package body App.Pages is
 
       App.Attachments.Stream_Upload (Body_R, Boundary, Uploaded);
       if not Uploaded then
-         Web.Logging.Error (Log_Tag (Request) & "attachment was not accepted");
+         Webframework_Logging.Error (Log_Tag (Request) & "attachment was not accepted");
       end if;
       return App.Nav.Redirect ("attachments");
    exception
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            (Log_Tag (Request) & "attachment upload failed: "
             & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
@@ -855,7 +855,7 @@ package body App.Pages is
       when Constraint_Error =>
          return Web.Response.Not_Found;
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            (Log_Tag (Request) & "attachment download failed: "
             & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
@@ -884,7 +884,7 @@ package body App.Pages is
       return App.Nav.Redirect ("attachments");
    exception
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            (Log_Tag (Request) & "attachment delete failed: "
             & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
@@ -1014,7 +1014,7 @@ package body App.Pages is
       return App.Runtime.Html_Response (Session_Id, To_String (Page));
    exception
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            ("email-demo route render failed: "
             & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;
@@ -1050,7 +1050,7 @@ package body App.Pages is
       return App.Nav.Redirect ("email_demo");
    exception
       when Error : others =>
-         Web.Logging.Error
+         Webframework_Logging.Error
            (Log_Tag (Request) & "email-demo send failed: "
             & Ada.Exceptions.Exception_Message (Error));
          return Web.Response.Internal_Server_Error;

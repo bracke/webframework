@@ -1,0 +1,35 @@
+name = "webframework_logging"
+description = "Bridge exposing the logging library as webframework's diagnostics logger"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework"
+
+tags = ["logging", "webframework", "bridge"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+logging = "*"
+
+[[depends-on]]
+logging_runtime = "*"
+
+[[depends-on]]
+representation = "*"
+
+[[pins]]
+logging = { path = "../../logging" }
+
+[[pins]]
+logging_runtime = { path = "../../logging/logging_runtime" }
+
+[[pins]]
+representation = { path = "../../representation" }
+
+[build-profiles]
+"*" = "development"

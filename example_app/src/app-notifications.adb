@@ -432,7 +432,9 @@ package body App.Notifications is
          return;
       end if;
       Email_Ptr := new NE.Email_Provider
-        (Client => Config_Ptr, Senders => Sender_Dir'Access);
+        (Client   => Config_Ptr,
+         Senders  => Sender_Dir'Access,
+         Attacher => null);   --  attachments disabled in this demo
       Wrapper_Ptr := new Recording_Provider
         (Inner => Pv.Provider_Access (Email_Ptr));
 

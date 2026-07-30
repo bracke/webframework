@@ -1,0 +1,8 @@
+dependency:logging=0.1.0-dev=85f5e1260a5c608865f074d706a2447659a54369b1d6e58664029884e6c96f6d
+dependency:logging_runtime=0.1.0-dev=37aafe7fbafe1ef10b503a334aee3f2290e2ebb6e1f518e4a4d4911832c54431
+dependency:representation=0.1.0-dev=53a08cad4db55c2d6c5db50d9b9ebc41863265d7a17fd11115848845fc8414c8
+external:LIBRARY_TYPE=default
+external:WEBFRAMEWORK_LOGGING_LIBRARY_TYPE=default
+profile:webframework_logging=DEVELOPMENT
+switches:webframework_logging=-Og,-fdata-sections,-ffunction-sections,-g,-gnatVa,-gnatW8,-gnatw.X,-gnatwa,-gnaty-d,-gnaty3,-gnatyA,-gnatyB,-gnatyI,-gnatyO,-gnatyS,-gnatya,-gnatyb,-gnatyc,-gnatye,-gnatyf,-gnatyh,-gnatyi,-gnatyk,-gnatyl,-gnatym,-gnatyn,-gnatyp,-gnatyr,-gnatyt,-gnatyu,-gnatyx
+version:gnat_native=15.2.1
