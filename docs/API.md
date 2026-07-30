@@ -40,9 +40,23 @@
 `Web.WebSocket` does not know JSON, sessions, routes, handlers, templates, or
 application state.
 
+## Server-Sent Events
+
+- `Web.SSE`: the `text/event-stream` format — `Response_Headers` (the stream's
+  HTTP head) and `Format_Event`/`Format_Comment`/`Format_Retry` (pure wire-text
+  builders) plus `Send_Event`/`Send_Comment`/`Send_Retry` that write to a
+  connection and report `Ok => False` when it closes. Multi-line data is split
+  into one `data:` line each and CR/LF are stripped from the event name/id, so a
+  caller value cannot forge a field or terminate the event early.
+- `Web.Server.Server_Sent_Events (Path, Handler)` registers a one-way streaming
+  GET route (guarded via `Guard_Server_Sent_Events`); the server writes the
+  response head, then the handler owns the connection and pushes events until a
+  `Send` reports the client is gone. The connection holds a worker for its
+  lifetime, as a WebSocket does.
+
 ## Webframework
 
-- `Web.Server`: `GNAT.Sockets` HTTP/HTTPS server, route/static/WebSocket
+- `Web.Server`: `GNAT.Sockets` HTTP/HTTPS server, route/static/WebSocket/SSE
   registry, request parsing, response sending, `Run`, `Run_TLS`, and
   cooperative observable `Stop`. `Health_Response` returns a stable text
   health-check response, and `Configuration_Report` returns a short validated

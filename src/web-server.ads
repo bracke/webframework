@@ -34,6 +34,14 @@ package Web.Server is
      (Conn    : in out Web.Connection.Connection_Type;
       Request : Web.Request.Request_Type);
 
+   --  A Server-Sent Events handler. After the server writes the event-stream
+   --  response head, the handler owns the connection and pushes events with
+   --  Web.SSE.Send_Event until the stream ends -- it should stop when a Send
+   --  reports Ok => False (the client disconnected). It reads no request body.
+   type SSE_Handler is access procedure
+     (Conn    : in out Web.Connection.Connection_Type;
+      Request : Web.Request.Request_Type);
+
    --  Register a GET route.
    --  @param Path Exact route path.
    --  @param Handler Route handler.
@@ -97,6 +105,22 @@ package Web.Server is
    --  @param Guard Guard to install; must not be null.
    --  @return No return value.
    procedure Guard_WebSocket (Path : String; Guard : Web.Guard.Guard_Access);
+
+   --  Register a Server-Sent Events route (a GET that opens a text/event-stream
+   --  and pushes events). The path must not collide with a GET route.
+   --  @param Path Exact route path.
+   --  @param Handler SSE handler.
+   --  @return No return value.
+   procedure Server_Sent_Events (Path : String; Handler : SSE_Handler);
+
+   --  Attach a guard to an SSE route. Global guards and these guards run before
+   --  the stream is opened; a halting guard returns its response instead of
+   --  opening the stream. Register the route with Server_Sent_Events first.
+   --  @param Path Exact SSE route path.
+   --  @param Guard Guard to install; must not be null.
+   --  @return No return value.
+   procedure Guard_Server_Sent_Events
+     (Path : String; Guard : Web.Guard.Guard_Access);
 
    --  Register a custom error response handler.
    --  @param Status HTTP status code in the range 100 .. 599.

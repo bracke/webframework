@@ -17,6 +17,7 @@ with Webframework_Logging;
 with Web.Security;
 with Web.Static;
 with Web.WebSocket;
+with Web.SSE;
 
 package body Web.Server is
    use Ada.Strings.Fixed;
@@ -43,6 +44,12 @@ package body Web.Server is
    package Socket_Maps is new Ada.Containers.Indefinite_Hashed_Maps
      (Key_Type     => String,
       Element_Type => WebSocket_Handler,
+      Hash         => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
+
+   package SSE_Maps is new Ada.Containers.Indefinite_Hashed_Maps
+     (Key_Type     => String,
+      Element_Type => SSE_Handler,
       Hash         => Ada.Strings.Hash,
       Equivalent_Keys => "=");
 
@@ -90,6 +97,8 @@ package body Web.Server is
    Global_Guards : Guard_Vectors.Vector;
    Guarded_Routes : Guarded_Route_Maps.Map;
    Socket_Guards : Socket_Guard_Maps.Map;
+   SSE_Routes : SSE_Maps.Map;
+   SSE_Guards : Socket_Guard_Maps.Map;
 
    --  A streaming POST route together with its guards.
    type Stream_Route is record
@@ -1308,6 +1317,53 @@ package body Web.Server is
       end if;
    end Guard_WebSocket;
 
+   procedure Server_Sent_Events (Path : String; Handler : SSE_Handler) is
+      Position : SSE_Maps.Cursor;
+      Inserted : Boolean;
+   begin
+      Require_Registration_Path (Path, "sse");
+      if Handler = null then
+         raise Web.Errors.Security_Error with "sse handler is null";
+      end if;
+
+      SSE_Maps.Insert
+        (Container => SSE_Routes,
+         Key       => Path,
+         New_Item  => Handler,
+         Position  => Position,
+         Inserted  => Inserted);
+      if not Inserted then
+         raise Web.Errors.Security_Error with "duplicate sse path";
+      end if;
+   end Server_Sent_Events;
+
+   procedure Guard_Server_Sent_Events
+     (Path : String; Guard : Web.Guard.Guard_Access)
+   is
+      Position : Socket_Guard_Maps.Cursor;
+   begin
+      if Guard = null then
+         raise Web.Errors.Security_Error with "guard is null";
+      end if;
+
+      Position := SSE_Guards.Find (Path);
+      if Socket_Guard_Maps.Has_Element (Position) then
+         declare
+            Guards : Guard_Vectors.Vector := Socket_Guard_Maps.Element (Position);
+         begin
+            Guards.Append (Guard);
+            SSE_Guards.Replace_Element (Position, Guards);
+         end;
+      else
+         declare
+            Guards : Guard_Vectors.Vector;
+         begin
+            Guards.Append (Guard);
+            SSE_Guards.Insert (Path, Guards);
+         end;
+      end if;
+   end Guard_Server_Sent_Events;
+
    procedure Register_Error_Handler (Status : Positive; Handler : Error_Handler) is
    begin
       Error_Pages.Register (Status, Handler);
@@ -2291,10 +2347,49 @@ package body Web.Server is
                   end;
                else
                   declare
-                     Response : constant Web.Response.Response_Type := Dispatch (Request);
+                     SSE_Cursor : constant SSE_Maps.Cursor :=
+                       (if Web.Request.Method (Request) = "GET"
+                        then SSE_Routes.Find (To_String (Path))
+                        else SSE_Maps.No_Element);
                   begin
-                     Request_Status := Web.Response.Status (Response);
-                     Send_Response (Conn, Request, Response);
+                     if SSE_Maps.Has_Element (SSE_Cursor) then
+                        --  Gate the stream through the same guards as HTTP
+                        --  routes: a halting guard returns its response instead
+                        --  of opening the event stream.
+                        declare
+                           Ctx : Web.Context.Request_Context :=
+                             Web.Context.New_Context;
+                           Halted : Boolean;
+                           Halt_Response : Web.Response.Response_Type;
+                           S_Guards : Guard_Vectors.Vector;
+                           Guard_Cursor : constant Socket_Guard_Maps.Cursor :=
+                             SSE_Guards.Find (To_String (Path));
+                        begin
+                           if Socket_Guard_Maps.Has_Element (Guard_Cursor) then
+                              S_Guards := Socket_Guard_Maps.Element (Guard_Cursor);
+                           end if;
+                           Apply_Guards
+                             (Request, Ctx, S_Guards, Halted, Halt_Response);
+                           if Halted then
+                              Request_Status :=
+                                Web.Response.Status (Halt_Response);
+                              Send_Response (Conn, Request, Halt_Response);
+                           else
+                              Request_Status := 200;
+                              Web.Connection.Send_All
+                                (Conn, Web.SSE.Response_Headers);
+                              SSE_Maps.Element (SSE_Cursor) (Conn, Request);
+                           end if;
+                        end;
+                     else
+                        declare
+                           Response : constant Web.Response.Response_Type :=
+                             Dispatch (Request);
+                        begin
+                           Request_Status := Web.Response.Status (Response);
+                           Send_Response (Conn, Request, Response);
+                        end;
+                     end if;
                   end;
                end if;
             end if;

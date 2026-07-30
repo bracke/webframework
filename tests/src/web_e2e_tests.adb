@@ -16,6 +16,7 @@ with Web.Patch;
 with Web.Request;
 with Web.Response;
 with Web.Server;
+with Web.SSE;
 with Web.TLS;
 with Zlib;
 
@@ -166,6 +167,27 @@ package body Web_E2E_Tests is
          Character'Val (16#89#) & "PNG" & Character'Val (13) & Character'Val (10),
          "image/png");
    end Binary_Response;
+
+   --  A bounded SSE stream: three "tick" events, then return (which closes the
+   --  connection), so a client can read the whole stream to completion.
+   procedure SSE_Ticker
+     (Conn    : in out Web.Connection.Connection_Type;
+      Request : Web.Request.Request_Type)
+   is
+      pragma Unreferenced (Request);
+      Ok : Boolean;
+   begin
+      for I in 1 .. 3 loop
+         declare
+            N : constant String :=
+              Ada.Strings.Fixed.Trim (Natural'Image (I), Ada.Strings.Both);
+         begin
+            Web.SSE.Send_Event
+              (Conn, "tick-" & N, Event => "tick", Id => N, Ok => Ok);
+            exit when not Ok;
+         end;
+      end loop;
+   end SSE_Ticker;
 
    task body Server_Task is
       Server_Port : Natural;
@@ -606,6 +628,7 @@ package body Web_E2E_Tests is
       Web.Server.Get ("/binary", Binary_Response'Access);
       Web.Server.Static ("/assets", Static_Directory);
       Web.Server.WebSocket ("/e2e-ws", Test_Live.WebSocket_Handler'Access);
+      Web.Server.Server_Sent_Events ("/e2e-sse", SSE_Ticker'Access);
       Worker.Start (Port);
 
       Http := Connect (Port);
@@ -913,6 +936,34 @@ package body Web_E2E_Tests is
             Assert (Character'Pos (Close_Frame (Close_Frame'First)) = 16#88#, "close response");
          end;
          GNAT.Sockets.Close_Socket (Websocket);
+      end;
+
+      --  Server-Sent Events: open the stream, read it to completion, and check
+      --  the event-stream head and the three ticks arrived intact.
+      declare
+         SSE_Socket : constant GNAT.Sockets.Socket_Type := Connect (Port);
+      begin
+         Send_All
+           (SSE_Socket,
+            "GET /e2e-sse HTTP/1.1" & CRLF
+            & "Host: 127.0.0.1" & CRLF
+            & "Accept: text/event-stream" & CRLF
+            & CRLF);
+         declare
+            Stream : constant String := Read_Until_Close (SSE_Socket);
+         begin
+            GNAT.Sockets.Close_Socket (SSE_Socket);
+            Assert (Ada.Strings.Fixed.Index (Stream, "200 OK") > 0,
+                    "SSE status line");
+            Assert (Ada.Strings.Fixed.Index (Stream, "text/event-stream") > 0,
+                    "SSE content type");
+            Assert (Ada.Strings.Fixed.Index (Stream, "event: tick") > 0,
+                    "SSE event name");
+            Assert (Ada.Strings.Fixed.Index (Stream, "data: tick-1") > 0,
+                    "first event delivered");
+            Assert (Ada.Strings.Fixed.Index (Stream, "data: tick-3") > 0,
+                    "last event delivered");
+         end;
       end;
 
       Web.Server.Stop;
