@@ -115,6 +115,21 @@ package body Web.Application is
       Web.Server.Post (Path, Handler);
    end Post;
 
+   procedure Put (Path : String; Handler : Route_Handler_Access) is
+   begin
+      Web.Server.Put (Path, Handler);
+   end Put;
+
+   procedure Patch (Path : String; Handler : Route_Handler_Access) is
+   begin
+      Web.Server.Patch (Path, Handler);
+   end Patch;
+
+   procedure Delete (Path : String; Handler : Route_Handler_Access) is
+   begin
+      Web.Server.Delete (Path, Handler);
+   end Delete;
+
    procedure Post_Stream
      (Path    : String;
       Handler : Stream_Handler_Access;
@@ -143,6 +158,30 @@ package body Web.Application is
    begin
       Web.Server.Post (Path, Handler, Guard);
    end Post;
+
+   procedure Put
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Web.Server.Put (Path, Handler, Guard);
+   end Put;
+
+   procedure Patch
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Web.Server.Patch (Path, Handler, Guard);
+   end Patch;
+
+   procedure Delete
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null) is
+   begin
+      Web.Server.Delete (Path, Handler, Guard);
+   end Delete;
 
    procedure WebSocket (Path : String; Handler : WebSocket_Handler_Access) is
    begin

@@ -200,6 +200,12 @@ package Web.Application is
    --  @return No return value.
    procedure Post (Path : String; Handler : Route_Handler_Access);
 
+   --  Register PUT / PATCH / DELETE routes through the façade. Same exact-path
+   --  semantics as Get/Post; a path parameter needs the context-aware form.
+   procedure Put (Path : String; Handler : Route_Handler_Access);
+   procedure Patch (Path : String; Handler : Route_Handler_Access);
+   procedure Delete (Path : String; Handler : Route_Handler_Access);
+
    --  Register a streaming POST route (e.g. a large upload). The handler pulls
    --  the body from a reader instead of receiving it buffered; guards run first.
    procedure Post_Stream
@@ -232,6 +238,22 @@ package Web.Application is
    --  @param Guard Optional per-route guard; null installs none.
    --  @return No return value.
    procedure Post
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+
+   --  Register context-aware PUT / PATCH / DELETE routes, optionally guarded.
+   --  The path may carry ":name" segments (e.g. "/users/:id"); read the captured
+   --  value in the handler with Web.Context.Path_Param (Ctx, "id").
+   procedure Put
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+   procedure Patch
+     (Path    : String;
+      Handler : Web.Guard.Contextual_Handler;
+      Guard   : Web.Guard.Guard_Access := null);
+   procedure Delete
      (Path    : String;
       Handler : Web.Guard.Contextual_Handler;
       Guard   : Web.Guard.Guard_Access := null);

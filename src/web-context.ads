@@ -47,6 +47,18 @@ package Web.Context is
    --  A derived attribute value, or an empty string when absent.
    function Attribute (Ctx : Request_Context; Key : String) return String;
 
+   --  Path parameters captured from a pattern route (the ":id" segment in a
+   --  route registered as "/users/:id"). The dispatcher sets them before the
+   --  handler runs; the handler reads them by name.
+   procedure Set_Path_Param
+     (Ctx : in out Request_Context; Name : String; Value : String);
+
+   --  Whether a path parameter was captured under Name.
+   function Has_Path_Param (Ctx : Request_Context; Name : String) return Boolean;
+
+   --  A captured path parameter's value, or an empty string when absent.
+   function Path_Param (Ctx : Request_Context; Name : String) return String;
+
 private
 
    package Attribute_Maps is new Ada.Containers.Indefinite_Hashed_Maps
@@ -60,6 +72,7 @@ private
       Principal_Value   : Ada.Strings.Unbounded.Unbounded_String;
       Principal_Present : Boolean := False;
       Attributes        : Attribute_Maps.Map;
+      Path_Params       : Attribute_Maps.Map;
    end record;
 
 end Web.Context;

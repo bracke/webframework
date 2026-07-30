@@ -61,4 +61,23 @@ package body Web.Context is
       return "";
    end Attribute;
 
+   procedure Set_Path_Param
+     (Ctx : in out Request_Context; Name : String; Value : String) is
+   begin
+      Ctx.Path_Params.Include (Name, Value);
+   end Set_Path_Param;
+
+   function Has_Path_Param (Ctx : Request_Context; Name : String) return Boolean is
+   begin
+      return Ctx.Path_Params.Contains (Name);
+   end Has_Path_Param;
+
+   function Path_Param (Ctx : Request_Context; Name : String) return String is
+   begin
+      if Ctx.Path_Params.Contains (Name) then
+         return Ctx.Path_Params.Element (Name);
+      end if;
+      return "";
+   end Path_Param;
+
 end Web.Context;
