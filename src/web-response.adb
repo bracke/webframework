@@ -613,18 +613,36 @@ package body Web.Response is
    function Status_Text (Status_Code : Positive) return String is
    begin
       case Status_Code is
-         when 200 =>
-            return "OK";
-         when 400 =>
-            return "Bad Request";
-         when 404 =>
-            return "Not Found";
-         when 406 =>
-            return "Not Acceptable";
-         when 500 =>
-            return "Internal Server Error";
          when 101 =>
             return "Switching Protocols";
+         when 200 =>
+            return "OK";
+         when 201 =>
+            return "Created";
+         when 204 =>
+            return "No Content";
+         when 400 =>
+            return "Bad Request";
+         when 401 =>
+            return "Unauthorized";
+         when 403 =>
+            return "Forbidden";
+         when 404 =>
+            return "Not Found";
+         when 405 =>
+            return "Method Not Allowed";
+         when 406 =>
+            return "Not Acceptable";
+         when 409 =>
+            return "Conflict";
+         when 422 =>
+            return "Unprocessable Entity";
+         when 429 =>
+            return "Too Many Requests";
+         when 500 =>
+            return "Internal Server Error";
+         when 503 =>
+            return "Service Unavailable";
          when others =>
             return "OK";
       end case;

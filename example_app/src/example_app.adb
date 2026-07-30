@@ -69,6 +69,7 @@ procedure Example_App is
       --  Connection hardening settings
       Ping_Interval  : Natural := 30;      --  Ping interval in seconds (0 = disabled)
       Rate_Limit     : Natural := 100;     --  Messages per minute limit (0 = disabled)
+      HTTP_Rate_Limit : Natural := 240;    --  HTTP requests per IP per minute (0 = disabled)
       Deduplication_Window : Natural := 60; --  Deduplication window in seconds (0 = disabled)
    end record;
 
@@ -303,6 +304,8 @@ procedure Example_App is
                Result.Ping_Interval := Natural'Value (Next_Value (Argument));
             elsif Argument = "--rate-limit" then
                Result.Rate_Limit := Natural'Value (Next_Value (Argument));
+            elsif Argument = "--http-rate-limit" then
+               Result.HTTP_Rate_Limit := Natural'Value (Next_Value (Argument));
             elsif Argument = "--deduplication-window" then
                Result.Deduplication_Window := Natural'Value (Next_Value (Argument));
             elsif Argument'Length > 0 and then Argument (Argument'First) = '-' then
@@ -357,6 +360,7 @@ procedure Example_App is
       --  Enable connection hardening features
       App.Runtime.Set_Ping_Interval (Settings.Ping_Interval);
       App.Runtime.Set_Rate_Limit (Settings.Rate_Limit);
+      App.Runtime.Set_HTTP_Rate_Limit (Settings.HTTP_Rate_Limit, Per_Seconds => 60);
       App.Runtime.Set_Deduplication_Window (Settings.Deduplication_Window);
 
       --  Emit a compact startup report with resolved routing/security values.
@@ -367,7 +371,8 @@ procedure Example_App is
          Deduplication_Value : constant Natural := App.Runtime.Deduplication_Window;
          Msg1 : constant String := "connection hardening: ping_interval=" & Natural'Image (Ping_Interval_Value);
          Msg2 : constant String := Msg1 & ", rate_limit=" & Natural'Image (Rate_Limit_Value);
-         Full_Msg : constant String := Msg2 & ", deduplication_window=" & Natural'Image (Deduplication_Value);
+         Msg3 : constant String := Msg2 & ", http_rate_limit=" & Natural'Image (Settings.HTTP_Rate_Limit);
+         Full_Msg : constant String := Msg3 & ", deduplication_window=" & Natural'Image (Deduplication_Value);
       begin
          Log_Info (Full_Msg);
       end;

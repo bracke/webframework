@@ -194,6 +194,15 @@ package Web.Server is
    --  @return No return value.
    procedure Set_CORS (Policy : Web.CORS.Policy);
 
+   --  Enable per-IP HTTP rate limiting: at most Max_Requests from one client IP
+   --  within Per_Seconds, else 429 Too Many Requests (with Retry-After). The IP
+   --  is the resolved client address (the X-Forwarded-For client when that is
+   --  trusted, else the peer). Max_Requests = 0 disables limiting (the default).
+   --  @param Max_Requests Requests allowed per window; 0 disables.
+   --  @param Per_Seconds  Window length in seconds.
+   --  @return No return value.
+   procedure Set_Rate_Limit (Max_Requests : Natural; Per_Seconds : Positive);
+
    --  Return a stable health-check response for embedding applications.
    --  @return Plain text 200 response.
    function Health_Response return Web.Response.Response_Type;

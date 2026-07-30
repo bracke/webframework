@@ -146,3 +146,23 @@ Web.Server.Set_CORS
 Use `Origins => "*"` for any origin (not combinable with `Credentials => True`,
 per the spec -- the matched origin is echoed instead). A request with no `Origin`
 (same-origin) is left untouched.
+
+## HTTP rate limiting
+
+Cap how many requests a single client IP may make in a window. Over the limit,
+the server answers `429 Too Many Requests` with a `Retry-After` header (seconds
+until the window resets) before the request reaches any route.
+
+```ada
+--  At most 240 requests per client IP per minute; 0 would disable it.
+Web.Server.Set_Rate_Limit (Max_Requests => 240, Per_Seconds => 60);
+```
+
+The client key is the forwarded client address when the connection carries one,
+otherwise the socket peer. Counting is a fixed-window over a bounded slot table
+(oldest entry evicted when full), so memory stays constant regardless of how
+many distinct IPs appear. This is the HTTP-request limiter; the WebSocket
+message limiter (`Set_Rate_Limit (Count)` on the application instance) is
+separate. On a `Web.Application` instance the HTTP limiter is
+`Set_HTTP_Rate_Limit (Max_Requests, Per_Seconds)`, named apart from the
+WebSocket `Set_Rate_Limit (Count)`.

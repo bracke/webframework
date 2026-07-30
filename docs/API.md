@@ -45,6 +45,13 @@ application state.
 - `Web.CORS`: a CORS `Policy` (`Make`) and `Apply`; install it with
   `Web.Server.Set_CORS` and the server adds `Access-Control-*` headers to every
   response and lets CORS-allowed origins past its same-origin gate.
+- `Web.Rate_Limit`: a fixed-window per-client limiter (`Configure`, `Check`).
+  Enable it with `Web.Server.Set_Rate_Limit (Max_Requests, Per_Seconds)`: the
+  server keys on the client IP (the `X-Forwarded-For`/proxy client address when
+  present, else the peer address) and replies `429 Too Many Requests` with a
+  `Retry-After` (seconds) header once a client exceeds `Max_Requests` inside the
+  window. `Max_Requests => 0` disables it. The limiter is bounded (a fixed slot
+  table, oldest-entry eviction) so it cannot grow without limit under churn.
 - `Web.SSE`: the `text/event-stream` format — `Response_Headers` (the stream's
   HTTP head) and `Format_Event`/`Format_Comment`/`Format_Retry` (pure wire-text
   builders) plus `Send_Event`/`Send_Comment`/`Send_Retry` that write to a
