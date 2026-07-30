@@ -27,23 +27,4 @@ package body App.Server_Events is
       end if;
    end Clock_Stream;
 
-   function Demo_Page
-     (Request : Web.Request.Request_Type;
-      Context : Web.Context.Request_Context) return Web.Response.Response_Type
-   is
-      pragma Unreferenced (Request);
-      pragma Unreferenced (Context);
-   begin
-      return Web.Response.Html
-        ("<!doctype html>"
-         & "<html><head><meta charset=""utf-8"">"
-         & "<title>Live events (SSE)</title></head>"
-         & "<body><h1>Server-Sent Events</h1>"
-         & "<p>Live one-way stream from <code>/events</code>:</p>"
-         & "<ul id=""sse-log""></ul>"
-         & "<p><a href=""/"">&larr; home</a></p>"
-         & "<script src=""/static/sse-demo.js""></script>"
-         & "</body></html>");
-   end Demo_Page;
-
 end App.Server_Events;

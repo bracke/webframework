@@ -14,6 +14,15 @@ package App.Pages is
      (Request : Web.Request.Request_Type;
       Context : Web.Context.Request_Context) return Web.Response.Response_Type;
 
+   --  Server-Sent Events demo page: subscribes to /events with EventSource.
+   --  Rendered through the shared layout like the other feature pages.
+   --  @param Request HTTP request.
+   --  @param Context Request context populated by the guards.
+   --  @return HTTP response.
+   function Live_Events
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type;
+
    --  Health endpoint for probes and local smoke checks.
    --  Render the health-check route.
    --  @param Request HTTP request.

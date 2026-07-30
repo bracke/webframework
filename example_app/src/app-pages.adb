@@ -171,6 +171,45 @@ package body App.Pages is
          return Web.Response.Internal_Server_Error;
    end Home;
 
+   function Live_Events
+     (Request : Web.Request.Request_Type;
+      Context : Web.Context.Request_Context) return Web.Response.Response_Type
+   is
+      use Standard.Templates.Values;
+      View       : Value := Object;
+      Page       : Unbounded_String;
+      Session_Id : constant String := App.Runtime.Find_Or_Create_Session (Request);
+   begin
+      Set (View, "title", String_Item ("Live Events"));
+      Standard.Templates.Values.Set
+        (View, "csrf_token",
+         Standard.Templates.Values.String_Item (App.Csrf.Token (Session_Id)));
+      Page := To_Unbounded_String (App.Templates.Render ("layout.html", View));
+
+      declare
+         Nav_Bar : constant String :=
+           Generate_Nav_Bar (Web.Request.Path (Request), Clearance_Of (Context));
+      begin
+         Page := To_Unbounded_String
+           (App.Templates.Replace_Marker
+              (To_String (Page), "<main>", Nav_Bar & "<main>"));
+      end;
+
+      Page := To_Unbounded_String
+        (App.Templates.Replace_Marker
+           (To_String (Page),
+            "<!-- wf:body -->",
+            App.Templates.Render ("live-events.html", Object)));
+
+      return App.Runtime.Html_Response (Session_Id, To_String (Page));
+   exception
+      when Error : others =>
+         Webframework_Logging.Error
+           ("live-events route render failed: "
+            & Ada.Exceptions.Exception_Message (Error));
+         return Web.Response.Internal_Server_Error;
+   end Live_Events;
+
    function Health (Request : Web.Request.Request_Type) return Web.Response.Response_Type is
       pragma Unreferenced (Request);
    begin
