@@ -1,0 +1,35 @@
+name = "webframework_tracing"
+description = "Bridge: W3C trace-context propagation and a span dump over webframework"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework"
+
+tags = ["tracing", "observability", "webframework", "bridge"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+webframework = "*"
+
+[[depends-on]]
+tracing = "*"
+
+[[depends-on]]
+tracing_runtime = "*"
+
+[[pins]]
+webframework = { path = ".." }
+
+[[pins]]
+tracing = { path = "../../tracing" }
+
+[[pins]]
+tracing_runtime = { path = "../../tracing/tracing_runtime" }
+
+[build-profiles]
+"*" = "development"
