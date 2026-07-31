@@ -32,6 +32,7 @@ with Web.Config;
 with Web.CORS;
 with Webframework_Logging;
 with Webframework_Metrics;
+with Metrics.Exposition;
 with Web.Html;
 
 with Ada.Environment_Variables;
@@ -579,8 +580,12 @@ begin
    App.Runtime.Guard_Server_Sent_Events
      ("/events", App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/health", App.Pages.Health'Access);
-   --  Prometheus scrape endpoint, served by the webframework_metrics bridge.
-   Webframework_Metrics.Install ("/metrics");
+   --  Metrics scrape endpoint, served by the webframework_metrics bridge in the
+   --  OpenMetrics dialect so the /trace-demo latency histogram carries its trace
+   --  exemplar (a Prometheus scraper still parses it; a plain Prometheus
+   --  exposition would simply omit the exemplar).
+   Webframework_Metrics.Install
+     ("/metrics", Metrics.Exposition.Open_Metrics);
    --  Distributed tracing demo: a traced endpoint + the /traces span dump.
    App.Runtime.Get ("/trace-demo", App.Trace_Demo.Handler'Access);
    App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
