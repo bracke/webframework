@@ -144,6 +144,12 @@ notifications_templates = { path = "../../notifications/notifications_templates"
 smtplib = "*"
 [[pins]]
 smtplib = { path = "../../smtplib" }
+# Real TLS: ssllib backs both the notifications TLS client (smtplib's ssllib
+# backend) and the in-process TLS mail catcher (ssllib server side).
+[[depends-on]]
+ssllib = "*"
+[[pins]]
+ssllib = { path = "../../ssllib" }
 
 # Pins are root-only in Alire: this root transitively builds cryptolib, ssh_lib,
 # zlib, hostkit and representation through webframework, database, and forms, so
@@ -194,6 +200,19 @@ metrics_runtime = "*"
 webframework_metrics = { path = "../webframework_metrics" }
 metrics = { path = "../../metrics" }
 metrics_runtime = { path = "../../metrics/metrics_runtime" }
+
+# Tracing demo: the tracing library, its runtime tracer, and the webframework
+# bridge (W3C trace-context propagation + a /traces span dump).
+[[depends-on]]
+webframework_tracing = "*"
+[[depends-on]]
+tracing = "*"
+[[depends-on]]
+tracing_runtime = "*"
+[[pins]]
+webframework_tracing = { path = "../webframework_tracing" }
+tracing = { path = "../../tracing" }
+tracing_runtime = { path = "../../tracing/tracing_runtime" }
 
 [build-profiles]
 "*" = "development"

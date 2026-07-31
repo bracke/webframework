@@ -57,3 +57,10 @@ b__*.ads
 /webframework_metrics/lib/
 /webframework_metrics/obj/
 /webframework_metrics/bin/
+
+# webframework_tracing (bridge crate) build outputs
+/webframework_tracing/alire/
+/webframework_tracing/config/
+/webframework_tracing/lib/
+/webframework_tracing/obj/
+/webframework_tracing/bin/

@@ -12,6 +12,7 @@ with App.Auth_Handlers;
 with App.Authz;
 with App.Guards;
 with App.Metrics;
+with App.Trace_Demo;
 with App.Nav;
 with App.Projects;
 with App.Attachments;
@@ -520,6 +521,7 @@ begin
    --  method through a global guard; the /metrics endpoint (below) serves the
    --  Prometheus exposition of the process-wide live registry.
    App.Metrics.Setup;
+   App.Trace_Demo.Setup;
    App.Runtime.Use_Guard (App.Metrics.Count_Request'Access);
    --  HTTP + websocket + static route wiring. Public routes (/login, /health,
    --  /api/login, /static) carry no guard; every other route is guard-protected
@@ -579,6 +581,8 @@ begin
    App.Runtime.Get ("/health", App.Pages.Health'Access);
    --  Prometheus scrape endpoint, served by the webframework_metrics bridge.
    Webframework_Metrics.Install ("/metrics");
+   --  Distributed tracing demo: a traced endpoint + the /traces span dump.
+   App.Runtime.Get ("/trace-demo", App.Trace_Demo.Handler'Access);
    App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
    --  The live channel requires authentication: guard the upgrade so an
    --  anonymous caller cannot open it (the static page still loads).
