@@ -1,4 +1,5 @@
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Interfaces; use type Interfaces.Unsigned_32;
 with Web.Response;
 with Webframework_Authorization;
 with Identity.Assurance.Levels;
@@ -124,5 +125,55 @@ package body App.Guards is
       return App.State.Get_Clearance (State) >= Admin_Clearance
         and then Interactive_Or_Stronger (Assurance);
    end Require_Admin_Action;
+
+   --  The static bearer token the metrics scrape requires; empty = locked.
+   Metrics_Token : Unbounded_String;
+
+   procedure Set_Metrics_Token (Token : String) is
+   begin
+      Metrics_Token := To_Unbounded_String (Token);
+   end Set_Metrics_Token;
+
+   --  Length-revealing but content-constant-time equality: once the lengths
+   --  match, every byte is examined, so a matching prefix takes as long as a
+   --  first-byte mismatch and the compare leaks no information about how much of
+   --  a wrong token was right.
+   function Constant_Time_Equal (A, B : String) return Boolean is
+      Diff : Interfaces.Unsigned_32 := 0;
+   begin
+      if A'Length /= B'Length then
+         return False;
+      end if;
+      for I in A'Range loop
+         declare
+            J : constant Integer := B'First + (I - A'First);
+         begin
+            Diff := Diff or
+              (Interfaces.Unsigned_32 (Character'Pos (A (I))) xor
+               Interfaces.Unsigned_32 (Character'Pos (B (J))));
+         end;
+      end loop;
+      return Diff = 0;
+   end Constant_Time_Equal;
+
+   function Require_Metrics_Token
+     (Request : Web.Request.Request_Type;
+      Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome
+   is
+      pragma Unreferenced (Context);
+      Prefix   : constant String := "Bearer ";
+      Auth     : constant String := Web.Request.Header (Request, "Authorization");
+      Expected : constant String := To_String (Metrics_Token);
+   begin
+      if Expected'Length > 0
+        and then Auth'Length > Prefix'Length
+        and then Auth (Auth'First .. Auth'First + Prefix'Length - 1) = Prefix
+        and then Constant_Time_Equal
+                   (Auth (Auth'First + Prefix'Length .. Auth'Last), Expected)
+      then
+         return Web.Guard.Proceed;
+      end if;
+      return Web.Guard.Halt (Web.Response.Unauthorized);
+   end Require_Metrics_Token;
 
 end App.Guards;
