@@ -11,6 +11,7 @@ with App.Auth;
 with App.Auth_Handlers;
 with App.Authz;
 with App.Guards;
+with App.Metrics;
 with App.Nav;
 with App.Projects;
 with App.Attachments;
@@ -29,6 +30,7 @@ with App.Todo;
 with Web.Config;
 with Web.CORS;
 with Webframework_Logging;
+with Webframework_Metrics;
 with Web.Html;
 
 with Ada.Environment_Variables;
@@ -513,6 +515,12 @@ begin
    App.Runtime.Set_CORS (Web.CORS.Make (Origins => "*"));
 
    App.Runtime.Use_Guard (App.Guards.Resolve_Principal'Access);
+
+   --  Observability: register the metric families and count every request by
+   --  method through a global guard; the /metrics endpoint (below) serves the
+   --  Prometheus exposition of the process-wide live registry.
+   App.Metrics.Setup;
+   App.Runtime.Use_Guard (App.Metrics.Count_Request'Access);
    --  HTTP + websocket + static route wiring. Public routes (/login, /health,
    --  /api/login, /static) carry no guard; every other route is guard-protected
    --  by Require_App_Access (pages) or Require_App_Access_Api (API endpoints),
@@ -569,6 +577,8 @@ begin
    App.Runtime.Guard_Server_Sent_Events
      ("/events", App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/health", App.Pages.Health'Access);
+   --  Prometheus scrape endpoint, served by the webframework_metrics bridge.
+   Webframework_Metrics.Install ("/metrics");
    App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
    --  The live channel requires authentication: guard the upgrade so an
    --  anonymous caller cannot open it (the static page still loads).

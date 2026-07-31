@@ -50,3 +50,10 @@ b__*.ads
 /webframework_logging/lib/
 /webframework_logging/obj/
 /webframework_logging/bin/
+
+# webframework_metrics (bridge crate) build outputs
+/webframework_metrics/alire/
+/webframework_metrics/config/
+/webframework_metrics/lib/
+/webframework_metrics/obj/
+/webframework_metrics/bin/

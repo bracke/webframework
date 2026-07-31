@@ -182,5 +182,18 @@ config_runtime = { path = "../../config/config_runtime" }
 [[pins]]
 cache = { path = "../../cache" }
 
+# Metrics demo: the metrics library, its runtime live registry, and the
+# webframework bridge that serves /metrics.
+[[depends-on]]
+webframework_metrics = "*"
+[[depends-on]]
+metrics = "*"
+[[depends-on]]
+metrics_runtime = "*"
+[[pins]]
+webframework_metrics = { path = "../webframework_metrics" }
+metrics = { path = "../../metrics" }
+metrics_runtime = { path = "../../metrics/metrics_runtime" }
+
 [build-profiles]
 "*" = "development"
