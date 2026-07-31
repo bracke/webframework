@@ -39,4 +39,19 @@ package App.Guards is
      (State : App.State.App_State;
       Event : Web.Events.Event) return Boolean;
 
+   --  Set the static bearer token the /metrics scrape guard requires. Call once
+   --  at startup. An empty token leaves the endpoint locked (every scrape is
+   --  denied) -- fail closed.
+   procedure Set_Metrics_Token (Token : String);
+
+   --  Guard the metrics scrape with a static bearer token: a request must send
+   --  `Authorization: Bearer <token>` matching the configured token, else 401.
+   --  This is the machine-to-machine pattern a Prometheus job uses
+   --  (authorization.credentials); a session-cookie guard like Require_App_Access
+   --  is wrong here because a scraper has no session. The token is compared in
+   --  constant time.
+   function Require_Metrics_Token
+     (Request : Web.Request.Request_Type;
+      Context : in out Web.Context.Request_Context) return Web.Guard.Guard_Outcome;
+
 end App.Guards;

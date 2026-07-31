@@ -580,12 +580,36 @@ begin
    App.Runtime.Guard_Server_Sent_Events
      ("/events", App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/health", App.Pages.Health'Access);
+   --  Metrics scrape auth: a Prometheus job authenticates with a static bearer
+   --  token (Authorization: Bearer <token>) rather than a session cookie. Read it
+   --  from METRICS_TOKEN, or fall back to a development default so the demo scrape
+   --  still works out of the box -- and say which is in effect.
+   declare
+      Default_Token : constant String := "dev-metrics-token";
+      Token         : constant String :=
+        (if Ada.Environment_Variables.Exists ("METRICS_TOKEN")
+         then Ada.Environment_Variables.Value ("METRICS_TOKEN")
+         else Default_Token);
+   begin
+      App.Guards.Set_Metrics_Token (Token);
+      if Token = Default_Token then
+         Log_Message
+           ("metrics: /metrics guarded by DEV bearer token """ & Default_Token
+            & """ -- set METRICS_TOKEN to override",
+            Terminal_Styles.Role_Muted);
+      else
+         Log_Message
+           ("metrics: /metrics guarded by bearer token from METRICS_TOKEN",
+            Terminal_Styles.Role_Muted);
+      end if;
+   end;
    --  Metrics scrape endpoint, served by the webframework_metrics bridge in the
    --  OpenMetrics dialect so the /trace-demo latency histogram carries its trace
    --  exemplar (a Prometheus scraper still parses it; a plain Prometheus
-   --  exposition would simply omit the exemplar).
+   --  exposition would simply omit the exemplar). Behind a bearer-token guard.
    Webframework_Metrics.Install
-     ("/metrics", Metrics.Exposition.Open_Metrics);
+     ("/metrics", Metrics.Exposition.Open_Metrics,
+      Guard => App.Guards.Require_Metrics_Token'Access);
    --  Distributed tracing demo: a traced endpoint + the /traces span dump.
    App.Runtime.Get ("/trace-demo", App.Trace_Demo.Handler'Access);
    App.Runtime.WebSocket ("/ws", App.Runtime.WebSocket_Handler'Access);
