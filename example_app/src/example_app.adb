@@ -13,6 +13,8 @@ with App.Authz;
 with App.Guards;
 with App.Metrics;
 with App.Trace_Demo;
+with App.Health;
+with Webframework_Health;
 with App.Nav;
 with App.Projects;
 with App.Attachments;
@@ -523,6 +525,7 @@ begin
    --  Prometheus exposition of the process-wide live registry.
    App.Metrics.Setup;
    App.Trace_Demo.Setup;
+   App.Health.Setup;
    App.Runtime.Use_Guard (App.Metrics.Count_Request'Access);
    --  HTTP + websocket + static route wiring. Public routes (/login, /health,
    --  /api/login, /static) carry no guard; every other route is guard-protected
@@ -580,6 +583,12 @@ begin
    App.Runtime.Guard_Server_Sent_Events
      ("/events", App.Guards.Require_App_Access'Access);
    App.Runtime.Get ("/health", App.Pages.Health'Access);
+   --  Real orchestrator probes, served by the webframework_health bridge:
+   --  /healthz (liveness -- is the process wedged?) reads only the liveness
+   --  probe; /readyz (readiness -- are dependencies reachable?) runs the database
+   --  and static-asset probes and returns 503 if a critical one is down.
+   Webframework_Health.Install_Liveness ("/healthz");
+   Webframework_Health.Install_Readiness ("/readyz");
    --  Metrics scrape auth: a Prometheus job authenticates with a static bearer
    --  token (Authorization: Bearer <token>) rather than a session cookie. Read it
    --  from METRICS_TOKEN, or fall back to a development default so the demo scrape
