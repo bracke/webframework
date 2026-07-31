@@ -1,0 +1,35 @@
+name = "webframework_health"
+description = "Bridge exposing health checks as webframework liveness/readiness routes"
+version = "0.1.0-dev"
+
+authors = ["Bent Bracke"]
+maintainers = ["Bent Bracke <bent@bracke.dk>"]
+maintainers-logins = ["bracke"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://github.com/bracke/webframework"
+
+tags = ["health", "readiness", "webframework", "bridge"]
+
+[[depends-on]]
+gnat_native = "=15.2.1"
+
+[[depends-on]]
+webframework = "*"
+
+[[depends-on]]
+health = "*"
+
+[[depends-on]]
+health_runtime = "*"
+
+[[pins]]
+webframework = { path = ".." }
+
+[[pins]]
+health = { path = "../../health" }
+
+[[pins]]
+health_runtime = { path = "../../health/health_runtime" }
+
+[build-profiles]
+"*" = "development"

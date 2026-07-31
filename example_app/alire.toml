@@ -214,5 +214,18 @@ webframework_tracing = { path = "../webframework_tracing" }
 tracing = { path = "../../tracing" }
 tracing_runtime = { path = "../../tracing/tracing_runtime" }
 
+# Health demo: the health library, its runtime checker, and the webframework
+# bridge that serves /healthz (liveness) and /readyz (readiness).
+[[depends-on]]
+webframework_health = "*"
+[[depends-on]]
+health = "*"
+[[depends-on]]
+health_runtime = "*"
+[[pins]]
+webframework_health = { path = "../webframework_health" }
+health = { path = "../../health" }
+health_runtime = { path = "../../health/health_runtime" }
+
 [build-profiles]
 "*" = "development"

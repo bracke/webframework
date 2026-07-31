@@ -64,3 +64,10 @@ b__*.ads
 /webframework_tracing/lib/
 /webframework_tracing/obj/
 /webframework_tracing/bin/
+
+# webframework_health (bridge crate) build outputs
+/webframework_health/alire/
+/webframework_health/config/
+/webframework_health/lib/
+/webframework_health/obj/
+/webframework_health/bin/
