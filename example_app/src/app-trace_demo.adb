@@ -1,3 +1,4 @@
+with Tracing;
 with Tracing.Context;
 with Tracing.Spans;
 with Tracing.Sampling;
@@ -5,6 +6,11 @@ with Tracing.Attributes;
 with Tracing.Correlation;
 with Tracing.Errors;
 with Tracing_Runtime.Tracer;
+with Tracing_Runtime.Clock;
+with Metrics;
+with Metrics.Errors;
+with Metrics.Labels;
+with Metrics_Runtime.Live;
 with Webframework_Tracing;
 with Webframework_Logging;
 
@@ -15,6 +21,15 @@ package body App.Trace_Demo is
    package Corr  renames Tracing.Correlation;
    package Attr  renames Tracing.Attributes;
    package WT    renames Webframework_Tracing;
+   package Live  renames Metrics_Runtime.Live;
+
+   use type Tracing.Timestamp;
+   use type Metrics.Sample_Value;
+
+   --  The latency histogram the exemplar attaches to: the observation of this
+   --  handler's duration carries the request's trace id, so a scrape links a
+   --  latency bucket back to a representative trace (visible in OpenMetrics).
+   Latency_Metric : constant String := "app_trace_demo_latency_seconds";
 
    --  Process-wide state: one collector all traced spans flow into, and a
    --  sample-everything sampler for the demo.
@@ -22,9 +37,14 @@ package body App.Trace_Demo is
    Sampler : constant Tracing.Sampling.Sampler := Tracing.Sampling.Always_On;
 
    procedure Setup is
+      Cat : Metrics.Errors.Error_Category;
    begin
       WT.Use_Collector (Sink'Access);
       WT.Install_Dump ("/traces");
+      Live.Default.Register_Histogram
+        (Latency_Metric,
+         [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
+         "trace-demo handler latency, in seconds", "seconds", Cat);
    end Setup;
 
    function Handler
@@ -36,6 +56,9 @@ package body App.Trace_Demo is
       Server : Tr.Live_Span :=
         Tr.Start (Sampler, Parent, "GET /trace-demo", Tracing.Spans.Server);
       Ignore : Tracing.Errors.Error_Category;
+
+      Started_At : constant Tracing.Timestamp :=
+        Tracing_Runtime.Clock.Now_Unix_Nanos;
    begin
       Tr.Set_Attribute
         (Server, "http.method",
@@ -63,6 +86,25 @@ package body App.Trace_Demo is
 
          Tr.Set_Status (Server, Tracing.Spans.Ok);
          Tr.Finish (Server, Sink);
+
+         --  The metrics tie-in: record this handler's latency with an exemplar
+         --  carrying the request's trace id (the same id the log line above
+         --  logged). It surfaces on the histogram bucket in the OpenMetrics
+         --  scrape at /metrics.
+         declare
+            Ended_At : constant Tracing.Timestamp :=
+              Tracing_Runtime.Clock.Now_Unix_Nanos;
+            Seconds  : constant Metrics.Sample_Value :=
+              Metrics.Sample_Value (Ended_At - Started_At) / 1.0e9;
+            Cat      : Metrics.Errors.Error_Category;
+         begin
+            Live.Default.Observe_With_Exemplar
+              (Latency_Metric, Metrics.Labels.Empty, Seconds,
+               Trace_Id     => Corr.Exemplar_Trace_Id (Tr.Context_Of (Server)),
+               Time_Seconds => Metrics.Sample_Value (Ended_At) / 1.0e9,
+               Has_Time     => True,
+               Category     => Cat);
+         end;
 
          return Web.Response.Text
            ("traced." & ASCII.LF
