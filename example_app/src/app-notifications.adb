@@ -27,10 +27,16 @@ with Notifications_Email;
 with Smtplib;
 with Smtplib.Configuration;
 with Smtplib.Network;
+with Smtplib.Network.Resolution;
+with Smtplib.Network.Clocks;
+with Smtplib.Tls;
+with Smtplib.Backends;
 with Smtplib.Backends.Default_Network;
 with Smtplib.Backends.Default_Random;
+with Smtplib.Backends.Ssllib_Tls;
 
 with App.Smtp_Catcher;
+with App.Tls_Fixture;
 
 package body App.Notifications is
 
@@ -59,8 +65,13 @@ package body App.Notifications is
    package NE   renames Notifications_Email;
    package Cfg  renames Smtplib.Configuration;
    package Net  renames Smtplib.Network;
+   package Tls  renames Smtplib.Tls;
+   package Bk   renames Smtplib.Backends;
    package DN   renames Smtplib.Backends.Default_Network;
    package DR   renames Smtplib.Backends.Default_Random;
+   package Ssl  renames Smtplib.Backends.Ssllib_Tls;
+   package Resolution renames Smtplib.Network.Resolution;
+   package NClocks    renames Smtplib.Network.Clocks;
 
    use type NT.Register_Outcome;
    use type In_T.Build_Outcome;
@@ -278,12 +289,51 @@ package body App.Notifications is
    ---------------------------------------------------------------------------
    Started : Boolean := False;
 
-   --  smtplib transport backends (real sockets to the catcher). Body-level so
-   --  they outlive the configuration that references them.
-   Net_Resolver  : aliased DN.Dns_Resolver :=
-     DN.Make_Resolver (Port => Smtplib.Port_Number (App.Smtp_Catcher.Listen_Port));
+   --  A resolver that always lands on the loopback catcher, whatever host name
+   --  it is asked for. This lets the TLS client carry the certificate's real
+   --  identity (www.example.com) for verification while every connection
+   --  actually reaches 127.0.0.1 -- a hermetic loopback with a genuine
+   --  hostname-verified handshake, no DNS and no external server.
+   type Loopback_Resolver is limited new Resolution.Resolver with record
+      Port : Smtplib.Port_Number := 465;
+   end record;
+
+   overriding procedure Resolve
+     (This       : in out Loopback_Resolver;
+      Host       : Net.Host_Name;
+      Preference : Net.Family_Preference;
+      Context    : NClocks.Operation_Context;
+      Addresses  : out Resolution.Resolved_Addresses;
+      Status     : out Resolution.Resolve_Status);
+
+   overriding procedure Resolve
+     (This       : in out Loopback_Resolver;
+      Host       : Net.Host_Name;
+      Preference : Net.Family_Preference;
+      Context    : NClocks.Operation_Context;
+      Addresses  : out Resolution.Resolved_Addresses;
+      Status     : out Resolution.Resolve_Status)
+   is
+      pragma Unreferenced (Host, Preference, Context);
+   begin
+      Addresses := Resolution.Append
+        (Resolution.Empty_Addresses,
+         Net.Make_IPv4_Address (127, 0, 0, 1, This.Port));
+      Status := Resolution.Resolved;
+   end Resolve;
+
+   --  smtplib transport backends. Body-level so they outlive the configuration
+   --  that references them by access.
+   Net_Resolver  : aliased Loopback_Resolver :=
+     (Port => Smtplib.Port_Number (App.Smtp_Catcher.Listen_Port));
    Net_Connector : aliased DN.Socket_Connector := DN.Make_Connector;
    Net_RNG       : aliased DR.Os_Random_Source := DR.Make;
+   Tls_Backend   : aliased Ssl.Ssllib_Backend  := Ssl.Make;
+
+   --  The trust-anchor file the TLS client verifies the catcher against; the
+   --  fixture certificate is written here before the configuration is finalized
+   --  (Finalize checks the path exists).
+   Trust_Path : constant String := "example_app_tls_ca.pem";
 
    Sender_Dir : aliased Static_Sender;
 
@@ -332,24 +382,62 @@ package body App.Notifications is
       return Pl.Finish (B);
    end Demo_Payload;
 
-   --  Build the plaintext, no-auth, localhost smtplib configuration targeting
-   --  the catcher, over the real network backend.
+   --  Build the no-auth smtplib configuration targeting the catcher over
+   --  *implicit TLS* (SMTPS): a real ssllib TLS 1.3 handshake from the first
+   --  byte, verified against the fixture certificate's identity, over the real
+   --  network backend. The loopback resolver keeps the connection on 127.0.0.1.
    procedure Build_Config (Ok : out Boolean) is
+      --  The honest capability declaration: the network + random backends'
+      --  capabilities merged with the ssllib TLS backend's, so Finalize accepts
+      --  the TLS setup (a missing Tls/Custom_Trust bit would be Cannot_Verify).
+      Caps : constant Bk.Backend_Capabilities :=
+        (IPv4                     => True,
+         IPv6                     => True,
+         Interruptible_Connect    => True,
+         Interruptible_Read_Write => True,
+         Secure_Random            => True,
+         Tls_1_2                  => True,
+         Tls_1_3                  => True,
+         System_Trust             => True,
+         Custom_Trust             => True,
+         Client_Certificates      => True,
+         Channel_Binding          => True,
+         others                   => False);
+
       B : Cfg.Configuration_Builder :=
         Cfg.Unauthenticated_Relay
-          (Host     => "127.0.0.1",
+          (Host     => App.Tls_Fixture.Server_Name,
            Ehlo     => "example-app.local",
            Port     => Smtplib.Port_Number (App.Smtp_Catcher.Listen_Port),
-           Security => Net.Plaintext,
+           Security => Net.Implicit_Tls,
            Ack      => Cfg.Acknowledge_Unauthenticated_Relay);
+
+      Tls_Cfg : constant Tls.Tls_Settings :=
+        Tls.Make_Settings
+          (Security        => Net.Implicit_Tls,
+           Min_Version     => Tls.Tls_1_2,
+           Sni_Server_Name => App.Tls_Fixture.Server_Name,
+           Trust           => Tls.Custom_File,
+           Trust_Path      => Trust_Path);
+
       RT : constant Cfg.Client_Runtime :=
         Cfg.Make_Runtime
           (Resolver     => Net_Resolver'Access,
            Connector    => Net_Connector'Access,
+           Tls_Backend  => Tls_Backend'Access,
            Random       => Net_RNG'Access,
-           Capabilities => DN.Capabilities);
-      CR : Cfg.Configuration_Result;
+           Capabilities => Caps);
+      CR       : Cfg.Configuration_Result;
+      Cert_Ok  : Boolean;
    begin
+      --  The trust file must exist when Finalize checks it.
+      App.Tls_Fixture.Write_Certificate (Trust_Path, Cert_Ok);
+      if not Cert_Ok then
+         Ok := False;
+         return;
+      end if;
+
+      Cfg.Set_Tls (B, Settings => Tls_Cfg, Starttls => Tls.Disabled);
       Cfg.Set_Runtime (B, RT);
       --  smtplib's own auto-retry is disabled: the notifications engine owns
       --  retry sequencing, so each Send maps exactly one attempt.

@@ -30,6 +30,6 @@ project Tools is
    end Binder;
 
    package Linker is
-      for Default_Switches ("Ada") use ("-lssl", "-lcrypto");
+      for Default_Switches ("Ada") use ();
    end Linker;
 end Tools;

@@ -35,54 +35,28 @@ package body Web_E2E_Tests is
    Static_Directory : constant String := "/tmp/webframework-e2e-static";
    Static_Image_Path : constant String := Static_Directory & "/image.png";
    Static_Style_Path : constant String := Static_Directory & "/style.css";
+   --  A self-signed certificate for localhost, valid to 2126, with a
+   --  subjectAltName naming both `localhost` and 127.0.0.1.
+   --
+   --  It replaced one that had a common name and no subjectAltName at all,
+   --  which only worked because the client was told not to verify. There is no
+   --  such instruction any more -- `ssllib` has no way to skip verification --
+   --  so the fixture has to be a certificate that actually verifies, which
+   --  under RFC 6125 means a subjectAltName rather than a common name.
    Test_Certificate : constant String :=
      "-----BEGIN CERTIFICATE-----" & LF
-     & "MIIDCTCCAfGgAwIBAgIUW4pBchTw00Odpz3pMkmmX7gYyP8wDQYJKoZIhvcNAQEL" & LF
-     & "BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI2MDcwNDE2NDkzOFoXDTI2MDcw" & LF
-     & "NTE2NDkzOFowFDESMBAGA1UEAwwJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF" & LF
-     & "AAOCAQ8AMIIBCgKCAQEAs8eL1UQUcMyqKzDmbPeGk8maLIBeTwwJb2HiQZaBAPcP" & LF
-     & "hpC+3WYIeH9Q9nyF7g4pSkGC03bgit73UdB8me5/ULYVJ4kyVGCZlihBWIZgiZ0x" & LF
-     & "SSZ8m+lm9TWaFC6III6pThjMHTvU1Y6CL8uM76n6kJncIBctBWI1+y4moDRcJtYR" & LF
-     & "yT/B9VhbpU13uANIwCjaK+a5VzcqOWhXpvEIEqq+exhFoahVKjaS6a2UgHRUTINL" & LF
-     & "CLu9xlU0mP3OuV9BB4jBZSbFZZwSFCcD8SECvuSGzFWc1dM4QBkiPz5lxFX0IE70" & LF
-     & "LGVwrgLVUbsGOWb6AtjKU4yo8LeWY7t2qXu2yn2yrQIDAQABo1MwUTAdBgNVHQ4E" & LF
-     & "FgQUhYicQEbjJy2+dix7KX2xGMvMA0wwHwYDVR0jBBgwFoAUhYicQEbjJy2+dix7" & LF
-     & "KX2xGMvMA0wwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAPuJH" & LF
-     & "iRF85f1JPd+kE1mmLsQgNv2TctMZugCT+A9GE5g5Ye9pLQIHm6txMSxQascoioH+" & LF
-     & "Yn7+hPjP60BBWHoZV56WNgYGvlpL7SOWSoMHfYNEH3mfZG2kTmgbnlyhCZDEjjkx" & LF
-     & "F8P13DVN4vJ6OhtLPY9lvwUH/SSdTL45QtQgVABbAe29ASK7XvwZFA9f+sUzZPM3" & LF
-     & "zMkvZ4N01OoxEBCa7QhYyPgS2+eHuL0b05+dt/hpS1fbIf3VhSvsgGmUJfIFcpf0" & LF
-     & "MbohDxzhRZTdqbNxidCXv3Vm055Q+8czOUNJQRfXMbdG0YfMyK9a+SQ7p+AVvV4Z" & LF
-     & "GyLT4/fJ+g9wnu9e+g==" & LF
+     & "MIIBWzCCAQ2gAwIBAgIUWxqkiHzYz0civJuFvGM8uhHCTGEwBQYDK2VwMBQxEjAQ" & LF
+     & "BgNVBAMMCWxvY2FsaG9zdDAgFw0yNjA3MzEwMjQzNDBaGA8yMTI2MDcwNzAyNDM0" & LF
+     & "MFowFDESMBAGA1UEAwwJbG9jYWxob3N0MCowBQYDK2VwAyEAya9Nb7MlyyMfWGWy" & LF
+     & "IoO6TacCu+8l4OkbW5F9uU9cUc2jbzBtMB0GA1UdDgQWBBTby9RGMDveV8Mq0dXz" & LF
+     & "ATYRR/FG4zAfBgNVHSMEGDAWgBTby9RGMDveV8Mq0dXzATYRR/FG4zAPBgNVHRMB" & LF
+     & "Af8EBTADAQH/MBoGA1UdEQQTMBGCCWxvY2FsaG9zdIcEfwAAATAFBgMrZXADQQA5" & LF
+     & "3CaVplBgcPBMHUj+qLWrMWjwVnBCulgGHTAcI05F3gw/HHJmG0s3DXegERai+S/k" & LF
+     & "dYmf0XhfRdDy/eCSZuoO" & LF
      & "-----END CERTIFICATE-----" & LF;
    Test_Private_Key : constant String :=
      "-----BEGIN PRIVATE KEY-----" & LF
-     & "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCzx4vVRBRwzKor" & LF
-     & "MOZs94aTyZosgF5PDAlvYeJBloEA9w+GkL7dZgh4f1D2fIXuDilKQYLTduCK3vdR" & LF
-     & "0HyZ7n9QthUniTJUYJmWKEFYhmCJnTFJJnyb6Wb1NZoULoggjqlOGMwdO9TVjoIv" & LF
-     & "y4zvqfqQmdwgFy0FYjX7LiagNFwm1hHJP8H1WFulTXe4A0jAKNor5rlXNyo5aFem" & LF
-     & "8QgSqr57GEWhqFUqNpLprZSAdFRMg0sIu73GVTSY/c65X0EHiMFlJsVlnBIUJwPx" & LF
-     & "IQK+5IbMVZzV0zhAGSI/PmXEVfQgTvQsZXCuAtVRuwY5ZvoC2MpTjKjwt5Zju3ap" & LF
-     & "e7bKfbKtAgMBAAECggEAAJBy6hVD7MV7i7Ksi1/AWWV2Do+q1vKTvXScBApDnTpW" & LF
-     & "s8wc/Pyc8oxCEnTAZ0+5+GKc7gEkJCXDSz8SevqvoovHwXFhzzPTYeb2Be5IfdUM" & LF
-     & "OoEk0o8Yo4Q5Ll4p7FeXUS+T/yKnV4BxRta09EKETOPq3Ripp37Ah34EegSZ2/VG" & LF
-     & "hO+g3O95f9ZWZko5AVNTfE/Vkqp7NZ9t2didMXTN+3tuj7WVpvicLhwxp8/SRJOH" & LF
-     & "zMxmFn1adkVocgLjmbk3h8thqZRQtL1J7fBSkM9gGmbsELjyPx3JAGZ+a7bLyP9e" & LF
-     & "SQnTRqhyaEccYGsNDoeLz7ueUFZeKn6ZH31C037KswKBgQD77pIw7kLtrgxrLx6K" & LF
-     & "kprzFVGktMjIS3AMYJIeuIlOYvYU/1RnDPzKpEqsv0WG4DwfEFpWMPM2OvFwNi+d" & LF
-     & "7sytYTxeEiGq4NoNMS8iub6EYafe/TBScN0dKzMUqc+nrXnu1H/2gccReSQkZrVm" & LF
-     & "QzYTh8F0Bhn7i1QJf9tulo78PwKBgQC2rramJWV22gyVKIxVEoER38347rlfVLxE" & LF
-     & "Jbv8CJLpH4HJevE4KC5AnrC936nV3GEzY7+NI8dOOeq3mYNtGUh6k+ngCbHknPR9" & LF
-     & "V4JHotxTlzsfBha90zWwvRIQOkW49oaAeJ6RKGxNX1d1MCqnHrJy9gQJl5sH/y3J" & LF
-     & "/rt9pCiGEwKBgFh0/OmnTuKrYPrlcYDQVw2Q57jALVt+eVovMj8NJlDamHLo79a7" & LF
-     & "DauNIhcjlaL06scxc7adu1fIPGvc6r02UrFx2cNh9GZOSuGk6lr0AvvyWgIGvkfE" & LF
-     & "Dy8lsurHcPz8ATsla8S+7ompElKhqYG9iagz224EkmzrD9fCB+b9gDj7AoGBAKY0" & LF
-     & "qwTavUe29v+2FodIAJosjw9O0uUDCQ7PbgrOGitzePfAnTrEg+BTAOafWbuzd9Pz" & LF
-     & "itF0nd50HzLPvp1CBYlQjdZBu9INYvuu5F8cs2xyCV4egg5O3WhhfM+61LiFwrWc" & LF
-     & "CFh0+KQkfEOogQXvjde+MMoxXuGVryk6U4bqFdx1AoGAAYWusuz8tchgI5Wgj+eU" & LF
-     & "aVczknapO3fcAv4t2tYTUQnNxTK1dhjYJD+JeWE4BI9VEtUWfLypzyF+jWimrgWV" & LF
-     & "jwe+apeMPzvjR7yEQNyXB2u5cA8/kcxv1OowGnuXKN3keHzO4Nuc+SIIXCFrm1+0" & LF
-     & "jTnXGhv7GguL3uYxWOFmShI=" & LF
+     & "MC4CAQAwBQYDK2VwBCIEIKk1ACgbSXzeJnruydhCuFYueliVpJtk0H6LUbG/c4P5" & LF
      & "-----END PRIVATE KEY-----" & LF;
 
    type Test_State is record
@@ -1011,7 +985,12 @@ package body Web_E2E_Tests is
       Web.Server.WebSocket ("/tls-e2e-ws", Test_Live.WebSocket_Handler'Access);
       Worker.Start (Port);
 
-      Web.TLS.Initialize_Client_No_Verify (Client_Context);
+      --  The client trusts the fixture's own certificate and nothing else,
+      --  and checks the name on it. It used to verify nothing at all.
+      Web.TLS.Initialize_Client
+        (Client_Context,
+         CA_File       => Test_Cert_Path,
+         Expected_Name => "localhost");
       Socket := Connect (Port);
       Assert (Web.Server.Running, "TLS server running after first connection");
       Web.Connection.Open_TLS

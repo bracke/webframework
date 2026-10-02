@@ -19,6 +19,20 @@ cryptolib = "*"
 [[pins]]
 cryptolib = { path = "../cryptolib" }
 
+# TLS is `ssllib`, which is Ada; this crate binds no C TLS library. Its own
+# dependencies are pinned here too, because Alire honours pins only in the root.
+[[depends-on]]
+ssllib = "*"
+
+[[pins]]
+ssllib = { path = "../ssllib" }
+
+[[pins]]
+truststores = { path = "../truststores" }
+
+[[pins]]
+hostkit = { path = "../hostkit" }
+
 [[depends-on]]
 ssh_lib = "*"
 
@@ -47,8 +61,6 @@ cache = { path = "../cache" }
 
 # Pins are root-only in Alire: ssh_lib pulls hostkit, so every root that builds
 # ssh_lib must pin hostkit too, even though no webframework source withs it.
-[[pins]]
-hostkit = { path = "../hostkit" }
 
 # Transitive path pins for the logging bridge (root-only in Alire).
 [[pins]]

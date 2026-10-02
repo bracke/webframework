@@ -24,6 +24,6 @@ project Webframework_Cli is
    end Binder;
 
    package Linker is
-      for Default_Switches ("Ada") use ("-lssl", "-lcrypto");
+      for Default_Switches ("Ada") use ();
    end Linker;
 end Webframework_Cli;

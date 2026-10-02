@@ -25,8 +25,12 @@ package Web.TLS is
       Verify_Client    : Client_Verification_Mode := Verify_None;
    end record;
 
-   --  Report whether OpenSSL TLS support is linked and can be initialized.
-   --  @return True when TLS initialization succeeds.
+   --  Report whether TLS support is available.
+   --
+   --  Always True. TLS is `ssllib`, which is Ada and is linked into this
+   --  library unconditionally; there is no C library that might be absent at
+   --  run time. Kept because callers branch on it and a caller that stopped
+   --  asking would be a caller that had to change.
    function Available return Boolean;
 
    --  Initialize a server TLS context from PEM certificate and key files.
@@ -76,9 +80,31 @@ package Web.TLS is
      (Item   : in out Context;
       Config : Server_Config);
 
-   --  Initialize a client TLS context without peer verification.
+   --  Initialize a client TLS context that trusts an explicit CA file.
+   --
    --  @param Item TLS context to initialize.
+   --  @param CA_File PEM file holding the anchors this client will trust, and
+   --         the only ones it will trust: the host's own trust store is never
+   --         consulted.
+   --  @param Expected_Name The name the presented certificate must be for.
    --  @return No return value.
+   procedure Initialize_Client
+     (Item          : in out Context;
+      CA_File       : String;
+      Expected_Name : String);
+
+   --  **Refused.** A client that verifies nothing is not something this
+   --  framework can build any more.
+   --
+   --  The TLS backend is `ssllib`, which has no way to disable certificate or
+   --  host-name verification -- not a default that can be changed, absent. This
+   --  leaves the context uninitialized, so the first `Connect_Connection`
+   --  returns a null handle rather than an unverified connection.
+   --
+   --  It is kept so that code calling it still compiles, and it fails instead
+   --  of quietly connecting to anything. Callers that used it to reach their
+   --  own self-signed server call `Initialize_Client` with that server's
+   --  certificate, which they already have.
    procedure Initialize_Client_No_Verify (Item : in out Context);
 
    --  Accept a TLS handshake on an already accepted TCP socket.

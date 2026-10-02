@@ -95,10 +95,12 @@ project Webframework is
       for Switches ("Ada") use ("-Es"); --  Symbolic traceback
    end Binder;
 
-   --  Web.TLS binds libssl/libcrypto directly; declare the link so every
-   --  executable that links this library (tests, example app, CLI) resolves
-   --  the OpenSSL symbols.
+   --  Nothing to link for TLS. `Web.TLS` is Ada over `ssllib`, so there is no
+   --  C library for a consumer to resolve symbols against -- which is why this
+   --  package is empty rather than absent: it used to carry -lssl -lcrypto for
+   --  every executable that linked this library, and its being empty is the
+   --  visible part of that change.
    package Linker is
-      for Linker_Options use ("-lssl", "-lcrypto");
+      for Linker_Options use ();
    end Linker;
 end Webframework;
