@@ -1,18 +1,8 @@
-with Logging.Levels;
-with Logging.Events;
-
-with Logging_Runtime;
-with Logging_Runtime.Clock;
-with Logging_Runtime.Stderr_Sink;
+with Ada.Strings.Unbounded;
+with Ada.Text_IO;
 
 package body Webframework_Logging is
-
-   function To_Level (L : Level_Type) return Logging.Levels.Level is
-     (case L is
-         when Debug_Level => Logging.Levels.Debug,
-         when Info_Level  => Logging.Levels.Info,
-         when Warn_Level  => Logging.Levels.Warn,
-         when Error_Level => Logging.Levels.Error);
+   use Ada.Strings.Unbounded;
 
    --  Process-global settings, guarded for concurrent access.
    protected Settings is
@@ -38,25 +28,58 @@ package body Webframework_Logging is
       function Struct return Boolean is (Struct_On);
    end Settings;
 
-   Clk : Logging_Runtime.Clock.System_Clock;
-   Snk : Logging_Runtime.Stderr_Sink.Sink;
+   function Level_Name (Level : Level_Type) return String is
+     (case Level is
+         when Debug_Level => "debug",
+         when Info_Level  => "info",
+         when Warn_Level  => "warn",
+         when Error_Level => "error");
+
+   function Escape (Value : String; JSON : Boolean) return String is
+      Result : Unbounded_String;
+   begin
+      for Ch of Value loop
+         case Ch is
+            when '"' =>
+               Append (Result, [1 => '\', 2 => '"']);
+            when '\' =>
+               Append (Result, [1 => '\', 2 => '\']);
+            when Character'Val (10) =>
+               Append (Result, "\n");
+            when Character'Val (13) =>
+               Append (Result, "\r");
+            when Character'Val (9) =>
+               Append (Result, "\t");
+            when others =>
+               if JSON and then Character'Pos (Ch) < 32 then
+                  Append (Result, "?");
+               else
+                  Append (Result, Ch);
+               end if;
+         end case;
+      end loop;
+      return To_String (Result);
+   end Escape;
 
    procedure Put (L : Level_Type; Message : String) is
-      Cap : constant Natural := Natural'Min (Message'Length, 4096) + 16;
-      E   : Logging.Events.Event (Fields_Capacity => 0, Pool => Cap);
-      Ok  : Boolean;
+      Is_Structured : Boolean;
    begin
       if L < Settings.Min then
          return;
       end if;
-      Logging.Events.Start (E, To_Level (L), Message);
-      Logging.Events.Set_Time (E, Clk.Now);
-      Logging.Events.Seal (E);
-      Snk.Format :=
-        (if Settings.Struct then Logging_Runtime.Json else Logging_Runtime.Logfmt);
-      --  Diagnostics logging is best-effort: a failed write is contained by the
-      --  sink and its result is intentionally not surfaced here.
-      Logging_Runtime.Stderr_Sink.Emit (Snk, E, Ok);
+      Is_Structured := Settings.Struct;
+      Ada.Text_IO.Put_Line
+        (Ada.Text_IO.Standard_Error,
+         (if Is_Structured then
+             "{""level"":""" & Level_Name (L) & """,""message"":"""
+             & Escape (Message, JSON => True) & """}"
+          else
+             "level=" & Level_Name (L) & " message="""
+             & Escape (Message, JSON => False) & '"'));
+   exception
+      when others =>
+         --  Diagnostics must never interfere with request processing.
+         null;
    end Put;
 
    procedure Set_Minimum_Level (Level : Level_Type) is

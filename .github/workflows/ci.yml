@@ -79,7 +79,7 @@ jobs:
       - name: Install OpenSSL headers
         run: sudo apt-get update && sudo apt-get install -y libssl-dev
       - name: Build and test the webframework_authorization bridge
-        working-directory: webframework_authorization/tests
+        working-directory: webframework/webframework_authorization/tests
         run: |
           alr --non-interactive build
           ./bin/test_bridge

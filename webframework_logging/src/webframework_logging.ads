@@ -1,9 +1,5 @@
---  Webframework_Logging — webframework's diagnostics logger, implemented over
---  the `logging` library. It offers a small process-global, string-message API
---  (the shape webframework's internals call), while the events, redaction, and
---  logfmt/JSON encoding all come from the logging crate and the stderr sink from
---  logging_runtime. webframework has no logging implementation of its own; this
---  bridge is its logger.
+--  Webframework_Logging -- webframework's small process-global diagnostics
+--  logger. Messages are emitted to standard error as logfmt or JSON.
 package Webframework_Logging is
 
    type Level_Type is (Debug_Level, Info_Level, Warn_Level, Error_Level);

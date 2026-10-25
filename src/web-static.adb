@@ -7,8 +7,6 @@ with Ada.Streams.Stream_IO;
 with Ada.Strings.Fixed;
 with Ada.Strings.Hash;
 with Ada.Strings.Unbounded;
-with Cache;
-with Cache.Maps;
 with Web.Errors;
 with Web.Security;
 
@@ -38,17 +36,17 @@ package body Web.Static is
       Checked_At : Ada.Calendar.Time := Ada.Calendar.Time_Of (1901, 1, 1);
    end record;
 
-   function Id_Hash (Key : Cache.Hash_Type) return Cache.Hash_Type is (Key);
+   function Key_Of (Path : String) return Ada.Containers.Hash_Type is
+     (Ada.Strings.Hash (Path));
 
-   --  A bounded LRU cache keyed by the path's hash; the cache library handles
-   --  eviction and recency. Time-to-live is not used here (freshness is by
-   --  modification time), so operations pass a zero time.
-   package Content_Cache is new Cache.Maps
-     (Key_Type => Cache.Hash_Type, Element_Type => Cache_Element,
-      Hash => Id_Hash);
+   type Cache_Slot is record
+      Key    : Ada.Containers.Hash_Type := 0;
+      Item   : Cache_Element;
+      Stamp  : Natural := 0;
+      In_Use : Boolean := False;
+   end record;
 
-   function Key_Of (Path : String) return Cache.Hash_Type is
-     (Cache.Hash_Type (Ada.Strings.Hash (Path)));
+   type Cache_Slot_Array is array (Positive range <>) of Cache_Slot;
 
    protected type Static_Cache_Shard is
       procedure Lookup
@@ -69,7 +67,8 @@ package body Web.Static is
          Content      : String;
          Response     : Web.Response.Response_Type);
    private
-      Entries : Content_Cache.Map (Capacity => Max_Static_Cache_Items_Per_Shard);
+      Entries : Cache_Slot_Array (1 .. Max_Static_Cache_Items_Per_Shard);
+      Clock   : Natural := 0;
    end Static_Cache_Shard;
 
    protected body Static_Cache_Shard is
@@ -80,24 +79,32 @@ package body Web.Static is
          Found        : out Boolean;
          Response     : out Web.Response.Response_Type)
       is
-         K    : constant Cache.Hash_Type := Key_Of (Path);
-         Item : Cache_Element;
-         Hit  : Boolean;
-         Removed : Boolean;
+         K     : constant Ada.Containers.Hash_Type := Key_Of (Path);
+         Index : Natural := 0;
       begin
          Found := False;
          Response := Web.Response.Internal_Server_Error;
-         Content_Cache.Get (Entries, K, 0, Item, Hit);
-         if Hit and then Item.Path = Path then
-            if Item.Size = Size and then Item.Modified = Modified then
+         for I in Entries'Range loop
+            if Entries (I).In_Use and then Entries (I).Key = K
+              and then Entries (I).Item.Path = Path
+            then
+               Index := I;
+               exit;
+            end if;
+         end loop;
+         if Index /= 0 then
+            if Entries (Index).Item.Size = Size
+              and then Entries (Index).Item.Modified = Modified
+            then
                --  Still valid: refresh the re-stat throttle and keep it hot.
-               Item.Checked_At := Ada.Calendar.Clock;
-               Content_Cache.Put (Entries, K, Item, 0);
+               Entries (Index).Item.Checked_At := Ada.Calendar.Clock;
+               Clock := Clock + 1;
+               Entries (Index).Stamp := Clock;
                Found := True;
-               Response := Item.Response;
+               Response := Entries (Index).Item.Response;
             else
                --  On disk changed: drop the stale entry.
-               Content_Cache.Invalidate (Entries, K, Removed);
+               Entries (Index).In_Use := False;
             end if;
          end if;
       end Lookup;
@@ -108,19 +115,23 @@ package body Web.Static is
          Found        : out Boolean;
          Response     : out Web.Response.Response_Type)
       is
-         K    : constant Cache.Hash_Type := Key_Of (Path);
-         Item : Cache_Element;
-         Hit  : Boolean;
+         K : constant Ada.Containers.Hash_Type := Key_Of (Path);
       begin
          Found := False;
          Response := Web.Response.Internal_Server_Error;
-         Content_Cache.Get (Entries, K, 0, Item, Hit);
-         if Hit and then Item.Path = Path
-           and then Now - Item.Checked_At <= Static_Revalidate_Interval
-         then
-            Found := True;
-            Response := Item.Response;
-         end if;
+         for I in Entries'Range loop
+            if Entries (I).In_Use and then Entries (I).Key = K
+              and then Entries (I).Item.Path = Path
+              and then Now - Entries (I).Item.Checked_At
+                <= Static_Revalidate_Interval
+            then
+               Clock := Clock + 1;
+               Entries (I).Stamp := Clock;
+               Found := True;
+               Response := Entries (I).Item.Response;
+               exit;
+            end if;
+         end loop;
       end Lookup_Fresh;
 
       procedure Store
@@ -130,18 +141,38 @@ package body Web.Static is
          Content      : String;
          Response     : Web.Response.Response_Type)
       is
+         K       : constant Ada.Containers.Hash_Type := Key_Of (Path);
+         Index   : Positive := Entries'First;
+         Oldest  : Natural := Natural'Last;
+         Located : Boolean := False;
       begin
          if Content'Length > Max_Cached_Static_File then
             return;
          end if;
-         Content_Cache.Put
-           (Entries, Key_Of (Path),
-            (Path       => To_Unbounded_String (Path),
-             Response   => Response,
-             Size       => Size,
-             Modified   => Modified,
-             Checked_At => Ada.Calendar.Clock),
-            Now => 0);
+         for I in Entries'Range loop
+            if Entries (I).In_Use and then Entries (I).Key = K then
+               Index := I;
+               Located := True;
+               exit;
+            elsif not Entries (I).In_Use and then not Located then
+               Index := I;
+               Located := True;
+            elsif not Located and then Entries (I).Stamp < Oldest then
+               Oldest := Entries (I).Stamp;
+               Index := I;
+            end if;
+         end loop;
+         Clock := Clock + 1;
+         Entries (Index) :=
+           (Key    => K,
+            Item   =>
+              (Path       => To_Unbounded_String (Path),
+               Response   => Response,
+               Size       => Size,
+               Modified   => Modified,
+               Checked_At => Ada.Calendar.Clock),
+            Stamp  => Clock,
+            In_Use => True);
       end Store;
    end Static_Cache_Shard;
 

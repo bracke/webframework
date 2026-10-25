@@ -13,23 +13,5 @@ tags = ["logging", "webframework", "bridge"]
 [[depends-on]]
 gnat_native = "=15.2.1"
 
-[[depends-on]]
-logging = "*"
-
-[[depends-on]]
-logging_runtime = "*"
-
-[[depends-on]]
-representation = "*"
-
-[[pins]]
-logging = { path = "../../logging" }
-
-[[pins]]
-logging_runtime = { path = "../../logging/logging_runtime" }
-
-[[pins]]
-representation = { path = "../../representation" }
-
 [build-profiles]
 "*" = "development"
