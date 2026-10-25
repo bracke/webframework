@@ -190,7 +190,7 @@ package body Web.TLS is
       Chunk  : Ada.Streams.Stream_Element_Array (1 .. 8_192);
       Last   : Ada.Streams.Stream_Element_Offset;
    begin
-      Streams_IO.Open (Handle, Streams_IO.In_File, Path);
+      Streams_IO.Open (Handle, Streams_IO.In_File, Path, Form => "shared=no");
       loop
          Streams_IO.Read (Handle, Chunk, Last);
          exit when Last < Chunk'First;

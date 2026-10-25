@@ -17,7 +17,7 @@ package body Web.Assets is
       Hash_Value : Natural := 5381;  --  Simple hash seed
    begin
       --  Open file and get size
-      Ada.Streams.Stream_IO.Open (File, Ada.Streams.Stream_IO.In_File, Path);
+      Ada.Streams.Stream_IO.Open (File, Ada.Streams.Stream_IO.In_File, Path, Form => "shared=no");
       Size := Ada.Streams.Stream_IO.Size (File);
 
       if Size = 0 then

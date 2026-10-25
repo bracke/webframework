@@ -2130,7 +2130,7 @@ package body Web.Server is
       Ada.Streams.Stream_IO.Open
         (File,
          Ada.Streams.Stream_IO.In_File,
-         Web.Response.File_Body_Path (Response));
+         Web.Response.File_Body_Path (Response), Form => "shared=no");
 
       while not Ada.Streams.Stream_IO.End_Of_File (File) loop
          Ada.Streams.Stream_IO.Read (File, Buffer, Last);

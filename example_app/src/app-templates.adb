@@ -28,7 +28,7 @@ package body App.Templates is
       Result : Unbounded_String;
    begin
       --  Read entire file to preserve template formatting exactly.
-      Ada.Text_IO.Open (File, Ada.Text_IO.In_File, Template_Path (File_Name));
+      Ada.Text_IO.Open (File, Ada.Text_IO.In_File, Template_Path (File_Name), Form => "shared=no");
 
       while not Ada.Text_IO.End_Of_File (File) loop
          Append (Result, Ada.Strings.Unbounded.Text_IO.Get_Line (File));

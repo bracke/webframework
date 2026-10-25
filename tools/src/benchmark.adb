@@ -288,14 +288,14 @@ procedure Benchmark is
          Ada.Directories.Create_Directory (Static_Directory);
       end if;
 
-      Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, Static_Path);
+      Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, Static_Path, Form => "shared=no");
       for Index_Value in 1 .. 100 loop
          Ada.Text_IO.Put_Line (File, ".item { color: #123456; padding: 4px; }");
       end loop;
       Ada.Text_IO.Close (File);
 
       for File_Index in 1 .. Static_Variant_Count loop
-         Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, Static_Variant_Path (File_Index));
+         Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, Static_Variant_Path (File_Index), Form => "shared=no");
          Ada.Text_IO.Put_Line
            (File,
             ".item-" & Trimmed_Natural (File_Index) & " { color: #123456; padding: 4px; }");
